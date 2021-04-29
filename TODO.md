@@ -1,4 +1,19 @@
-## Use source locations in messages.
+## Deriving for multi-param type classes
+
+``` haskell
+class MonadMultiParam a m where
+  multiParamMethod :: Int -> m ()
+```
+
+The current TH code doesn't work for multi-param classes, since it expects a
+`Name` and then treats it as having the kind `(* -> *) -> Constraint` without
+any additional parameters.  This means you cannot mock a fair number of
+parameterized monads.
+
+The TH methods need to take types as parameters, not names, so that you can ask
+for an instance of `MonadError String`, for example, not just `MonadError`.
+
+## Use source locations in mock messages.
 
 We should be able to use the `HasCallStack` machinery to tell the user which
 specific `expect` or `whenever` call we're referring to when talking about an
@@ -8,12 +23,8 @@ see which one failed.
 
 Similarly, we could try to capture the call stack in `mockAction` and include
 it in errors.  Instead of just knowing there was an unexpected call from
-somewhere unspecified, you can find out where the call is.
-
-## Check deriving behavior for monads with superclasses.
-
-I haven't yet thought about this, but it seems to have been a concern for
-monad-mock and I believe I'll run into most of the same issues.
+somewhere unspecified and what the method and parameters were, you can look at
+where the call actually came from.
 
 ## Mockable for classes without `Show` / `Eq` on arguments.
 
