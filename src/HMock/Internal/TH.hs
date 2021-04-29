@@ -9,7 +9,7 @@ import Data.Maybe
 import Data.Typeable
 import HMock.Internal.Core
 import HMock.Internal.Predicates
-import Language.Haskell.TH hiding (Match, match)
+import Language.Haskell.TH hiding (match)
 
 data Method = Method
   { methodName :: Name,
@@ -43,9 +43,9 @@ deriveMockable cls = do
   decs <-
     sequenceA
       [ defineActionType cls methods,
-        defineMatchType cls methods,
+        defineMatcherType cls methods,
         defineShowAction methods,
-        defineShowMatch methods,
+        defineShowMatcher methods,
         defineExactly methods,
         defineMatch methods
       ]
@@ -81,33 +81,33 @@ methodToActionName name = mkName (toUpper c : cs)
   where
     (c : cs) = nameBase name
 
-defineMatchType :: Name -> [Method] -> Q Dec
-defineMatchType cls methods = do
+defineMatcherType :: Name -> [Method] -> Q Dec
+defineMatcherType cls methods = do
   a <- newName "a"
-  let conDecs = matchConstructor cls <$> methods
+  let conDecs = matcherConstructor cls <$> methods
   return
     ( DataInstD
         []
         Nothing
-        (AppT (AppT (ConT ''Match) (ConT cls)) (VarT a))
+        (AppT (AppT (ConT ''Matcher) (ConT cls)) (VarT a))
         Nothing
         conDecs
         []
     )
 
-methodToMatchName :: Name -> Name
-methodToMatchName name = mkName (toUpper c : cs ++ "_")
+methodToMatcherName :: Name -> Name
+methodToMatcherName name = mkName (toUpper c : cs ++ "_")
   where
     (c : cs) = nameBase name
 
-matchConstructor :: Name -> Method -> Con
-matchConstructor cls (Method name args result) =
+matcherConstructor :: Name -> Method -> Con
+matcherConstructor cls (Method name args result) =
   GadtC
-    [methodToMatchName name]
+    [methodToMatcherName name]
     ((s,) . AppT (ConT ''Predicate) <$> args)
     target
   where
-    target = AppT (AppT (ConT ''Match) (ConT cls)) result
+    target = AppT (AppT (ConT ''Matcher) (ConT cls)) result
     s = Bang NoSourceUnpackedness NoSourceStrictness
 
 defineShowAction :: [Method] -> Q Dec
@@ -130,13 +130,13 @@ showActionClause (Method name args _) = do
           )
   return (Clause [ConP (methodToActionName name) (VarP <$> argVars)] body [])
 
-defineShowMatch :: [Method] -> Q Dec
-defineShowMatch methods = do
-  clauses <- traverse showMatchClause methods
-  return (FunD 'showMatch clauses)
+defineShowMatcher :: [Method] -> Q Dec
+defineShowMatcher methods = do
+  clauses <- traverse showMatcherClause methods
+  return (FunD 'showMatcher clauses)
 
-showMatchClause :: Method -> Q Clause
-showMatchClause (Method name args _) = do
+showMatcherClause :: Method -> Q Clause
+showMatcherClause (Method name args _) = do
   argVars <- replicateM (length args) (newName "p")
   printedArgs <- traverse showArg argVars
   let body =
@@ -149,7 +149,7 @@ showMatchClause (Method name args _) = do
                   )
               )
           )
-  return (Clause [ConP (methodToMatchName name) (VarP <$> argVars)] body [])
+  return (Clause [ConP (methodToMatcherName name) (VarP <$> argVars)] body [])
   where
     showArg a = [|"«" ++ showPredicate $(varE a) ++ "»"|]
 
@@ -164,7 +164,7 @@ exactlyClause (Method name args _) = do
   return
     ( Clause
         [ConP (methodToActionName name) (VarP <$> argVars)]
-        (NormalB (makeBody (ConE (methodToMatchName name)) argVars))
+        (NormalB (makeBody (ConE (methodToMatcherName name)) argVars))
         []
     )
   where
@@ -189,7 +189,7 @@ matchClause (Method name args _) = do
 
   return
     ( Clause
-        [ ConP (methodToMatchName name) (VarP . fst <$> vars),
+        [ ConP (methodToMatcherName name) (VarP . fst <$> vars),
           ConP (methodToActionName name) (VarP . snd <$> vars)
         ]
         ( GuardedB

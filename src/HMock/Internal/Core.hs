@@ -109,41 +109,41 @@ excess = simplify . go
     go (AllOf xs) = AllOf (map go xs)
     go (Sequence xs) = Sequence (map go xs)
 
--- | The result of matching a @'Match' a@ with an @'Action' b@.
+-- | The result of matching a @'Matcher' a@ with an @'Action' b@.
 data MatchResult a b where
-  -- | The match was for a different action.
+  -- | The 'Matcher' was for a different method.
   NoMatch :: MatchResult a b
-  -- | The match was for the right action, but the arguments don't match, the
-  -- argument is the number of incorrect arguments.
+  -- | The 'Matcher' was for the right method, but this number of arguments
+  -- don't match.
   PartialMatch :: Int -> MatchResult a b
   -- | This is a match. 'Refl' witnesses equality of return types.
   FullMatch :: a :~: b -> MatchResult a b
 
--- | A class for 'Monad' subclasses that can be mocked.  You usually want to
--- generate this instance using Template Haskell, as it's a lot of
--- boilerplate.
+-- | A class for 'Monad' subclasses whose methods can be mocked.  You usually
+-- want to generate this instance using 'HMock.TH.makeMockable' or
+-- 'HMock.TH.deriveMockable', because it's just a lot of boilerplate.
 class Typeable ctx => Mockable (ctx :: (* -> *) -> Constraint) where
   -- An action that is performed.  This data type will have one constructor for
-  -- each method of the 'Monad'
+  -- each method.
   data Action ctx :: * -> *
 
   -- | A specification for matching actions.  The actual arguments should be
   -- replaced with predicates.
-  data Match ctx :: * -> *
+  data Matcher ctx :: * -> *
 
   -- Gets a text description of an 'Action', for use in error messages.
   showAction :: Action ctx a -> String
 
-  -- Gets a text description of a 'Match', for use in error messages.
-  showMatch :: Match ctx a -> String
+  -- Gets a text description of a 'Matcher', for use in error messages.
+  showMatcher :: Matcher ctx a -> String
 
-  -- Converts an 'Action' into a 'Match' that will only match those exact
+  -- Converts an 'Action' into a 'Matcher' that will only match those exact
   -- parameter values.  This is sometimes more convenient than writing
-  -- 'isEqual' everywhere.
-  exactly :: Action ctx a -> Match ctx a
+  -- 'HMock.eq_' everywhere.
+  exactly :: Action ctx a -> Matcher ctx a
 
-  -- Attempts to match an 'Action' with a 'Match'.
-  match :: Match ctx a -> Action ctx b -> MatchResult a b
+  -- Attempts to match an 'Action' with a 'Matcher'.
+  match :: Matcher ctx a -> Action ctx b -> MatchResult a b
 
 -- | Monad transformer for running mocks.
 newtype MockT m a where
@@ -160,20 +160,20 @@ runMockT (MockT test) = do
       error $
         "Missing expectations:\n" ++ formatExpected "  " missing
 
--- | A pair of a 'Match' and a response for when it matches.  The 'Action'
--- passed to the response is guaranteed to match the 'Match', so it's okay
+-- | A pair of a 'Matcher' and a response for when it matches.  The 'Action'
+-- passed to the response is guaranteed to match the 'Matcher', so it's okay
 -- to just pattern match on the correct action.
 data WithResult (ctx :: (* -> *) -> Constraint) (m :: * -> *) where
   -- | Matches an 'Action' and perform a response in the 'MockT' monad.  The
   -- response can perform any action, including setting up more expectations.
-  (:=>) :: Match ctx a -> (Action ctx a -> MockT m a) -> WithResult ctx m
+  (:=>) :: Matcher ctx a -> (Action ctx a -> MockT m a) -> WithResult ctx m
 
 -- | Matches an 'Action' and returns a constant response.  This is easier to
 -- use when you don't need to look at the arguments, set up new expectations,
 -- etc.
 (|=>) ::
   (Mockable ctx, Monad m) =>
-  Match ctx a ->
+  Matcher ctx a ->
   a ->
   WithResult ctx m
 m |=> r = m :=> const (return r)
@@ -215,9 +215,9 @@ mockAction a = MockT $ do
           fromDynamic step :: Maybe (WithResult ctx m) =
         case match m a of
           NoMatch -> Nothing
-          PartialMatch n -> Just (Left (n, showMatch m))
+          PartialMatch n -> Just (Left (n, showMatcher m))
           FullMatch Refl
-            | MockT r <- impl a -> Just (Right (showMatch m, put e >> r))
+            | MockT r <- impl a -> Just (Right (showMatcher m, put e >> r))
     tryMatch _ = Nothing
 
 -- An error for an action that has no expectations at all.
@@ -276,7 +276,7 @@ expectN ::
   WithResult ctx m ->
   Expected m
 expectN card wr@(m :=> (_ :: Action ctx a -> MockT m a)) =
-  Expect card (Step (showMatch m) (toDyn wr))
+  Expect card (Step (showMatcher m) (toDyn wr))
 
 -- Creates an expectation that an action is performed once.  This is equivalent
 -- to @'expectN' 'once'@, but shorter.
