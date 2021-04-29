@@ -1,0 +1,40 @@
+cabal-version:      2.4
+name:               hmock
+version:            0.1.0.0
+
+synopsis:           Flexible mock framework for Haskell
+description:        TODO
+
+bug-reports:        N/A
+license:            BSD-3-Clause
+license-file:       LICENSE
+
+author:             Chris Smith <cdsmith@gmail.com>
+maintainer:         Chris Smith <cdsmith@gmail.com>
+
+extra-source-files: CHANGELOG.md
+
+library
+    exposed-modules:  HMock,
+                      HMock.Mockable,
+                      HMock.TH,
+                      HMock.Internal.Cardinality,
+                      HMock.Internal.Core,
+                      HMock.Internal.Predicates,
+                      HMock.Internal.TH
+    build-depends:    base ^>=4.14.1.0,
+                      constraints,
+                      mtl,
+                      template-haskell,
+    hs-source-dirs:   src
+    default-language: Haskell2010
+    ghc-options:      -Wall
+
+test-suite tests
+    type:             exitcode-stdio-1.0
+    main-is:          Main.hs
+    build-depends:    base ^>=4.14.1.0,
+                      hspec,
+                      hmock,
+    hs-source-dirs:   test
+    default-language: Haskell2010
