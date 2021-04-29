@@ -11,21 +11,29 @@ import HMock.Internal.Core
 import HMock.Internal.Predicates
 import Language.Haskell.TH hiding (match)
 
+unappliedName :: Type -> Maybe Name
+unappliedName (AppT a _) = unappliedName a
+unappliedName (ConT a) = Just a
+unappliedName _ = Nothing
+
+getMembers :: Type -> Q [Dec]
+getMembers t = do
+  case unappliedName t of
+    Just cls -> do
+      info <- reify cls
+      case info of
+        ClassI (ClassD _ _ _ _ members) _ -> return members
+        _ -> fail $ "Expected " ++ show cls ++ " to be a class, but it wasn't."
+    Nothing -> return []
+
 data Method = Method
   { methodName :: Name,
     methodArgs :: [Type],
     methodResult :: Type
   }
 
-getMethods :: Name -> Q [Method]
+getMethods :: Type -> Q [Method]
 getMethods cls = mapMaybe parseMethod <$> getMembers cls
-
-getMembers :: Name -> Q [Dec]
-getMembers cls = do
-  info <- reify cls
-  case info of
-    ClassI (ClassD _ _ _ _ members) _ -> return members
-    _ -> fail $ "Expected " ++ show cls ++ " to be a class, but it wasn't."
 
 parseMethod :: Dec -> Maybe Method
 parseMethod (SigD name ty)
@@ -34,46 +42,47 @@ parseMethod (SigD name ty)
     Just (Method name (init argsAndReturn) result)
 parseMethod _ = Nothing
 
-makeMockable :: Name -> Q [Dec]
-makeMockable cls = (++) <$> deriveMockable cls <*> deriveForMockT cls
+makeMockable :: Q Type -> Q [Dec]
+makeMockable qt = (++) <$> deriveMockable qt <*> deriveForMockT qt
 
-deriveMockable :: Name -> Q [Dec]
-deriveMockable cls = do
-  methods <- getMethods cls
+deriveMockable :: Q Type -> Q [Dec]
+deriveMockable qt = do
+  t <- qt
+  methods <- getMethods t
   decs <-
     sequenceA
-      [ defineActionType cls methods,
-        defineMatcherType cls methods,
+      [ defineActionType t methods,
+        defineMatcherType t methods,
         defineShowAction methods,
         defineShowMatcher methods,
         defineExactly methods,
         defineMatch methods
       ]
-  return [InstanceD Nothing [] (AppT (ConT ''Mockable) (ConT cls)) decs]
+  return [InstanceD Nothing [] (AppT (ConT ''Mockable) t) decs]
 
 fnArgsAndReturn :: Type -> [Type]
 fnArgsAndReturn (AppT (AppT ArrowT a) b) = a : fnArgsAndReturn b
 fnArgsAndReturn r = [r]
 
-defineActionType :: Name -> [Method] -> Q Dec
-defineActionType cls methods = do
+defineActionType :: Type -> [Method] -> Q Dec
+defineActionType t methods = do
   a <- newName "a"
-  let conDecs = actionConstructor cls <$> methods
+  let conDecs = actionConstructor t <$> methods
   return
     ( DataInstD
         []
         Nothing
-        (AppT (AppT (ConT ''Action) (ConT cls)) (VarT a))
+        (AppT (AppT (ConT ''Action) t) (VarT a))
         Nothing
         conDecs
         []
     )
 
-actionConstructor :: Name -> Method -> Con
-actionConstructor cls (Method name args result) =
+actionConstructor :: Type -> Method -> Con
+actionConstructor t (Method name args result) =
   GadtC [methodToActionName name] (map (s,) args) target
   where
-    target = AppT (AppT (ConT ''Action) (ConT cls)) result
+    target = AppT (AppT (ConT ''Action) t) result
     s = Bang NoSourceUnpackedness NoSourceStrictness
 
 methodToActionName :: Name -> Name
@@ -81,15 +90,15 @@ methodToActionName name = mkName (toUpper c : cs)
   where
     (c : cs) = nameBase name
 
-defineMatcherType :: Name -> [Method] -> Q Dec
-defineMatcherType cls methods = do
+defineMatcherType :: Type -> [Method] -> Q Dec
+defineMatcherType t methods = do
   a <- newName "a"
-  let conDecs = matcherConstructor cls <$> methods
+  let conDecs = matcherConstructor t <$> methods
   return
     ( DataInstD
         []
         Nothing
-        (AppT (AppT (ConT ''Matcher) (ConT cls)) (VarT a))
+        (AppT (AppT (ConT ''Matcher) t) (VarT a))
         Nothing
         conDecs
         []
@@ -100,14 +109,14 @@ methodToMatcherName name = mkName (toUpper c : cs ++ "_")
   where
     (c : cs) = nameBase name
 
-matcherConstructor :: Name -> Method -> Con
-matcherConstructor cls (Method name args result) =
+matcherConstructor :: Type -> Method -> Con
+matcherConstructor t (Method name args result) =
   GadtC
     [methodToMatcherName name]
     ((s,) . AppT (ConT ''Predicate) <$> args)
     target
   where
-    target = AppT (AppT (ConT ''Matcher) (ConT cls)) result
+    target = AppT (AppT (ConT ''Matcher) t) result
     s = Bang NoSourceUnpackedness NoSourceStrictness
 
 defineShowAction :: [Method] -> Q Dec
@@ -227,13 +236,14 @@ matchClause (Method name args _) = do
         ]
     )
 
-deriveForMockT :: Name -> Q [Dec]
-deriveForMockT cls = do
-  maybeMethods <- traverse parseMethod <$> getMembers cls
+deriveForMockT :: Q Type -> Q [Dec]
+deriveForMockT qt = do
+  t <- qt
+  maybeMethods <- traverse parseMethod <$> getMembers t
   case maybeMethods of
     Nothing ->
       fail $
-        "Cannot derive MockT because " ++ nameBase cls ++ " is too complex."
+        "Cannot derive MockT because " ++ show t ++ " is too complex."
     Just methods -> do
       m <- newName "m"
       decs <- traverse mockMethodImpl methods
@@ -241,7 +251,7 @@ deriveForMockT cls = do
         [ InstanceD
             Nothing
             [AppT (ConT ''Typeable) (VarT m), AppT (ConT ''Monad) (VarT m)]
-            (AppT (ConT cls) (AppT (ConT ''MockT) (VarT m)))
+            (AppT t (AppT (ConT ''MockT) (VarT m)))
             decs
         ]
 

@@ -1,4 +1,7 @@
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 
@@ -18,7 +21,7 @@ instance MonadFS IO where
   readFile = Prelude.readFile
   writeFile = Prelude.writeFile
 
-makeMockable ''MonadFS
+makeMockable [t|MonadFS|]
 
 copyFile :: MonadFS m => FilePath -> FilePath -> m ()
 copyFile a b = readFile a >>= writeFile b
@@ -29,12 +32,17 @@ class MonadExtraneousMembers m where
 
   mockableMethod :: Int -> m ()
 
-deriveMockable ''MonadExtraneousMembers
+deriveMockable [t|MonadExtraneousMembers|]
 
 instance (Typeable m, Monad m) => MonadExtraneousMembers (MockT m) where
   data SomeDataType (MockT m) = FooCon
   favoriteNumber _ = 42
   mockableMethod a = mockMethod (MockableMethod a)
+
+class MonadMultiParam a m | m -> a where
+  multiParamMethod :: String -> m ()
+
+deriveMockable [t|MonadMultiParam String|]
 
 main :: IO ()
 main = hspec $ do
@@ -47,6 +55,7 @@ main = hspec $ do
         copyFile "foo.txt" "bar.txt"
 
   describe "MonadExtraneousMembers" $ do
-    it "mocks mockableMethod" $ example . runMockT $ do
-      mock $ expect $ MockableMethod 42 |-> ()
-      mockableMethod 42
+    it "mocks mockableMethod" $
+      example . runMockT $ do
+        mock $ expect $ MockableMethod 42 |-> ()
+        mockableMethod 42
