@@ -1,3 +1,3 @@
-module HMock.TH (makeMockable) where
+module HMock.TH (makeMockable, deriveMockable, deriveForMockT) where
 
 import HMock.Internal.TH

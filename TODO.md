@@ -1,18 +1,3 @@
-## Deriving Mockable when there are monad methods of the wrong form.
-
-``` haskell
-class MonadFoo m where
-  data Foo m
-  favoriteNumber :: m () -> Int
-
-  foo :: m ()
-```
-
-Only `foo` here can be mocked, but it should still be possible to make
-`MonadFoo` mockable using `deriveMockable` .  One then needs to write a manual
-`MockT` instance rather than using `deriveForMockT` , and provide some kind of
-concrete/fake implementation for the remaining members.
-
 ## Mockable for classes without `Show` / `Eq` on arguments.
 
 ``` haskell
