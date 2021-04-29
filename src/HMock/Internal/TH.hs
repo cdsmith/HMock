@@ -236,7 +236,7 @@ deriveForMockT cls = do
         "Cannot derive MockT because " ++ nameBase cls ++ " is too complex."
     Just methods -> do
       m <- newName "m"
-      decs <- traverse mockMethod methods
+      decs <- traverse mockMethodImpl methods
       return
         [ InstanceD
             Nothing
@@ -245,8 +245,8 @@ deriveForMockT cls = do
             decs
         ]
 
-mockMethod :: Method -> Q Dec
-mockMethod (Method name args _) = do
+mockMethodImpl :: Method -> Q Dec
+mockMethodImpl (Method name args _) = do
   argVars <- replicateM (length args) (newName "p")
   return
     ( FunD
@@ -255,7 +255,7 @@ mockMethod (Method name args _) = do
             (VarP <$> argVars)
             ( NormalB
                 ( AppE
-                    (VarE 'mockAction)
+                    (VarE 'mockMethod)
                     (actionExp (UnboundVarE (methodToActionName name)) argVars)
                 )
             )

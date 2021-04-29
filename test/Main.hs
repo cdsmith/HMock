@@ -34,7 +34,7 @@ deriveMockable ''MonadExtraneousMembers
 instance (Typeable m, Monad m) => MonadExtraneousMembers (MockT m) where
   data SomeDataType (MockT m) = FooCon
   favoriteNumber _ = 42
-  mockableMethod a = mockAction (MockableMethod a)
+  mockableMethod a = mockMethod (MockableMethod a)
 
 main :: IO ()
 main = hspec $ do

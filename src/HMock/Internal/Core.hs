@@ -29,9 +29,9 @@ import HMock.Internal.Cardinality
 data Step where
   Step :: String -> Dynamic -> Step
 
--- | A set of expectations and resulting actions to mock.  An entire unit test
--- with mocks is expected to run in a single base 'Monad', which is the type
--- parameter here.
+-- | A set of expected actions and their responses.  An entire test with mocks
+-- is expected to run in a single base 'Monad', which is the type parameter
+-- here.
 data Expected (m :: * -> *) where
   ExpectNothing :: Expected m
   Expect :: Cardinality -> Step -> Expected m
@@ -160,17 +160,18 @@ runMockT (MockT test) = do
       error $
         "Missing expectations:\n" ++ formatExpected "  " missing
 
--- | A pair of a 'Matcher' and a response for when it matches.  The 'Action'
--- passed to the response is guaranteed to match the 'Matcher', so it's okay
--- to just pattern match on the correct action.
+-- | A pair of a 'Matcher' and a response for when it matches.  The matching
+-- 'Action' is passed to the response, and is guaranteed to be a match, so it's
+-- okay to just pattern match on the correct method.
 data WithResult (ctx :: (* -> *) -> Constraint) (m :: * -> *) where
-  -- | Matches an 'Action' and perform a response in the 'MockT' monad.  The
-  -- response can perform any action, including setting up more expectations.
+  -- | Matches an 'Action' and performs a response in the 'MockT' monad.  This
+  -- is a vary flexible response, which can look at arguments, do things in the
+  -- base monad, set up more expectations, etc.
   (:=>) :: Matcher ctx a -> (Action ctx a -> MockT m a) -> WithResult ctx m
 
--- | Matches an 'Action' and returns a constant response.  This is easier to
--- use when you don't need to look at the arguments, set up new expectations,
--- etc.
+-- | Matches an 'Action' and returns a constant response.  This is more
+-- convenient than '(:=>)' in the common case where you just want to return a
+-- known result.
 (|=>) ::
   (Mockable ctx, Monad m) =>
   Matcher ctx a ->
@@ -179,8 +180,10 @@ data WithResult (ctx :: (* -> *) -> Constraint) (m :: * -> *) where
 m |=> r = m :=> const (return r)
 
 -- | Matches an exact 'Action' and returns a constant response.  This is the
--- simplest way to write an expectation, and is more readable when you know the
--- exact arguments to the action.
+-- simplest way to write an expectation, and is more readable than '(:=>)' or
+-- '(|=>)' when you know the exact arguments that must be passed to the
+-- method.  However, it can lead to over-assertion if used too often, which can
+-- make your tests brittle and less useful.
 (|->) ::
   (Mockable ctx, Monad m) =>
   Action ctx a ->
@@ -188,14 +191,14 @@ m |=> r = m :=> const (return r)
   WithResult ctx m
 a |-> b = exactly a |=> b
 
--- | Implements an action in a 'Mockable' monad by delegating to the mock
+-- | Implements a method in a 'Mockable' monad by delegating to the mock
 -- framework.  This is typically used only in generated code.
-mockAction ::
+mockMethod ::
   forall ctx m a.
   (Mockable ctx, Monad m, Typeable m) =>
   Action ctx a ->
   MockT m a
-mockAction a = MockT $ do
+mockMethod a = MockT $ do
   expected <- get
   case partitionEithers (mapMaybe tryMatch (liveSteps expected)) of
     ([], []) -> noMatchError a
@@ -220,7 +223,7 @@ mockAction a = MockT $ do
             | MockT r <- impl a -> Just (Right (showMatcher m, put e >> r))
     tryMatch _ = Nothing
 
--- An error for an action that has no expectations at all.
+-- An error for an action that matches no expectations at all.
 noMatchError ::
   Mockable ctx =>
   -- | The action that was received.
@@ -232,7 +235,7 @@ noMatchError a =
       ++ showAction a
 
 -- An error for an action that doesn't match the argument predicates for any
--- of the action's expectations.
+-- of the method's expectations.
 partialMatchError ::
   Mockable ctx =>
   -- | The action that was received.
@@ -296,7 +299,12 @@ whenever ::
   Expected m
 whenever = expectN anyCardinality
 
--- Creates an expectation that a sequence of actions will occur in order.  Other
--- actions can still happen between them.
+-- Creates a sequential expectation.  Other actions can still happen during the
+-- sequence, but these specific expectations must be met in this order.
+--
+-- Beware of using 'inSequence' too often.  It is appropriate when the property
+-- you are testing is that the order of effects is correct.  If that's not the
+-- purpose of the test, consider adding several independent expectations,
+-- instead.  This avoids over-asserting, and keeps your tests less brittle.
 inSequence :: [Expected m] -> Expected m
 inSequence = Sequence
