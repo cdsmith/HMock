@@ -1,3 +1,20 @@
+## Use source locations in messages.
+
+We should be able to use the `HasCallStack` machinery to tell the user which
+specific `expect` or `whenever` call we're referring to when talking about an
+expectation.  This is nicer than just printing the method name and argument
+predicates.  For example, if you have a sequence of three expectations, you can
+see which one failed.
+
+Similarly, we could try to capture the call stack in `mockAction` and include
+it in errors.  Instead of just knowing there was an unexpected call from
+somewhere unspecified, you can find out where the call is.
+
+## Check deriving behavior for monads with superclasses.
+
+I haven't yet thought about this, but it seems to have been a concern for
+monad-mock and I believe I'll run into most of the same issues.
+
 ## Mockable for classes without `Show` / `Eq` on arguments.
 
 ``` haskell
