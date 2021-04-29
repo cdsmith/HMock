@@ -137,13 +137,18 @@ class Typeable ctx => Mockable (ctx :: (* -> *) -> Constraint) where
   -- Gets a text description of a 'Matcher', for use in error messages.
   showMatcher :: Matcher ctx a -> String
 
+  -- Attempts to match an 'Action' with a 'Matcher'.
+  match :: Matcher ctx a -> Action ctx b -> MatchResult a b
+
+-- | A class for 'Monad' subclasses whose methods can be mocked and compared
+-- for exact equality.  Only those classes whose methods have nice enough
+-- arguments (which can be printed and compared for equality) may be instances
+-- of this subclass.
+class Mockable ctx => ExactMockable ctx where
   -- Converts an 'Action' into a 'Matcher' that will only match those exact
   -- parameter values.  This is sometimes more convenient than writing
   -- 'HMock.eq_' everywhere.
   exactly :: Action ctx a -> Matcher ctx a
-
-  -- Attempts to match an 'Action' with a 'Matcher'.
-  match :: Matcher ctx a -> Action ctx b -> MatchResult a b
 
 -- | Monad transformer for running mocks.
 newtype MockT m a where
@@ -185,7 +190,7 @@ m |=> r = m :=> const (return r)
 -- method.  However, it can lead to over-assertion if used too often, which can
 -- make your tests brittle and less useful.
 (|->) ::
-  (Mockable ctx, Monad m) =>
+  (ExactMockable ctx, Monad m) =>
   Action ctx a ->
   a ->
   WithResult ctx m

@@ -2,7 +2,8 @@
 module HMock
   ( MockT,
     runMockT,
-    Mockable (Action, Matcher, exactly),
+    Mockable (Action, Matcher),
+    ExactMockable (exactly),
     WithResult ((:=>)),
     (|=>),
     (|->),

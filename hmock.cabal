@@ -24,6 +24,7 @@ library
                       HMock.Internal.TH
     build-depends:    base ^>=4.14.1.0,
                       constraints,
+                      extra,
                       mtl,
                       template-haskell,
     hs-source-dirs:   src

@@ -21,33 +21,22 @@ makeMockable [t| MonadFoo Int |]
 ```
 
 The TH code derives an incorrect instance, here.  In the `MonadFoo Int`
-instance, the correct type for `foo` is `Int -> m ()`, but current code treats
-it as if it has the type `forall a. a -> m ()`.
+instance, the instantiated type for `foo` is `Int -> m ()`, but current code
+treats it as if it has the type `forall a. a -> m ()`, and generates the
+`Action` and `Match` types to be too polymorphic.
 
-(Currently, you need `FlexibleInstances` to use `makeMockable` on this type.
-One can also ask whether there should be a way to add constraints on the
-derived `Mockable` instance, so this it's not needed.  In this case, the
-context would just be copied, so `makeMockable [t| a ~ Int |] [t| MonadFoo a |]`
-would act as if `foo` has type `a ~ Int => a -> m ()`, which is the same as
-`Int -> m ()`.)
-
-## Mockable for classes without `Show` / `Eq` on arguments.
+A related concern is that you need `FlexibleInstances` to use `makeMockable` on
+this type.  One can also ask whether there should be a way to add context to
+the derived `Mockable` instance, so this it's not needed.  For instance,
+`makeMockableCtx [t| a ~ Int |] [t| MonadFoo a |]` could generate an instance
+like
 
 ``` haskell
-class MonadFoo m where
-    foo :: (Int -> Int) -> m Int
+instance (a ~ Int) => Mockable (MonadFoo a) where {...}
 ```
 
-One challenge here is the `exactly` method, which requires at least `Eq` for all
-arguments to implement correctly.  I wonder if `exactly` ought to be in a
-subclass called something like `ExactMockable` instead, which would become the
-constraint for `(|->)` .
-
-There's an easier solution for `showAction` and `showMatch` .  These are only
-used for error messages, so the TH-generated code should check whether a `Show`
-instance is available, and if not, show a placeholder string for the unshowable
-argument, possibly mentioning the type.  (The same check could decide whether it
-generates an `ExactMockable` instance.)
+In the instance, `foo` would have the type `a ~ Int => a -> m ()`, which is the
+same as `Int -> m ()`.
 
 ## Mockable with polymorphic return values.
 

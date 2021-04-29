@@ -4,6 +4,7 @@
 module HMock.Internal.TH where
 
 import Control.Monad
+import Control.Monad.Extra
 import Data.Char
 import Data.Maybe
 import Data.Typeable
@@ -37,10 +38,18 @@ getMethods cls = mapMaybe parseMethod <$> getMembers cls
 
 parseMethod :: Dec -> Maybe Method
 parseMethod (SigD name ty)
-  | argsAndReturn <- fnArgsAndReturn ty,
+  | argsAndReturn <- splitType ty,
     AppT (VarT _) result <- last argsAndReturn =
     Just (Method name (init argsAndReturn) result)
+  where
+    splitType (AppT (AppT ArrowT a) b) = a : splitType b
+    splitType r = [r]
 parseMethod _ = Nothing
+
+hasNiceFields :: Method -> Q Bool
+hasNiceFields (Method _ args _) = allM isNiceField args
+  where
+    isNiceField ty = (&&) <$> isInstance ''Show [ty] <*> isInstance ''Eq [ty]
 
 makeMockable :: Q Type -> Q [Dec]
 makeMockable qt = (++) <$> deriveMockable qt <*> deriveForMockT qt
@@ -49,20 +58,30 @@ deriveMockable :: Q Type -> Q [Dec]
 deriveMockable qt = do
   t <- qt
   methods <- getMethods t
-  decs <-
+  mockableDecs <-
     sequenceA
       [ defineActionType t methods,
         defineMatcherType t methods,
         defineShowAction methods,
         defineShowMatcher methods,
-        defineExactly methods,
         defineMatch methods
       ]
-  return [InstanceD Nothing [] (AppT (ConT ''Mockable) t) decs]
+  let mockableInst =
+        [InstanceD Nothing [] (AppT (ConT ''Mockable) t) mockableDecs]
 
-fnArgsAndReturn :: Type -> [Type]
-fnArgsAndReturn (AppT (AppT ArrowT a) b) = a : fnArgsAndReturn b
-fnArgsAndReturn r = [r]
+  exact <- allM hasNiceFields methods
+  exactMockableInst <-
+    if exact
+      then do
+        exactDecs <-
+          sequenceA
+            [ defineExactly methods
+            ]
+        return
+          [InstanceD Nothing [] (AppT (ConT ''ExactMockable) t) exactDecs]
+      else return []
+
+  return (mockableInst ++ exactMockableInst)
 
 defineActionType :: Type -> [Method] -> Q Dec
 defineActionType t methods = do
@@ -104,11 +123,6 @@ defineMatcherType t methods = do
         []
     )
 
-methodToMatcherName :: Name -> Name
-methodToMatcherName name = mkName (toUpper c : cs ++ "_")
-  where
-    (c : cs) = nameBase name
-
 matcherConstructor :: Type -> Method -> Con
 matcherConstructor t (Method name args result) =
   GadtC
@@ -119,6 +133,11 @@ matcherConstructor t (Method name args result) =
     target = AppT (AppT (ConT ''Matcher) t) result
     s = Bang NoSourceUnpackedness NoSourceStrictness
 
+methodToMatcherName :: Name -> Name
+methodToMatcherName name = mkName (toUpper c : cs ++ "_")
+  where
+    (c : cs) = nameBase name
+
 defineShowAction :: [Method] -> Q Dec
 defineShowAction methods = do
   clauses <- traverse showActionClause methods
@@ -127,17 +146,19 @@ defineShowAction methods = do
 showActionClause :: Method -> Q Clause
 showActionClause (Method name args _) = do
   argVars <- replicateM (length args) (newName "p")
+  printedArgs <- traverse showArg (zip args argVars)
   let body =
         NormalB
           ( AppE
               (VarE 'unwords)
-              ( ListE
-                  ( LitE (StringL (nameBase name)) :
-                    map (AppE (VarE 'show) . VarE) argVars
-                  )
-              )
+              (ListE (LitE (StringL (nameBase name)) : printedArgs))
           )
   return (Clause [ConP (methodToActionName name) (VarP <$> argVars)] body [])
+  where
+    showArg (ty, var) = do
+      showable <- isInstance ''Show [ty]
+      return $
+        if showable then AppE (VarE 'show) (VarE var) else LitE (StringL "_")
 
 defineShowMatcher :: [Method] -> Q Dec
 defineShowMatcher methods = do

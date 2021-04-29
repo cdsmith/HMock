@@ -44,6 +44,11 @@ class MonadMultiParam a m | m -> a where
 
 deriveMockable [t|MonadMultiParam String|]
 
+class MonadUnshowable m where
+    unshowableArgs :: (Int -> Int) -> m Int
+
+makeMockable [t| MonadUnshowable |]
+
 main :: IO ()
 main = hspec $ do
   describe "MonadFS" $ do
