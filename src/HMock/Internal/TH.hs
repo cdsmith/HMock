@@ -6,8 +6,8 @@ module HMock.Internal.TH where
 import Control.Monad
 import Control.Monad.Extra
 import Data.Char
+import Data.Generics
 import Data.Maybe
-import Data.Typeable
 import HMock.Internal.Core
 import HMock.Internal.Predicates
 import Language.Haskell.TH hiding (match)
@@ -17,15 +17,38 @@ unappliedName (AppT a _) = unappliedName a
 unappliedName (ConT a) = Just a
 unappliedName _ = Nothing
 
-getMembers :: Type -> Q [Dec]
-getMembers t = do
+withClass :: Type -> (Dec -> Q a) -> Q a
+withClass t f = do
   case unappliedName t of
     Just cls -> do
       info <- reify cls
       case info of
-        ClassI (ClassD _ _ _ _ members) _ -> return members
+        ClassI dec@ClassD {} _ -> f dec
         _ -> fail $ "Expected " ++ show cls ++ " to be a class, but it wasn't."
-    Nothing -> return []
+    _ -> fail "Expected a class, but got something else."
+
+getClassVars :: Type -> Q [(Name, Type)]
+getClassVars t = withClass t $
+  \(ClassD _ _ binders _ _) -> return (fst $ matchVars t binders)
+  where
+    matchVars (ConT _) vs = ([], vs)
+    matchVars (AppT a b) vs = case matchVars a vs of
+      (tbl, v : vs') -> ((toName v, b) : tbl, vs')
+      (tbl, []) -> (tbl, [])
+    matchVars _ vs = ([], vs)
+
+    toName :: TyVarBndr -> Name
+    toName (PlainTV n) = n
+    toName (KindedTV n _) = n
+
+substTypeVars :: [(Name, Type)] -> Type -> Type
+substTypeVars classVars = everywhere (mkT subst)
+  where
+    subst (VarT x) | Just t <- lookup x classVars = t
+    subst t = t
+
+getMembers :: Type -> Q [Dec]
+getMembers t = withClass t $ \(ClassD _ _ _ _ members) -> return members
 
 data Method = Method
   { methodName :: Name,
@@ -85,8 +108,9 @@ deriveMockable qt = do
 
 defineActionType :: Type -> [Method] -> Q Dec
 defineActionType t methods = do
+  classVars <- getClassVars t
   a <- newName "a"
-  let conDecs = actionConstructor t <$> methods
+  let conDecs = actionConstructor t classVars <$> methods
   return
     ( DataInstD
         []
@@ -97,11 +121,14 @@ defineActionType t methods = do
         []
     )
 
-actionConstructor :: Type -> Method -> Con
-actionConstructor t (Method name args result) =
-  GadtC [methodToActionName name] (map (s,) args) target
+actionConstructor :: Type -> [(Name, Type)] -> Method -> Con
+actionConstructor t classVars (Method name args result) =
+  GadtC
+    [methodToActionName name]
+    (map ((s,) . substTypeVars classVars) args)
+    target
   where
-    target = AppT (AppT (ConT ''Action) t) result
+    target = AppT (AppT (ConT ''Action) t) (substTypeVars classVars result)
     s = Bang NoSourceUnpackedness NoSourceStrictness
 
 methodToActionName :: Name -> Name
@@ -111,8 +138,9 @@ methodToActionName name = mkName (toUpper c : cs)
 
 defineMatcherType :: Type -> [Method] -> Q Dec
 defineMatcherType t methods = do
+  classVars <- getClassVars t
   a <- newName "a"
-  let conDecs = matcherConstructor t <$> methods
+  let conDecs = matcherConstructor t classVars <$> methods
   return
     ( DataInstD
         []
@@ -123,14 +151,14 @@ defineMatcherType t methods = do
         []
     )
 
-matcherConstructor :: Type -> Method -> Con
-matcherConstructor t (Method name args result) =
+matcherConstructor :: Type -> [(Name, Type)] -> Method -> Con
+matcherConstructor t classVars (Method name args result) =
   GadtC
     [methodToMatcherName name]
-    ((s,) . AppT (ConT ''Predicate) <$> args)
+    ((s,) . AppT (ConT ''Predicate) . substTypeVars classVars <$> args)
     target
   where
-    target = AppT (AppT (ConT ''Matcher) t) result
+    target = AppT (AppT (ConT ''Matcher) t) (substTypeVars classVars result)
     s = Bang NoSourceUnpackedness NoSourceStrictness
 
 methodToMatcherName :: Name -> Name

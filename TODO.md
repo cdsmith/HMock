@@ -11,7 +11,7 @@ it in errors.  Instead of just knowing there was an unexpected call from
 somewhere unspecified and what the method and parameters were, you can look at
 where the call actually came from.
 
-## Better deriving for multi-param type classes
+## Instance contexts
 
 ``` haskell
 class MonadFoo a m where
@@ -20,14 +20,9 @@ class MonadFoo a m where
 makeMockable [t| MonadFoo Int |]
 ```
 
-The TH code derives an incorrect instance, here.  In the `MonadFoo Int`
-instance, the instantiated type for `foo` is `Int -> m ()`, but current code
-treats it as if it has the type `forall a. a -> m ()`, and generates the
-`Action` and `Match` types to be too polymorphic.
-
-A related concern is that you need `FlexibleInstances` to use `makeMockable` on
-this type.  One can also ask whether there should be a way to add context to
-the derived `Mockable` instance, so this it's not needed.  For instance,
+Using `makeMockable` here requires `FlexibleInstances`.  One can also ask
+whether there should be a way to add context to the derived `Mockable` instance,
+so that `FlexibleInstances` isn't needed.  For instance,
 `makeMockableCtx [t| a ~ Int |] [t| MonadFoo a |]` could generate an instance
 like
 

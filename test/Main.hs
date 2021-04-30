@@ -40,7 +40,7 @@ instance (Typeable m, Monad m) => MonadExtraneousMembers (MockT m) where
   mockableMethod a = mockMethod (MockableMethod a)
 
 class MonadMultiParam a m | m -> a where
-  multiParamMethod :: String -> m ()
+  multiParamMethod :: a -> m ()
 
 deriveMockable [t|MonadMultiParam String|]
 
