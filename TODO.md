@@ -4,6 +4,23 @@ The TH code is not particularly hardened.  I suspect you would be able to break
 it with lots of innocuous changes, even just adding explicit foralls and other
 cosmetic changes.  It needs some work toward systematic completeness.
 
+## More priorities for actions
+
+Currently, it's an error when more than one `Matcher` in the expectations
+applies to the current `Action`.  It's more common in other mock frameworks to
+adopt rules for choosing which match to prefer.
+
+* One such rule is to choose the most specific match.  This would mean adding
+  some kind of partial order on predicates.  We'd probably just adopt a
+  four-tier system, where `none_` > `eq_ x` > anythiong else matching `x` >
+  `none_`.  Then instead of looking for a unique match, we're looking for a
+  unique maximally specific match.
+* Another rule is to have user-specified priorities.  A simple answer along
+  these lines would be to have `whenever` get lower priority than `expect` and
+  `expectN`, so it can be used to set a default action when there's no
+  expectation.  One might then add an `expectMany` that is like `whenever` but
+  without the low priority.
+
 ## Use source locations in mock messages.
 
 We should be able to use the `HasCallStack` machinery to tell the user which
@@ -57,20 +74,3 @@ to know in order to set expectations properly.
 It's possible this could be solved by changing the `Action` and `Match` types
 to have the monad as a phantom parameter, similar to what was done with
 `Expected` , so that `match` could unify them.
-
-## More priorities for actions
-
-Currently, it's an error when more than one `Matcher` in the expectations
-applies to the current `Action`.  It's more common in other mock frameworks to
-adopt rules for choosing which match to prefer.
-
-* One such rule is to choose the most specific match.  This would mean adding
-  some kind of partial order on predicates.  We'd probably just adopt a
-  four-tier system, where `none_` > `eq_ x` > anythiong else matching `x` >
-  `none_`.  Then instead of looking for a unique match, we're looking for a
-  unique maximally specific match.
-* Another rule is to have user-specified priorities.  A simple answer along
-  these lines would be to have `whenever` get lower priority than `expect` and
-  `expectN`, so it can be used to set a default action when there's no
-  expectation.  One might then add an `expectMany` that is like `whenever` but
-  without the low priority.
