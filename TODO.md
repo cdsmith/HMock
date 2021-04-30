@@ -1,3 +1,9 @@
+## Verify TH code with more different types
+
+The TH code is not particularly hardened.  I suspect you would be able to break
+it with lots of innocuous changes, even just adding explicit foralls and other
+cosmetic changes.  It needs some work toward systematic completeness.
+
 ## Use source locations in mock messages.
 
 We should be able to use the `HasCallStack` machinery to tell the user which
