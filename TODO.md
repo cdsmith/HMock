@@ -11,28 +11,6 @@ it in errors.  Instead of just knowing there was an unexpected call from
 somewhere unspecified and what the method and parameters were, you can look at
 where the call actually came from.
 
-## Instance contexts
-
-``` haskell
-class MonadFoo a m where
-  foo :: a -> m ()
-
-makeMockable [t| MonadFoo Int |]
-```
-
-Using `makeMockable` here requires `FlexibleInstances`.  One can also ask
-whether there should be a way to add context to the derived `Mockable` instance,
-so that `FlexibleInstances` isn't needed.  For instance,
-`makeMockableCtx [t| a ~ Int |] [t| MonadFoo a |]` could generate an instance
-like
-
-``` haskell
-instance (a ~ Int) => Mockable (MonadFoo a) where {...}
-```
-
-In the instance, `foo` would have the type `a ~ Int => a -> m ()`, which is the
-same as `Int -> m ()`.
-
 ## Mockable with polymorphic return values.
 
 ``` haskell
