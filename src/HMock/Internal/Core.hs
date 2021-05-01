@@ -114,8 +114,8 @@ data MatchResult a b where
   -- | The 'Matcher' was for a different method.
   NoMatch :: MatchResult a b
   -- | The 'Matcher' was for the right method, but this number of arguments
-  -- don't match.
-  PartialMatch :: Int -> MatchResult a b
+  -- don't match.  'Refl' witnesses equality of return types.
+  PartialMatch :: a :~: a -> Int -> MatchResult a b
   -- | This is a match. 'Refl' witnesses equality of return types.
   FullMatch :: a :~: b -> MatchResult a b
 
@@ -135,7 +135,7 @@ class Typeable ctx => Mockable (ctx :: (* -> *) -> Constraint) where
   showAction :: Action ctx a -> String
 
   -- Gets a text description of a 'Matcher', for use in error messages.
-  showMatcher :: Matcher ctx a -> String
+  showMatcher :: Maybe (Action ctx a) -> Matcher ctx b -> String
 
   -- Attempts to match an 'Action' with a 'Matcher'.
   match :: Matcher ctx a -> Action ctx b -> MatchResult a b
@@ -223,9 +223,9 @@ mockMethod a = MockT $ do
           fromDynamic step :: Maybe (WithResult ctx m) =
         case match m a of
           NoMatch -> Nothing
-          PartialMatch n -> Just (Left (n, showMatcher m))
+          PartialMatch Refl n -> Just (Left (n, showMatcher (Just a) m))
           FullMatch Refl
-            | MockT r <- impl a -> Just (Right (showMatcher m, put e >> r))
+            | MockT r <- impl a -> Just (Right (showMatcher (Just a) m, put e >> r))
     tryMatch _ = Nothing
 
 -- An error for an action that matches no expectations at all.
@@ -284,7 +284,7 @@ expectN ::
   WithResult ctx m ->
   Expected m
 expectN card wr@(m :=> (_ :: Action ctx a -> MockT m a)) =
-  Expect card (Step (showMatcher m) (toDyn wr))
+  Expect card (Step (showMatcher Nothing m) (toDyn wr))
 
 -- Creates an expectation that an action is performed once.  This is equivalent
 -- to @'expectN' 'once'@, but shorter.

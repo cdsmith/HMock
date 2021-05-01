@@ -1,26 +1,3 @@
-## Eliminate Proxy in derived Matcher types
-
-Currently, `Matcher` for polymorphic arguments results in a (constrained)
-`Proxy` argument to the constructor.  This isn't used at all for matching, but
-is used to remember a type at which the `Matcher` was first instantiated, so
-that it can be printed.  This is wrong, because the initial instantiation type
-doesn't matter at all to the meaning of the `Matcher`.  It's extra info that is
-collected only to pretend we know more than we do later on.
-
-What we should do instead is this:
-
-``` haskell
-class Mockable cls where
-    ...
-    showMatcher :: Maybe (Action cls a) -> Matcher cls a -> String
-```
-
-When `showMatcher` is applied to `Nothing`, polymorphic argument matchers should
-just be printed as "«polymorphic»", since we don't know what type to instantiate
-at.  When applied to `Just action`, the type of the `Action` can be used to
-satisfy the `Predicate` constraints, just like what happens in `match`, and a
-more specific message can be printed.
-
 ## Verify TH code with more different types
 
 The TH code is not particularly hardened.  I suspect you would be able to break

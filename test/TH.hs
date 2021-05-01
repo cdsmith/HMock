@@ -11,6 +11,7 @@
 module TH where
 
 import Data.Dynamic
+import Data.Kind
 import Data.Typeable
 import HMock
 import HMock.Mockable

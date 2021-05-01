@@ -181,23 +181,19 @@ defineMatcherType t methods = do
     )
 
 matcherConstructor :: Type -> Method -> ConQ
-matcherConstructor t method
-  | null (methodTyVars method) && null (methodCxt method) = return body
-  | otherwise =
-    forallC (methodTyVars method) (return (methodCxt method)) (return body)
+matcherConstructor t method = return body
   where
     body =
       GadtC
         [methodToMatcherName (methodName method)]
-        ((s,) <$> args)
+        ( (Bang NoSourceUnpackedness NoSourceStrictness,) . mkPredicate
+            <$> methodArgs method
+        )
         target
-    args =
-      (mkProxy <$> methodTyVars method) ++ (mkPredicate <$> methodArgs method)
     target =
       AppT
         (AppT (ConT ''Matcher) t)
         (methodResult method)
-    s = Bang NoSourceUnpackedness NoSourceStrictness
     mkPredicate argTy
       | null (methodTyVars method) && null (methodCxt method) =
         AppT (ConT ''Predicate) argTy
@@ -205,8 +201,6 @@ matcherConstructor t method
       where
         (tyVars, cx) =
           relevantContext argTy (methodTyVars method, methodCxt method)
-    mkProxy (PlainTV v) = AppT (ConT ''Proxy) (VarT v)
-    mkProxy (KindedTV v _) = AppT (ConT ''Proxy) (VarT v)
 
 relevantContext :: Type -> ([TyVarBndr], Cxt) -> ([TyVarBndr], Cxt)
 relevantContext ty (tvs, cx) =
@@ -259,46 +253,52 @@ showActionClause method = do
 
 defineShowMatcher :: [Method] -> Q Dec
 defineShowMatcher methods = do
-  clauses <- traverse showMatcherClause methods
+  clauses <- concatMapM showMatcherClauses methods
   return (FunD 'showMatcher clauses)
 
-showMatcherClause :: Method -> Q Clause
-showMatcherClause method = do
-  argVars <- replicateM (length (methodArgs method)) (newName "p")
-  printedArgs <- traverse showArg (zip argVars (methodArgs method))
-  let body =
+showMatcherClauses :: Method -> Q [Clause]
+showMatcherClauses method = do
+  argVars <- replicateM (length (methodArgs method)) (newName "a")
+  argTVars <- replicateM (length (methodArgs method)) (newName "t")
+  predVars <- replicateM (length (methodArgs method)) (newName "p")
+  printedArgs <- traverse showArg (zip3 predVars argTVars (methodArgs method))
+  printedPolyArgs <- traverse showPolyArg (zip predVars (methodArgs method))
+  let body args =
         NormalB
           ( AppE
               (VarE 'unwords)
               ( ListE
                   ( LitE (StringL (nameBase (methodName method))) :
-                    printedArgs
+                    args
                   )
               )
           )
   return
-    ( Clause
-        [ ConP
-            (methodToMatcherName (methodName method))
-            ((mkProxy <$> methodTyVars method) ++ (VarP <$> argVars))
+    [ Clause
+        [ ConP 'Just [ConP (methodToActionName (methodName method)) (typedArg <$> zip3 argVars argTVars (methodArgs method))],
+          ConP (methodToMatcherName (methodName method)) (VarP <$> predVars)
         ]
-        body
+        (body printedArgs)
+        [],
+      Clause
+        [ ConP 'Nothing [],
+          ConP (methodToMatcherName (methodName method)) (VarP <$> predVars)
+        ]
+        (body printedPolyArgs)
         []
-    )
+    ]
   where
-    showArg (a, ty)
-      | null (freeTypeVars ty) = [|"«" ++ showPredicate $(varE a) ++ "»"|]
-      | otherwise = [|"«" ++ showPredicate $(applyTypes tvs (varE a)) ++ "»"|]
-      where
-        (tvs, _) = relevantContext ty (methodTyVars method, [])
+    typedArg (a, t, ty)
+      | null (freeTypeVars ty) = VarP a
+      | otherwise = SigP (VarP a) (VarT t)
 
-    applyTypes [] a = a
-    applyTypes (PlainTV v : vs) a = applyTypes vs (appTypeE a (varT v))
-    applyTypes (KindedTV v _ : vs) a = applyTypes vs (appTypeE a (varT v))
+    showArg (p, t, ty)
+      | null (freeTypeVars ty) = [|"«" ++ showPredicate $(varE p) ++ "»"|]
+      | otherwise = [|"«" ++ showPredicate ($(varE p) :: Predicate $(varT t)) ++ "»"|]
 
-    mkProxy (PlainTV v) = SigP (ConP 'Proxy []) (AppT (ConT ''Proxy) (VarT v))
-    mkProxy (KindedTV v _) =
-      SigP (ConP 'Proxy []) (AppT (ConT ''Proxy) (VarT v))
+    showPolyArg (p, ty)
+      | null (freeTypeVars ty) = [|"«" ++ showPredicate $(varE p) ++ "»"|]
+      | otherwise = [|"«polymorphic»"|]
 
 defineMatch :: [Method] -> Q Dec
 defineMatch methods = do
@@ -314,16 +314,15 @@ matchClause method = do
   let n = length (methodArgs method)
   argVars <- replicateM n ((,) <$> newName "p" <*> newName "a")
   mismatchVar <- newName "mismatches"
-  let proxyArgs = replicate (length (methodTyVars method)) (conP 'Proxy [])
   clause
     [ conP
         (methodToMatcherName (methodName method))
-        (proxyArgs ++ (varP . fst <$> argVars)),
+        (varP . fst <$> argVars),
       conP (methodToActionName (methodName method)) (varP . snd <$> argVars)
     ]
     ( guardedB
         [ (,) <$> normalG [|$(varE mismatchVar) == 0|] <*> [|FullMatch Refl|],
-          (,) <$> normalG [|otherwise|] <*> [|PartialMatch $(varE mismatchVar)|]
+          (,) <$> normalG [|otherwise|] <*> [|PartialMatch Refl $(varE mismatchVar)|]
         ]
     )
     [ valD
