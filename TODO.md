@@ -35,6 +35,25 @@ more powerful matchers.  Finally, `instance (a ~ Int) => Mockable (MonadFoo a)`
 is equivalent to the monomorphic form.  Currently, there is no way to specify
 these contexts, but such a mechanism could be added.
 
+## Specify base monad for MockT instances
+
+``` haskell
+class MonadFoo2 a m | m -> a where
+  foo2 :: a -> m ()
+
+makeMockableWithOptions (def {mockPrefix = "Str"}) [t|MonadFoo2 String|]
+makeMockableWithOptions (def {mockPrefix = "Int"}) [t|MonadFoo2 Int|]
+```
+
+This fails.  Both versions of `makeMockableWithOptions` try to define an
+instance of `MockT m`, but with different choices of `a`, and this violates the
+functional dependency.  The work-around is to use `deriveMockableWithOptions`
+instead, and then write your own `MockT` instances with different base monads.
+
+In `deriveForMockT`, we could let you specify the base monad, so you could use
+the same workaround without manually writing the `MockT` instance.  The instance
+isn't hard to write, so it's a pretty minor point.
+
 ## More priorities for actions
 
 Currently, it's an error when more than one `Matcher` in the expectations
