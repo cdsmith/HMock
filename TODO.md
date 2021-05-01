@@ -4,25 +4,6 @@ The TH code is not particularly hardened.  I suspect you would be able to break
 it with lots of innocuous changes, even just adding explicit foralls and other
 cosmetic changes.  It needs some work toward systematic completeness.
 
-## Mockable with constrained polymorphic arguments.
-
-``` haskell
-class MonadFoo m where
-    foo :: forall a. Enum a => a -> m ()
-```
-
-The derived instance for this will currently fail.  The `Action` and `Matcher`
-constructors have the types
-
-``` haskell
-Foo :: forall a. Enum a => a -> Action MonadFoo ()
-Foo_ :: (forall a. Enum a => Predicate a) -> Matcher MonadFoo ()
-```
-
-Matching works fine, but `showMatcher` fails to compile, because the `Enum a`
-constraint needs to be satisfied in order to call `showPredicate` for that
-argument, and that cannot happen until we have an `Action` to pattern match on.
-
 ## More priorities for actions
 
 Currently, it's an error when more than one `Matcher` in the expectations

@@ -1,7 +1,6 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE ImpredicativeTypes #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -20,7 +19,7 @@ import HMock.TH
 class MonadFoo1 m where
   foo1 :: String -> m ()
 
-makeMockable [t| MonadFoo1 |]
+makeMockable [t|MonadFoo1|]
 
 class MonadFoo2 a m | m -> a where
   foo2 :: a -> m ()
@@ -28,6 +27,6 @@ class MonadFoo2 a m | m -> a where
 makeMockable [t|MonadFoo2 String|]
 
 class MonadFoo3 m where
-  foo3 :: a -> String -> m ()
+  foo3 :: Enum a => String -> a -> b -> m ()
 
 makeMockable [t|MonadFoo3|]
