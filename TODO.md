@@ -4,6 +4,60 @@ The TH code is not particularly hardened.  I suspect you would be able to break
 it with lots of innocuous changes, even just adding explicit foralls and other
 cosmetic changes.  It needs some work toward systematic completeness.
 
+## Derive Mockable with prefixes on `Action` and `Matcher` constructors
+
+``` haskell
+class MonadFoo a m where
+    foo :: a -> m ()
+
+makeMockable [t| MonadFoo Int |]
+makeMockable [t| MonadFoo String |]
+```
+
+This is an error, because the constructors for the two instances have the same
+names.  We can fix this with user-specified prefixes:
+
+``` haskell
+class MonadFoo a m where
+    foo :: a -> m ()
+
+makeMockablePrefix "Int" [t| MonadFoo Int |]
+-- defines IntFoo
+makeMockablePrefix "Str" [t| MonadFoo String |]
+-- defines StrFoo
+```
+
+## Derive polymorphic multi-param Mockable
+
+``` haskell
+class MonadFoo a m where
+    foo :: a -> m ()
+
+makeMockable [t| MonadFoo |]
+```
+
+This is an error, because `MonadFoo` has the kind `* -> (* -> *) -> Constraint`
+instead of the expected `(* -> *) -> Constraint`.  However, we can define a
+polymorphic `instance Typeable a => Mockable (MonadFoo a)`.  We should
+automatically do so, rather than failing.
+
+This polymorphic instance is less capable than a concrete instance for something
+like `MonadFoo Int`, because the matchers now have to be (rank 2) polymorphic,
+as well:
+
+``` haskell
+Foo_ :: (forall a. Typeable a => Predicate a) -> Matcher (MonadFoo a) ()
+```
+
+Still, this instance is useful.  Indeed, it's enough to define a `Predicate`
+based on `Dynamic` that matches calls of any individual type.
+
+Even more intermediate ground could be had by adding constraints.  For example,
+`instance (Typeable a, Num a) => Mockable (MonadFoo a)`, would allow slightly
+more powerful matchers.  Finally, `instance (a ~ Int) => Mockable (MonadFoo a)`
+is equivalent to the monomorphic form.  Currently, there is no way to specify
+these contexts, but such a mechanism could be added.
+
 ## More priorities for actions
 
 Currently, it's an error when more than one `Matcher` in the expectations
