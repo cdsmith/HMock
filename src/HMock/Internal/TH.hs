@@ -52,27 +52,42 @@ getMembers t = withClass t $ \(ClassD _ _ _ _ members) -> return members
 
 data Method = Method
   { methodName :: Name,
+    methodTyVars :: [TyVarBndr],
+    methodCxt :: Cxt,
     methodArgs :: [Type],
     methodResult :: Type
   }
 
 getMethods :: Type -> Q [Method]
-getMethods cls = mapMaybe parseMethod <$> getMembers cls
+getMethods t = mapMaybe . parseMethod <$> getClassVars t <*> getMembers t
 
-parseMethod :: Dec -> Maybe Method
-parseMethod (SigD name ty)
-  | argsAndReturn <- splitType ty,
+parseMethod :: [(Name, Type)] -> Dec -> Maybe Method
+parseMethod classVars (SigD name ty)
+  | (tvs, cx, argsAndReturn) <- splitType (substTypeVars classVars ty),
     AppT (VarT _) result <- last argsAndReturn =
-    Just (Method name (init argsAndReturn) result)
+    Just (Method name tvs cx (init argsAndReturn) result)
   where
-    splitType (AppT (AppT ArrowT a) b) = a : splitType b
-    splitType r = [r]
-parseMethod _ = Nothing
+    splitType :: Type -> ([TyVarBndr], [Pred], [Type])
+    splitType (ForallT tv cx b) =
+      let (tvs, cxs, parts) = splitType b in (tv ++ tvs, cx ++ cxs, parts)
+    splitType (AppT (AppT ArrowT a) b) =
+      let (tvs, cx, parts) = splitType b in (tvs, cx, a : parts)
+    splitType r = ([], [], [r])
+parseMethod _ _ = Nothing
+
+isMonomorphic :: Type -> Bool
+isMonomorphic = everything (&&) (mkQ True mono)
+  where
+    mono (VarT _) = False
+    mono _ = True
 
 hasNiceFields :: Method -> Q Bool
-hasNiceFields (Method _ args _) = allM isNiceField args
+hasNiceFields method = allM isNiceField (methodArgs method)
   where
-    isNiceField ty = (&&) <$> isInstance ''Show [ty] <*> isInstance ''Eq [ty]
+    isNiceField :: Type -> Q Bool
+    isNiceField ty
+      | not (isMonomorphic ty) = return False
+      | otherwise = (&&) <$> isInstance ''Eq [ty] <*> isInstance ''Show [ty]
 
 makeMockable :: Q Type -> Q [Dec]
 makeMockable qt = (++) <$> deriveMockable qt <*> deriveForMockT qt
@@ -81,6 +96,12 @@ deriveMockable :: Q Type -> Q [Dec]
 deriveMockable qt = do
   t <- qt
   methods <- getMethods t
+
+  when (null methods) $ do
+    fail $
+      "Cannot derive Mockable because " ++ pprint t
+        ++ " has no members in mtl MonadFoo style."
+
   mockableDecs <-
     sequenceA
       [ defineActionType t methods,
@@ -106,11 +127,10 @@ deriveMockable qt = do
 
   return (mockableInst ++ exactMockableInst)
 
-defineActionType :: Type -> [Method] -> Q Dec
+defineActionType :: Type -> [Method] -> DecQ
 defineActionType t methods = do
-  classVars <- getClassVars t
   a <- newName "a"
-  let conDecs = actionConstructor t classVars <$> methods
+  conDecs <- traverse (actionConstructor t) methods
   return
     ( DataInstD
         []
@@ -121,15 +141,18 @@ defineActionType t methods = do
         []
     )
 
-actionConstructor :: Type -> [(Name, Type)] -> Method -> Con
-actionConstructor t classVars (Method name args result) =
-  GadtC
-    [methodToActionName name]
-    (map ((s,) . substTypeVars classVars) args)
-    target
+actionConstructor :: Type -> Method -> ConQ
+actionConstructor t method
+  | null (methodTyVars method) && null (methodCxt method) = return body
+  | otherwise = forallC (methodTyVars method) (return (methodCxt method)) (return body)
   where
-    target = AppT (AppT (ConT ''Action) t) (substTypeVars classVars result)
+    target = AppT (AppT (ConT ''Action) t) (methodResult method)
     s = Bang NoSourceUnpackedness NoSourceStrictness
+    body =
+      GadtC
+        [methodToActionName (methodName method)]
+        (map (s,) (methodArgs method))
+        target
 
 methodToActionName :: Name -> Name
 methodToActionName name = mkName (toUpper c : cs)
@@ -138,9 +161,8 @@ methodToActionName name = mkName (toUpper c : cs)
 
 defineMatcherType :: Type -> [Method] -> Q Dec
 defineMatcherType t methods = do
-  classVars <- getClassVars t
   a <- newName "a"
-  let conDecs = matcherConstructor t classVars <$> methods
+  let conDecs = matcherConstructor t <$> methods
   return
     ( DataInstD
         []
@@ -151,15 +173,21 @@ defineMatcherType t methods = do
         []
     )
 
-matcherConstructor :: Type -> [(Name, Type)] -> Method -> Con
-matcherConstructor t classVars (Method name args result) =
+matcherConstructor :: Type -> Method -> Con
+matcherConstructor t method =
   GadtC
-    [methodToMatcherName name]
-    ((s,) . AppT (ConT ''Predicate) . substTypeVars classVars <$> args)
+    [methodToMatcherName (methodName method)]
+    ((s,) . mkPredicate <$> methodArgs method)
     target
   where
-    target = AppT (AppT (ConT ''Matcher) t) (substTypeVars classVars result)
+    target =
+      AppT
+        (AppT (ConT ''Matcher) t)
+        (methodResult method)
     s = Bang NoSourceUnpackedness NoSourceStrictness
+    mkPredicate argTy
+      | null (methodTyVars method) && null (methodCxt method) = AppT (ConT ''Predicate) argTy
+      | otherwise = ForallT (methodTyVars method) (methodCxt method) (AppT (ConT ''Predicate) argTy)
 
 methodToMatcherName :: Name -> Name
 methodToMatcherName name = mkName (toUpper c : cs ++ "_")
@@ -172,19 +200,32 @@ defineShowAction methods = do
   return (FunD 'showAction clauses)
 
 showActionClause :: Method -> Q Clause
-showActionClause (Method name args _) = do
-  argVars <- replicateM (length args) (newName "p")
-  printedArgs <- traverse showArg (zip args argVars)
+showActionClause method = do
+  argVars <- replicateM (length (methodArgs method)) (newName "p")
+  printedArgs <- traverse showArg (zip (methodArgs method) argVars)
   let body =
         NormalB
           ( AppE
               (VarE 'unwords)
-              (ListE (LitE (StringL (nameBase name)) : printedArgs))
+              ( ListE
+                  ( LitE (StringL (nameBase (methodName method))) :
+                    printedArgs
+                  )
+              )
           )
-  return (Clause [ConP (methodToActionName name) (VarP <$> argVars)] body [])
+  return
+    ( Clause
+        [ ConP
+            (methodToActionName (methodName method))
+            (VarP <$> argVars)
+        ]
+        body
+        []
+    )
   where
     showArg (ty, var) = do
-      showable <- isInstance ''Show [ty]
+      showable <-
+        if isMonomorphic ty then isInstance ''Show [ty] else return False
       return $
         if showable then AppE (VarE 'show) (VarE var) else LitE (StringL "_")
 
@@ -194,20 +235,28 @@ defineShowMatcher methods = do
   return (FunD 'showMatcher clauses)
 
 showMatcherClause :: Method -> Q Clause
-showMatcherClause (Method name args _) = do
-  argVars <- replicateM (length args) (newName "p")
+showMatcherClause method = do
+  argVars <- replicateM (length (methodArgs method)) (newName "p")
   printedArgs <- traverse showArg argVars
   let body =
         NormalB
           ( AppE
               (VarE 'unwords)
               ( ListE
-                  ( LitE (StringL (nameBase name)) :
+                  ( LitE (StringL (nameBase (methodName method))) :
                     printedArgs
                   )
               )
           )
-  return (Clause [ConP (methodToMatcherName name) (VarP <$> argVars)] body [])
+  return
+    ( Clause
+        [ ConP
+            (methodToMatcherName (methodName method))
+            (VarP <$> argVars)
+        ]
+        body
+        []
+    )
   where
     showArg a = [|"«" ++ showPredicate $(varE a) ++ "»"|]
 
@@ -217,12 +266,14 @@ defineExactly methods = do
   return (FunD 'exactly clauses)
 
 exactlyClause :: Method -> Q Clause
-exactlyClause (Method name args _) = do
-  argVars <- replicateM (length args) (newName "p")
+exactlyClause method = do
+  argVars <- replicateM (length (methodArgs method)) (newName "p")
   return
     ( Clause
-        [ConP (methodToActionName name) (VarP <$> argVars)]
-        (NormalB (makeBody (ConE (methodToMatcherName name)) argVars))
+        [ConP (methodToActionName (methodName method)) (VarP <$> argVars)]
+        ( NormalB
+            (makeBody (ConE (methodToMatcherName (methodName method))) argVars)
+        )
         []
     )
   where
@@ -231,91 +282,69 @@ exactlyClause (Method name args _) = do
 
 defineMatch :: [Method] -> Q Dec
 defineMatch methods = do
-  let fallthrough = Clause [WildP, WildP] (NormalB (ConE 'NoMatch)) []
-  clauses <- (++ [fallthrough]) <$> traverse matchClause methods
+  clauses <- (++ fallthrough) <$> traverse matchClause methods
   return (FunD 'match clauses)
+  where
+    fallthrough
+      | length methods <= 1 = []
+      | otherwise = [Clause [WildP, WildP] (NormalB (ConE 'NoMatch)) []]
 
 matchClause :: Method -> Q Clause
-matchClause (Method name args _) = do
-  let n = length args
-  vars <- zip <$> replicateM n (newName "p") <*> replicateM n (newName "a")
+matchClause method = do
+  let n = length (methodArgs method)
+  argVars <- replicateM n ((,) <$> newName "p" <*> newName "a")
   mismatchVar <- newName "mismatches"
-  matches <-
-    traverse
-      (\(p, a) -> [|accept $(return (VarE p)) $(return (VarE a))|])
-      vars
-
-  return
-    ( Clause
-        [ ConP (methodToMatcherName name) (VarP . fst <$> vars),
-          ConP (methodToActionName name) (VarP . snd <$> vars)
-        ]
-        ( GuardedB
-            [ ( NormalG
-                  ( InfixE
-                      (Just (VarE mismatchVar))
-                      (VarE '(==))
-                      (Just (LitE (IntegerL 0)))
-                  ),
-                AppE (ConE 'FullMatch) (UnboundVarE 'Refl)
-              ),
-              ( NormalG (VarE 'otherwise),
-                AppE (ConE 'PartialMatch) (VarE mismatchVar)
-              )
-            ]
-        )
-        [ ValD
-            (VarP mismatchVar)
-            ( NormalB
-                ( InfixE
-                    (Just (VarE 'length))
-                    (VarE '($))
-                    ( Just
-                        ( AppE
-                            ( AppE
-                                (VarE 'filter)
-                                (VarE 'not)
-                            )
-                            (ListE matches)
-                        )
-                    )
-                )
-            )
-            []
+  clause
+    [ conP (methodToMatcherName (methodName method)) (varP . fst <$> argVars),
+      conP (methodToActionName (methodName method)) (varP . snd <$> argVars)
+    ]
+    ( guardedB
+        [ (,) <$> normalG [|$(varE mismatchVar) == 0|] <*> [|FullMatch Refl|],
+          (,) <$> normalG [|otherwise|] <*> [|PartialMatch $(varE mismatchVar)|]
         ]
     )
+    [ valD
+        (varP mismatchVar)
+        (normalB [|length (filter not $(listE (mkAccept <$> argVars)))|])
+        []
+    ]
+  where
+    mkAccept (p, a) = [|accept $(return (VarE p)) $(return (VarE a))|]
 
 deriveForMockT :: Q Type -> Q [Dec]
 deriveForMockT qt = do
   t <- qt
-  maybeMethods <- traverse parseMethod <$> getMembers t
-  case maybeMethods of
-    Nothing ->
-      fail $
-        "Cannot derive MockT because " ++ show t ++ " is too complex."
-    Just methods -> do
-      m <- newName "m"
-      decs <- traverse mockMethodImpl methods
-      return
-        [ InstanceD
-            Nothing
-            [AppT (ConT ''Typeable) (VarT m), AppT (ConT ''Monad) (VarT m)]
-            (AppT t (AppT (ConT ''MockT) (VarT m)))
-            decs
-        ]
+  members <- getMembers t
+  methods <- getMethods t
+  when (length methods < length members) $
+    fail $
+      "Cannot derive MockT because " ++ pprint t
+        ++ " has members that don't match mtl MonadFoo style."
+  m <- newName "m"
+  decs <- traverse mockMethodImpl methods
+  return
+    [ InstanceD
+        Nothing
+        [AppT (ConT ''Typeable) (VarT m), AppT (ConT ''Monad) (VarT m)]
+        (AppT t (AppT (ConT ''MockT) (VarT m)))
+        decs
+    ]
 
 mockMethodImpl :: Method -> Q Dec
-mockMethodImpl (Method name args _) = do
-  argVars <- replicateM (length args) (newName "p")
+mockMethodImpl method = do
+  argVars <- replicateM (length (methodArgs method)) (newName "p")
   return
     ( FunD
-        name
+        (methodName method)
         [ Clause
             (VarP <$> argVars)
             ( NormalB
                 ( AppE
                     (VarE 'mockMethod)
-                    (actionExp (UnboundVarE (methodToActionName name)) argVars)
+                    ( actionExp
+                        (UnboundVarE (methodToActionName (methodName method)))
+                        argVars
+                    )
                 )
             )
             []
