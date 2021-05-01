@@ -6,11 +6,19 @@ module HMock.Internal.TH where
 import Control.Monad
 import Control.Monad.Extra
 import Data.Char
+import Data.Default
 import Data.Generics
 import Data.Maybe
 import HMock.Internal.Core
 import HMock.Internal.Predicates
 import Language.Haskell.TH hiding (match)
+
+newtype MockableOptions = MockableOptions
+  { mockPrefix :: String
+  }
+
+instance Default MockableOptions where
+  def = MockableOptions {mockPrefix = ""}
 
 unappliedName :: Type -> Maybe Name
 unappliedName (AppT a _) = unappliedName a
@@ -96,10 +104,18 @@ hasNiceFields method = allM isNiceField (methodArgs method)
       | otherwise = (&&) <$> isInstance ''Eq [ty] <*> isInstance ''Show [ty]
 
 makeMockable :: Q Type -> Q [Dec]
-makeMockable qt = (++) <$> deriveMockable qt <*> deriveForMockT qt
+makeMockable = makeMockableWithOptions def
+
+makeMockableWithOptions :: MockableOptions -> Q Type -> Q [Dec]
+makeMockableWithOptions options qt =
+  (++) <$> deriveMockableWithOptions options qt
+    <*> deriveForMockTWithOptions options qt
 
 deriveMockable :: Q Type -> Q [Dec]
-deriveMockable qt = do
+deriveMockable = deriveMockableWithOptions def
+
+deriveMockableWithOptions :: MockableOptions -> Q Type -> Q [Dec]
+deriveMockableWithOptions options qt = do
   t <- qt
   methods <- getMethods t
 
@@ -110,11 +126,11 @@ deriveMockable qt = do
 
   mockableDecs <-
     sequenceA
-      [ defineActionType t methods,
-        defineMatcherType t methods,
-        defineShowAction methods,
-        defineShowMatcher methods,
-        defineMatch methods
+      [ defineActionType options t methods,
+        defineMatcherType options t methods,
+        defineShowAction options methods,
+        defineShowMatcher options methods,
+        defineMatch options methods
       ]
   let mockableInst =
         [InstanceD Nothing [] (AppT (ConT ''Mockable) t) mockableDecs]
@@ -125,7 +141,7 @@ deriveMockable qt = do
       then do
         exactDecs <-
           sequenceA
-            [ defineExactly methods
+            [ defineExactly options methods
             ]
         return
           [InstanceD Nothing [] (AppT (ConT ''ExactMockable) t) exactDecs]
@@ -133,10 +149,10 @@ deriveMockable qt = do
 
   return (mockableInst ++ exactMockableInst)
 
-defineActionType :: Type -> [Method] -> DecQ
-defineActionType t methods = do
+defineActionType :: MockableOptions -> Type -> [Method] -> DecQ
+defineActionType options t methods = do
   a <- newName "a"
-  conDecs <- traverse (actionConstructor t) methods
+  conDecs <- traverse (actionConstructor options t) methods
   return
     ( DataInstD
         []
@@ -147,8 +163,8 @@ defineActionType t methods = do
         []
     )
 
-actionConstructor :: Type -> Method -> ConQ
-actionConstructor t method
+actionConstructor :: MockableOptions -> Type -> Method -> ConQ
+actionConstructor options t method
   | null (methodTyVars method) && null (methodCxt method) = return body
   | otherwise =
     forallC (methodTyVars method) (return (methodCxt method)) (return body)
@@ -157,19 +173,19 @@ actionConstructor t method
     s = Bang NoSourceUnpackedness NoSourceStrictness
     body =
       GadtC
-        [methodToActionName (methodName method)]
+        [methodToActionName options (methodName method)]
         (map (s,) (methodArgs method))
         target
 
-methodToActionName :: Name -> Name
-methodToActionName name = mkName (toUpper c : cs)
+methodToActionName :: MockableOptions -> Name -> Name
+methodToActionName options name = mkName (mockPrefix options ++ toUpper c : cs)
   where
     (c : cs) = nameBase name
 
-defineMatcherType :: Type -> [Method] -> Q Dec
-defineMatcherType t methods = do
+defineMatcherType :: MockableOptions -> Type -> [Method] -> Q Dec
+defineMatcherType options t methods = do
   a <- newName "a"
-  conDecs <- traverse (matcherConstructor t) methods
+  conDecs <- traverse (matcherConstructor options t) methods
   return
     ( DataInstD
         []
@@ -180,12 +196,12 @@ defineMatcherType t methods = do
         []
     )
 
-matcherConstructor :: Type -> Method -> ConQ
-matcherConstructor t method = return body
+matcherConstructor :: MockableOptions -> Type -> Method -> ConQ
+matcherConstructor options t method = return body
   where
     body =
       GadtC
-        [methodToMatcherName (methodName method)]
+        [methodToMatcherName options (methodName method)]
         ( (Bang NoSourceUnpackedness NoSourceStrictness,) . mkPredicate
             <$> methodArgs method
         )
@@ -211,19 +227,19 @@ relevantContext ty (tvs, cx) =
     tvHasVar vars (KindedTV v _) = v `elem` vars
     cxtHasVar vars t = any (`elem` vars) (freeTypeVars t)
 
-methodToMatcherName :: Name -> Name
-methodToMatcherName name = mkName (toUpper c : cs ++ "_")
+methodToMatcherName :: MockableOptions -> Name -> Name
+methodToMatcherName options name = mkName (mockPrefix options ++ toUpper c : cs ++ "_")
   where
     (c : cs) = nameBase name
 
-defineShowAction :: [Method] -> Q Dec
-defineShowAction methods = do
-  clauses <- traverse showActionClause methods
+defineShowAction :: MockableOptions -> [Method] -> Q Dec
+defineShowAction options methods = do
+  clauses <- traverse (showActionClause options) methods
   return (FunD 'showAction clauses)
 
-showActionClause :: Method -> Q Clause
-showActionClause method = do
-  argVars <- replicateM (length (methodArgs method)) (newName "p")
+showActionClause :: MockableOptions -> Method -> Q Clause
+showActionClause options method = do
+  argVars <- replicateM (length (methodArgs method)) (newName "a")
   printedArgs <- traverse showArg (zip (methodArgs method) argVars)
   let body =
         NormalB
@@ -238,7 +254,7 @@ showActionClause method = do
   return
     ( Clause
         [ ConP
-            (methodToActionName (methodName method))
+            (methodToActionName options (methodName method))
             (VarP <$> argVars)
         ]
         body
@@ -251,13 +267,13 @@ showActionClause method = do
       return $
         if showable then AppE (VarE 'show) (VarE var) else LitE (StringL "_")
 
-defineShowMatcher :: [Method] -> Q Dec
-defineShowMatcher methods = do
-  clauses <- concatMapM showMatcherClauses methods
+defineShowMatcher :: MockableOptions -> [Method] -> Q Dec
+defineShowMatcher options methods = do
+  clauses <- concatMapM (showMatcherClauses options) methods
   return (FunD 'showMatcher clauses)
 
-showMatcherClauses :: Method -> Q [Clause]
-showMatcherClauses method = do
+showMatcherClauses :: MockableOptions -> Method -> Q [Clause]
+showMatcherClauses options method = do
   argVars <- replicateM (length (methodArgs method)) (newName "a")
   argTVars <- replicateM (length (methodArgs method)) (newName "t")
   predVars <- replicateM (length (methodArgs method)) (newName "p")
@@ -275,14 +291,14 @@ showMatcherClauses method = do
           )
   return
     [ Clause
-        [ ConP 'Just [ConP (methodToActionName (methodName method)) (typedArg <$> zip3 argVars argTVars (methodArgs method))],
-          ConP (methodToMatcherName (methodName method)) (VarP <$> predVars)
+        [ ConP 'Just [ConP (methodToActionName options (methodName method)) (typedArg <$> zip3 argVars argTVars (methodArgs method))],
+          ConP (methodToMatcherName options (methodName method)) (VarP <$> predVars)
         ]
         (body printedArgs)
         [],
       Clause
         [ ConP 'Nothing [],
-          ConP (methodToMatcherName (methodName method)) (VarP <$> predVars)
+          ConP (methodToMatcherName options (methodName method)) (VarP <$> predVars)
         ]
         (body printedPolyArgs)
         []
@@ -300,25 +316,25 @@ showMatcherClauses method = do
       | null (freeTypeVars ty) = [|"«" ++ showPredicate $(varE p) ++ "»"|]
       | otherwise = [|"«polymorphic»"|]
 
-defineMatch :: [Method] -> Q Dec
-defineMatch methods = do
-  clauses <- (++ fallthrough) <$> traverse matchClause methods
+defineMatch :: MockableOptions -> [Method] -> Q Dec
+defineMatch options methods = do
+  clauses <- (++ fallthrough) <$> traverse (matchClause options) methods
   return (FunD 'match clauses)
   where
     fallthrough
       | length methods <= 1 = []
       | otherwise = [Clause [WildP, WildP] (NormalB (ConE 'NoMatch)) []]
 
-matchClause :: Method -> Q Clause
-matchClause method = do
+matchClause :: MockableOptions -> Method -> Q Clause
+matchClause options method = do
   let n = length (methodArgs method)
   argVars <- replicateM n ((,) <$> newName "p" <*> newName "a")
   mismatchVar <- newName "mismatches"
   clause
     [ conP
-        (methodToMatcherName (methodName method))
+        (methodToMatcherName options (methodName method))
         (varP . fst <$> argVars),
-      conP (methodToActionName (methodName method)) (varP . snd <$> argVars)
+      conP (methodToActionName options (methodName method)) (varP . snd <$> argVars)
     ]
     ( guardedB
         [ (,) <$> normalG [|$(varE mismatchVar) == 0|] <*> [|FullMatch Refl|],
@@ -333,19 +349,19 @@ matchClause method = do
   where
     mkAccept (p, a) = [|accept $(return (VarE p)) $(return (VarE a))|]
 
-defineExactly :: [Method] -> Q Dec
-defineExactly methods = do
-  clauses <- traverse exactlyClause methods
+defineExactly :: MockableOptions -> [Method] -> Q Dec
+defineExactly options methods = do
+  clauses <- traverse (exactlyClause options) methods
   return (FunD 'exactly clauses)
 
-exactlyClause :: Method -> Q Clause
-exactlyClause method = do
-  argVars <- replicateM (length (methodArgs method)) (newName "p")
+exactlyClause :: MockableOptions -> Method -> Q Clause
+exactlyClause options method = do
+  argVars <- replicateM (length (methodArgs method)) (newName "a")
   return
     ( Clause
-        [ConP (methodToActionName (methodName method)) (VarP <$> argVars)]
+        [ConP (methodToActionName options (methodName method)) (VarP <$> argVars)]
         ( NormalB
-            (makeBody (ConE (methodToMatcherName (methodName method))) argVars)
+            (makeBody (ConE (methodToMatcherName options (methodName method))) argVars)
         )
         []
     )
@@ -354,7 +370,10 @@ exactlyClause method = do
     makeBody e (v : vs) = makeBody (AppE e (AppE (VarE 'eq_) (VarE v))) vs
 
 deriveForMockT :: Q Type -> Q [Dec]
-deriveForMockT qt = do
+deriveForMockT = deriveForMockTWithOptions def
+
+deriveForMockTWithOptions :: MockableOptions -> Q Type -> Q [Dec]
+deriveForMockTWithOptions options qt = do
   t <- qt
   members <- getMembers t
   methods <- getMethods t
@@ -363,7 +382,7 @@ deriveForMockT qt = do
       "Cannot derive MockT because " ++ pprint t
         ++ " has members that don't match mtl MonadFoo style."
   m <- newName "m"
-  decs <- traverse mockMethodImpl methods
+  decs <- traverse (mockMethodImpl options) methods
   return
     [ InstanceD
         Nothing
@@ -372,9 +391,9 @@ deriveForMockT qt = do
         decs
     ]
 
-mockMethodImpl :: Method -> Q Dec
-mockMethodImpl method = do
-  argVars <- replicateM (length (methodArgs method)) (newName "p")
+mockMethodImpl :: MockableOptions -> Method -> Q Dec
+mockMethodImpl options method = do
+  argVars <- replicateM (length (methodArgs method)) (newName "a")
   return
     ( FunD
         (methodName method)
@@ -384,7 +403,7 @@ mockMethodImpl method = do
                 ( AppE
                     (VarE 'mockMethod)
                     ( actionExp
-                        (UnboundVarE (methodToActionName (methodName method)))
+                        (UnboundVarE (methodToActionName options (methodName method)))
                         argVars
                     )
                 )

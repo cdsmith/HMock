@@ -10,6 +10,7 @@
 
 module TH where
 
+import Data.Default
 import Data.Dynamic
 import Data.Kind
 import Data.Typeable
@@ -22,10 +23,10 @@ class MonadFoo1 m where
 
 makeMockable [t|MonadFoo1|]
 
-class MonadFoo2 a m | m -> a where
+class MonadFoo2 a m where
   foo2 :: a -> m ()
 
-makeMockable [t|MonadFoo2 String|]
+makeMockableWithOptions (def {mockPrefix = "Int"}) [t|MonadFoo2 Int|]
 
 class MonadFoo3 m where
   foo3 :: Enum a => String -> a -> b -> m ()

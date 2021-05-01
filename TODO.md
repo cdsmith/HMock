@@ -1,31 +1,8 @@
 ## Verify TH code with more different types
 
 The TH code is not particularly hardened.  I suspect you would be able to break
-it with lots of innocuous changes, even just adding explicit foralls and other
-cosmetic changes.  It needs some work toward systematic completeness.
-
-## Derive Mockable with prefixes on `Action` and `Matcher` constructors
-
-``` haskell
-class MonadFoo a m where
-    foo :: a -> m ()
-
-makeMockable [t| MonadFoo Int |]
-makeMockable [t| MonadFoo String |]
-```
-
-This is an error, because the constructors for the two instances have the same
-names.  We can fix this with user-specified prefixes:
-
-``` haskell
-class MonadFoo a m where
-    foo :: a -> m ()
-
-makeMockablePrefix "Int" [t| MonadFoo Int |]
--- defines IntFoo
-makeMockablePrefix "Str" [t| MonadFoo String |]
--- defines StrFoo
-```
+it with lots of innocuous or cosmetic changes.  It needs some work toward
+systematic completeness.
 
 ## Derive polymorphic multi-param Mockable
 

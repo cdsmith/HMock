@@ -24,6 +24,7 @@ library
                       HMock.Internal.TH
     build-depends:    base ^>=4.14.1.0,
                       constraints,
+                      data-default,
                       extra,
                       mtl,
                       syb,
@@ -37,6 +38,7 @@ test-suite tests
     main-is:          Main.hs
     other-modules:    TH
     build-depends:    base ^>=4.14.1.0,
+                      data-default,
                       hspec,
                       hmock,
     hs-source-dirs:   test
