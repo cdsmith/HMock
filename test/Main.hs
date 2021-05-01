@@ -9,6 +9,7 @@ import Data.Typeable
 import HMock
 import HMock.Mockable
 import HMock.TH
+import TH
 import Test.Hspec hiding (Expectation)
 import Prelude hiding (readFile, writeFile)
 import qualified Prelude

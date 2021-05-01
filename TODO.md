@@ -34,6 +34,25 @@ it in errors.  Instead of just knowing there was an unexpected call from
 somewhere unspecified and what the method and parameters were, you can look at
 where the call actually came from.
 
+## Mockable with constrained polymorphic arguments.
+
+``` haskell
+class MonadFoo m where
+    foo :: forall a. Enum a => a -> m ()
+```
+
+The derived instance for this will currently fail.  The `Action` and `Matcher`
+constructors have the types
+
+``` haskell
+Foo :: forall a. Enum a => a -> Action MonadFoo ()
+Foo_ :: (forall a. Enum a => Predicate a) -> Matcher MonadFoo ()
+```
+
+Matching works fine, but `showMatcher` fails to compile, because the `Enum a`
+constraint needs to be satisfied in order to call `showPredicate` for that
+argument, and that cannot happen until we have an `Action` to pattern match on.
+
 ## Mockable with polymorphic return values.
 
 ``` haskell
