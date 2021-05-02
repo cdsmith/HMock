@@ -173,14 +173,14 @@ actionConstructor options t method
     s = Bang NoSourceUnpackedness NoSourceStrictness
     body =
       GadtC
-        [methodToActionName options (methodName method)]
+        [getActionName options method]
         (map (s,) (methodArgs method))
         target
 
-methodToActionName :: MockableOptions -> Name -> Name
-methodToActionName options name = mkName (mockPrefix options ++ toUpper c : cs)
+getActionName :: MockableOptions -> Method -> Name
+getActionName options method = mkName (mockPrefix options ++ toUpper c : cs)
   where
-    (c : cs) = nameBase name
+    (c : cs) = nameBase (methodName method)
 
 defineMatcherType :: MockableOptions -> Type -> [Method] -> Q Dec
 defineMatcherType options t methods = do
@@ -201,7 +201,7 @@ matcherConstructor options t method = return body
   where
     body =
       GadtC
-        [methodToMatcherName options (methodName method)]
+        [getMatcherName options method]
         ( (Bang NoSourceUnpackedness NoSourceStrictness,) . mkPredicate
             <$> methodArgs method
         )
@@ -227,10 +227,10 @@ relevantContext ty (tvs, cx) =
     tvHasVar vars (KindedTV v _) = v `elem` vars
     cxtHasVar vars t = any (`elem` vars) (freeTypeVars t)
 
-methodToMatcherName :: MockableOptions -> Name -> Name
-methodToMatcherName options name = mkName (mockPrefix options ++ toUpper c : cs ++ "_")
+getMatcherName :: MockableOptions -> Method -> Name
+getMatcherName options name = mkName (mockPrefix options ++ toUpper c : cs ++ "_")
   where
-    (c : cs) = nameBase name
+    (c : cs) = nameBase (methodName name)
 
 defineShowAction :: MockableOptions -> [Method] -> Q Dec
 defineShowAction options methods = do
@@ -254,7 +254,7 @@ showActionClause options method = do
   return
     ( Clause
         [ ConP
-            (methodToActionName options (methodName method))
+            (getActionName options method)
             (VarP <$> argVars)
         ]
         body
@@ -291,14 +291,14 @@ showMatcherClauses options method = do
           )
   return
     [ Clause
-        [ ConP 'Just [ConP (methodToActionName options (methodName method)) (typedArg <$> zip3 argVars argTVars (methodArgs method))],
-          ConP (methodToMatcherName options (methodName method)) (VarP <$> predVars)
+        [ ConP 'Just [ConP (getActionName options method) (typedArg <$> zip3 argVars argTVars (methodArgs method))],
+          ConP (getMatcherName options method) (VarP <$> predVars)
         ]
         (body printedArgs)
         [],
       Clause
         [ ConP 'Nothing [],
-          ConP (methodToMatcherName options (methodName method)) (VarP <$> predVars)
+          ConP (getMatcherName options method) (VarP <$> predVars)
         ]
         (body printedPolyArgs)
         []
@@ -332,9 +332,9 @@ matchClause options method = do
   mismatchVar <- newName "mismatches"
   clause
     [ conP
-        (methodToMatcherName options (methodName method))
+        (getMatcherName options method)
         (varP . fst <$> argVars),
-      conP (methodToActionName options (methodName method)) (varP . snd <$> argVars)
+      conP (getActionName options method) (varP . snd <$> argVars)
     ]
     ( guardedB
         [ (,) <$> normalG [|$(varE mismatchVar) == 0|] <*> [|FullMatch Refl|],
@@ -359,9 +359,9 @@ exactlyClause options method = do
   argVars <- replicateM (length (methodArgs method)) (newName "a")
   return
     ( Clause
-        [ConP (methodToActionName options (methodName method)) (VarP <$> argVars)]
+        [ConP (getActionName options method) (VarP <$> argVars)]
         ( NormalB
-            (makeBody (ConE (methodToMatcherName options (methodName method))) argVars)
+            (makeBody (ConE (getMatcherName options method)) argVars)
         )
         []
     )
@@ -403,7 +403,7 @@ mockMethodImpl options method = do
                 ( AppE
                     (VarE 'mockMethod)
                     ( actionExp
-                        (UnboundVarE (methodToActionName options (methodName method)))
+                        (UnboundVarE (getActionName options method))
                         argVars
                     )
                 )
