@@ -15,25 +15,20 @@ makeMockable [t| MonadFoo |]
 
 This is an error, because `MonadFoo` has the kind `* -> (* -> *) -> Constraint`
 instead of the expected `(* -> *) -> Constraint`.  However, we can define a
-polymorphic `instance Typeable a => Mockable (MonadFoo a)`.  We should
-automatically do so, rather than failing.
-
-This polymorphic instance is less capable than a concrete instance for something
-like `MonadFoo Int`, because the matchers now have to be (rank 2) polymorphic,
-as well:
+polymorphic `instance Typeable a => Mockable (MonadFoo a)`.  This polymorphic
+instance is less capable than a concrete instance for something like
+`MonadFoo Int`, because the matchers now have to be (rank 2) polymorphic, as
+well:
 
 ``` haskell
 Foo_ :: (forall a. Typeable a => Predicate a) -> Matcher (MonadFoo a) ()
 ```
 
-Still, this instance is useful.  Indeed, it's enough to define a `Predicate`
-based on `Dynamic` that matches calls of any individual type.
-
-Even more intermediate ground could be had by adding constraints.  For example,
-`instance (Typeable a, Num a) => Mockable (MonadFoo a)`, would allow slightly
-more powerful matchers.  Finally, `instance (a ~ Int) => Mockable (MonadFoo a)`
-is equivalent to the monomorphic form.  Currently, there is no way to specify
-these contexts, but such a mechanism could be added.
+Still, this instance is useful.  In particular, it's enough to define a
+`Predicate` based on `Dynamic` that matches calls of any individual type, such
+as `typed_ @Int (gt_ 0)`.  We also cannot get any more general, since the
+`Typeable` constraint is needed to store expectations for the class in `MockT`.
+So this is a compelling default point in the design space.
 
 ## Specify base monad for MockT instances
 
