@@ -378,7 +378,7 @@ exactlyClause options method = do
     []
   where
     makeBody [] e = e
-    makeBody (v : vs) e = makeBody vs [|$e (eq_ $(varE v))|]
+    makeBody (v : vs) e = makeBody vs [|$e (eq $(varE v))|]
 
 deriveForMockT :: Q Type -> Q [Dec]
 deriveForMockT = deriveForMockTWithOptions def

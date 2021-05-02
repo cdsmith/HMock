@@ -18,106 +18,99 @@ data Predicate a = Predicate
     accept :: a -> Bool
   }
 
-eq_ :: (Show a, Eq a) => a -> Predicate a
-eq_ x =
+eq :: (Show a, Eq a) => a -> Predicate a
+eq x =
   Predicate
     { showPredicate = show x,
       accept = (== x)
     }
 
-neq_ :: (Show a, Eq a) => a -> Predicate a
-neq_ x =
+neq :: (Show a, Eq a) => a -> Predicate a
+neq x =
   Predicate
     { showPredicate = "≠ " ++ show x,
       accept = (/= x)
     }
 
-gt_ :: (Show a, Ord a) => a -> Predicate a
-gt_ x =
+gt :: (Show a, Ord a) => a -> Predicate a
+gt x =
   Predicate
     { showPredicate = "> " ++ show x,
       accept = (> x)
     }
 
-geq_ :: (Show a, Ord a) => a -> Predicate a
-geq_ x =
+geq :: (Show a, Ord a) => a -> Predicate a
+geq x =
   Predicate
     { showPredicate = ">= " ++ show x,
       accept = (>= x)
     }
 
-lt_ :: (Show a, Ord a) => a -> Predicate a
-lt_ x =
+lt :: (Show a, Ord a) => a -> Predicate a
+lt x =
   Predicate
     { showPredicate = "< " ++ show x,
       accept = (< x)
     }
 
-leq_ :: (Show a, Ord a) => a -> Predicate a
-leq_ x =
+leq :: (Show a, Ord a) => a -> Predicate a
+leq x =
   Predicate
     { showPredicate = "<= " ++ show x,
       accept = (<= x)
     }
 
-any_ :: Predicate a
-any_ =
+__ :: Predicate a
+__ =
   Predicate
     { showPredicate = "any",
       accept = const True
     }
 
-none_ :: Predicate a
-none_ =
-  Predicate
-    { showPredicate = "none",
-      accept = const False
-    }
-
-and_ :: Predicate a -> Predicate a -> Predicate a
-p `and_` q =
+andP :: Predicate a -> Predicate a -> Predicate a
+p `andP` q =
   Predicate
     { showPredicate = showPredicate p ++ " and " ++ showPredicate q,
       accept = \x -> accept p x && accept q x
     }
 
-or_ :: Predicate a -> Predicate a -> Predicate a
-p `or_` q =
+orP :: Predicate a -> Predicate a -> Predicate a
+p `orP` q =
   Predicate
     { showPredicate = showPredicate p ++ " or " ++ showPredicate q,
       accept = \x -> accept p x || accept q x
     }
 
-not_ :: Predicate a -> Predicate a
-not_ p =
+notP :: Predicate a -> Predicate a
+notP p =
   Predicate
     { showPredicate = "not " ++ showPredicate p,
       accept = not . accept p
     }
 
-startsWith_ :: String -> Predicate String
-startsWith_ s =
+startsWith :: String -> Predicate String
+startsWith s =
   Predicate
     { showPredicate = "starts with " ++ show s,
       accept = \x -> s `isPrefixOf` x
     }
 
-endsWith_ :: String -> Predicate String
-endsWith_ s =
+endsWith :: String -> Predicate String
+endsWith s =
   Predicate
     { showPredicate = "ends with " ++ show s,
       accept = \x -> s `isSuffixOf` x
     }
 
-hasSubstr_ :: String -> Predicate String
-hasSubstr_ s =
+hasSubstr :: String -> Predicate String
+hasSubstr s =
   Predicate
     { showPredicate = "has substring " ++ show s,
       accept = \x -> s `isInfixOf` x
     }
 
-suchThat_ :: HasCallStack => (a -> Bool) -> Predicate a
-suchThat_ f =
+suchThat :: HasCallStack => (a -> Bool) -> Predicate a
+suchThat f =
   withFrozenCallStack $
     Predicate
       { showPredicate = case locs of
@@ -129,10 +122,10 @@ suchThat_ f =
     locs = map snd (getCallStack callStack)
 
 -- | Converts a 'Predicate' to a new type.  Typically used with visible type
--- application, as in @'typed_' @Int ('lt_' 42)@.  This will only match if the
+-- application, as in @'typed' @Int ('lt' 42)@.  This will only match if the
 -- argument is an Int, and also less than 42.
-typed_ :: forall a b. (Typeable a, Typeable b) => Predicate a -> Predicate b
-typed_ p =
+typed :: forall a b. (Typeable a, Typeable b) => Predicate a -> Predicate b
+typed p =
   Predicate
     { showPredicate =
         showPredicate p ++ " :: " ++ show (typeRep (Proxy :: Proxy a)),
