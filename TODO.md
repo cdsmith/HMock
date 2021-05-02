@@ -40,11 +40,11 @@ instance Typeable a => Mockable (MonadFoo a) where
 
 -- An exact matcher for f, since it has 
 f_ :: Typeable a => String -> Matcher (MonadFoo a) ()
-f_ x = F_ (eq_ x)
+f_ x = F_ (eq x)
 
 -- A parameterized exact matcher for h, since it is typed by a class param.
 h_ :: (Typeable a, Eq a, Show a) -> Matcher (MonadFoo a) ()
-h_ x = H_ (eq_ x)
+h_ x = H_ (eq x)
 ```
 
 ## Have a plan for functional dependencies
@@ -96,8 +96,8 @@ adopt rules for choosing which match to prefer.
 
 * One such rule is to choose the most specific match.  This would mean adding
   some kind of partial order on predicates.  We'd probably just adopt a
-  four-tier system, where `none_` > `eq_ x` > anythiong else matching `x` >
-  `none_`.  Then instead of looking for a unique match, we're looking for a
+  three-tier system, where `eq x` > anythiong else matching `x` >
+  `__`.  Then instead of looking for a unique match, we're looking for a
   unique maximally specific match.
 * Another rule is to have user-specified priorities.  A simple answer along
   these lines would be to have `whenever` get lower priority than `expect` and
@@ -122,27 +122,43 @@ where the call actually came from.
 
 ``` haskell
 class MonadFoo m where
-    foo :: a -> m a
+    foo :: forall a. a -> m a
+
+makeMockable [t| MonadFoo |]
 ```
 
-Currently, this will fail to derive an instance.  Matching seems challenging in
-this case.  Currently, the matcher relies on the idea that matching the methods
-is enough to infer equality of return types, but now that's not the case.
+The derived instance fails to compile, because matching methods is no longer
+enough to prove equality of the return types, so we cannot be sure that the
+response has the right type for the actual call.
 
-Even more interesting is the desire to let people set up type-specific and
-type-agnostic mocks.  That is, I'd like you to be able to write either
+There are two things you might want to have happen in this case:
+
+First, you could write a type-specific expectation, like this:
 
 ``` haskell
 -- Matches foo applied only to Bool.
-mock $ whenever $ Foo_ any_ :=> const (return True)
+mock $ whenever $ Foo_ __ :=> const (return True)
 ```
 
-or
+This is a perfectly good matcher and response, since the polymorphic return
+type on the `Matcher` can unify with the `Bool` in the response.  However, it's
+not implementable because there's no way (without a `Typeable a` constraint on
+the method) to tell whether the actual call to the method is instantiating
+`a ~ Bool`.  I don't know any way to cleverly dodge that requirement.
+Reluctantly, I accept that in order to write this expectation, the user must
+modify `MonadFoo` to add that `Typeable` constraint.
+
+Second, you could try to write a polymorphic expectation, like this:
 
 ``` haskell
 -- Matches foo applied to any type of argument.
-mock $ whenever $ Foo_ any_ :=> \(Foo x) -> return x
+mock $ whenever $ Foo_ __ :=> \(Foo x) -> return x
 ```
+
+`(:=>)` has an ambiguous type here.  My instinct is to try to promote the
+ambiguous type to a rank 2 type, thereby limiting what the programmer may write
+to those things which can unify with *any* type acceptable to `foo`.  I haven't
+yet worked out what that would look like.
 
 ## Mockable when the monad is mentioned in an argument.
 
