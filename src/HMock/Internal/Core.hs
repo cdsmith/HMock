@@ -125,20 +125,20 @@ data MatchResult a b where
 class Typeable ctx => Mockable (ctx :: (* -> *) -> Constraint) where
   -- An action that is performed.  This data type will have one constructor for
   -- each method.
-  data Action ctx :: * -> *
+  data Action ctx :: (* -> *) -> * -> *
 
   -- | A specification for matching actions.  The actual arguments should be
   -- replaced with predicates.
-  data Matcher ctx :: * -> *
+  data Matcher ctx :: (* -> *) -> * -> *
 
   -- Gets a text description of an 'Action', for use in error messages.
-  showAction :: Action ctx a -> String
+  showAction :: Action ctx m a -> String
 
   -- Gets a text description of a 'Matcher', for use in error messages.
-  showMatcher :: Maybe (Action ctx a) -> Matcher ctx b -> String
+  showMatcher :: Maybe (Action ctx m a) -> Matcher ctx m b -> String
 
   -- Attempts to match an 'Action' with a 'Matcher'.
-  match :: Matcher ctx a -> Action ctx b -> MatchResult a b
+  match :: Matcher ctx m a -> Action ctx m b -> MatchResult a b
 
 -- | A class for 'Monad' subclasses whose methods can be mocked and compared
 -- for exact equality.  Only those classes whose methods have nice enough
@@ -148,7 +148,7 @@ class Mockable ctx => ExactMockable ctx where
   -- Converts an 'Action' into a 'Matcher' that will only match those exact
   -- parameter values.  This is sometimes more convenient than writing
   -- 'HMock.eq_' everywhere.
-  exactly :: Action ctx a -> Matcher ctx a
+  exactly :: Action ctx m a -> Matcher ctx m a
 
 -- | Monad transformer for running mocks.
 newtype MockT m a where
@@ -172,14 +172,14 @@ data WithResult (ctx :: (* -> *) -> Constraint) (m :: * -> *) where
   -- | Matches an 'Action' and performs a response in the 'MockT' monad.  This
   -- is a vary flexible response, which can look at arguments, do things in the
   -- base monad, set up more expectations, etc.
-  (:=>) :: Matcher ctx a -> (Action ctx a -> MockT m a) -> WithResult ctx m
+  (:=>) :: Matcher ctx m a -> (Action ctx m a -> MockT m a) -> WithResult ctx m
 
 -- | Matches an 'Action' and returns a constant response.  This is more
 -- convenient than '(:=>)' in the common case where you just want to return a
 -- known result.
 (|=>) ::
   (Mockable ctx, Monad m) =>
-  Matcher ctx a ->
+  Matcher ctx m a ->
   a ->
   WithResult ctx m
 m |=> r = m :=> const (return r)
@@ -191,7 +191,7 @@ m |=> r = m :=> const (return r)
 -- make your tests brittle and less useful.
 (|->) ::
   (ExactMockable ctx, Monad m) =>
-  Action ctx a ->
+  Action ctx m a ->
   a ->
   WithResult ctx m
 a |-> b = exactly a |=> b
@@ -201,7 +201,7 @@ a |-> b = exactly a |=> b
 mockMethod ::
   forall ctx m a.
   (Mockable ctx, Monad m, Typeable m) =>
-  Action ctx a ->
+  Action ctx m a ->
   MockT m a
 mockMethod a = MockT $ do
   expected <- get
@@ -232,8 +232,8 @@ mockMethod a = MockT $ do
 noMatchError ::
   Mockable ctx =>
   -- | The action that was received.
-  Action ctx a ->
-  m a
+  Action ctx m a ->
+  StateT (Expected m) m a
 noMatchError a =
   error $
     "Unexpected action: "
@@ -244,10 +244,10 @@ noMatchError a =
 partialMatchError ::
   Mockable ctx =>
   -- | The action that was received.
-  Action ctx a ->
+  Action ctx m a ->
   -- | Descriptions of the matchers that most closely matched, closest first.
   [String] ->
-  m a
+  StateT (Expected m) m a
 partialMatchError a partials =
   error $
     "Wrong arguments: "
@@ -259,10 +259,10 @@ partialMatchError a partials =
 ambiguousMatchError ::
   Mockable ctx =>
   -- | The action that was received.
-  Action ctx a ->
+  Action ctx m a ->
   -- | Descriptions of the matchers that matched the action.
   [String] ->
-  m a
+  StateT (Expected m) m a
 ambiguousMatchError a matches =
   error $
     "Ambiguous matches for action: "
@@ -283,7 +283,7 @@ expectN ::
   -- | The action and its response.
   WithResult ctx m ->
   Expected m
-expectN card wr@(m :=> (_ :: Action ctx a -> MockT m a)) =
+expectN card wr@(m :=> (_ :: Action ctx m a -> MockT m a)) =
   Expect card (Step (showMatcher Nothing m) (toDyn wr))
 
 -- Creates an expectation that an action is performed once.  This is equivalent

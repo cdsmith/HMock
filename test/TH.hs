@@ -38,3 +38,8 @@ class MonadFoo3 m where
   foo3 :: Enum a => String -> a -> b -> m ()
 
 makeMockable [t|MonadFoo3|]
+
+class MonadFoo4 m where
+    foo :: (Int -> m ()) -> m ()
+
+makeMockable [t|MonadFoo4|]

@@ -159,17 +159,3 @@ mock $ whenever $ Foo_ __ :=> \(Foo x) -> return x
 ambiguous type to a rank 2 type, thereby limiting what the programmer may write
 to those things which can unify with *any* type acceptable to `foo`.  I haven't
 yet worked out what that would look like.
-
-## Mockable when the monad is mentioned in an argument.
-
-``` haskell
-class MonadFoo m where
-    foo :: (Int -> m ()) -> m ()
-```
-
-This poses a problem because `Action MonadFoo a` doesn't specify the monad,
-which one needs to know in order to set expectations properly.
-
-It's possible this could be solved by changing the `Action` and `Match` types
-to have the monad as a phantom parameter, similar to what was done with
-`Expected`, so that `match` could unify them.

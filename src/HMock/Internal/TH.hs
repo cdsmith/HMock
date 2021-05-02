@@ -56,6 +56,9 @@ data Instance = Instance
     generalizedParams :: [Name]
   }
 
+monadVar :: Instance -> Name
+monadVar inst = last (generalizedParams inst)
+
 internalError :: Q a
 internalError = fail "Internal error in HMock.  Please report this as a bug."
 
@@ -107,12 +110,14 @@ getMethods :: Type -> Q [Method]
 getMethods t = mapMaybe . parseMethod <$> getInstance t <*> getMembers t
 
 parseMethod :: Instance -> Dec -> Maybe Method
-parseMethod params (SigD name ty)
+parseMethod inst (SigD name ty)
   | (tvs, cx, argsAndReturn) <-
-      splitType (substTypeVars (exactParams params) ty),
+      splitType (substTypeVars (exactParams inst) ty),
     AppT (VarT _) result <- last argsAndReturn =
-    Just (Method name tvs cx (init argsAndReturn) result)
+    Just (Method name tvs cx (map replaceMonadVar (init argsAndReturn)) result)
   where
+    replaceMonadVar = substTypeVars
+      [(monadVar inst, AppT (ConT ''MockT) (VarT (monadVar inst)))] 
     splitType :: Type -> ([TyVarBndr], [Pred], [Type])
     splitType (ForallT tv cx b) =
       let (tvs, cxs, parts) = splitType b in (tv ++ tvs, cx ++ cxs, parts)
@@ -157,19 +162,20 @@ deriveMockableWithOptions options qt = do
 
   t <- qt
   inst <- getInstance t
-  methods <- getMethods t
 
+  methods <- getMethods t
   when (null methods) $ do
     fail $
       "Cannot derive Mockable because " ++ pprint t
         ++ " has no members in mtl MonadFoo style."
 
+  let m = last (generalizedParams inst)
   let mockableInst =
         instanceD
           (varsToConstraints (conT ''Typeable) (init (generalizedParams inst)))
           [t|Mockable $(pure (instanceType inst))|]
-          [ defineActionType options (instanceType inst) methods,
-            defineMatcherType options (instanceType inst) methods,
+          [ defineActionType options (instanceType inst) m methods,
+            defineMatcherType options (instanceType inst) m methods,
             defineShowAction options methods,
             defineShowMatcher options methods,
             defineMatch options methods
@@ -187,52 +193,41 @@ deriveMockableWithOptions options qt = do
 
   sequenceA (mockableInst : exactMockableInst)
 
-defineActionType :: MockableOptions -> Type -> [Method] -> DecQ
-defineActionType options t methods =
-  dataInstD
-    (pure [])
-    ''Action
-    [pure t]
-    (Just (AppT (AppT ArrowT StarT) StarT))
-    (actionConstructor options t <$> methods)
-    []
+defineActionType :: MockableOptions -> Type -> Name -> [Method] -> DecQ
+defineActionType options t m methods = do
+  kind <- [t| (* -> *) -> * -> * |]
+  let cons = actionConstructor options t m <$> methods
+  dataInstD (pure []) ''Action [pure t] (Just kind) cons []
 
-actionConstructor :: MockableOptions -> Type -> Method -> ConQ
-actionConstructor options t method
-  | null (methodTyVars method) && null (methodCxt method) = body
-  | otherwise = forallC (methodTyVars method) (return (methodCxt method)) body
-  where
-    body =
-      gadtC
-        [getActionName options method]
-        [ return (Bang NoSourceUnpackedness NoSourceStrictness, argTy)
-          | argTy <- methodArgs method
-        ]
-        [t|Action $(pure t) $(pure (methodResult method))|]
+actionConstructor :: MockableOptions -> Type -> Name -> Method -> ConQ
+actionConstructor options t m method = do
+  forallC [] (return (methodCxt method)) $
+     gadtC
+      [getActionName options method]
+      [ return (Bang NoSourceUnpackedness NoSourceStrictness, argTy)
+        | argTy <- methodArgs method
+      ]
+      [t|Action $(pure t) $(varT m) $(pure (methodResult method))|]
 
 getActionName :: MockableOptions -> Method -> Name
 getActionName options method = mkName (mockPrefix options ++ toUpper c : cs)
   where
     (c : cs) = nameBase (methodName method)
 
-defineMatcherType :: MockableOptions -> Type -> [Method] -> Q Dec
-defineMatcherType options t methods =
-  dataInstD
-    (pure [])
-    ''Matcher
-    [pure t]
-    (Just (AppT (AppT ArrowT StarT) StarT))
-    (matcherConstructor options t <$> methods)
-    []
+defineMatcherType :: MockableOptions -> Type -> Name -> [Method] -> Q Dec
+defineMatcherType options t m methods = do
+  kind <- [t| (* -> *) -> * -> * |]
+  let cons = matcherConstructor options t m <$> methods
+  dataInstD (pure []) ''Matcher [pure t] (Just kind) cons []
 
-matcherConstructor :: MockableOptions -> Type -> Method -> ConQ
-matcherConstructor options t method =
+matcherConstructor :: MockableOptions -> Type -> Name -> Method -> ConQ
+matcherConstructor options t m method = do
   gadtC
     [getMatcherName options method]
     [ (Bang NoSourceUnpackedness NoSourceStrictness,) <$> mkPredicate argTy
       | argTy <- methodArgs method
     ]
-    [t|Matcher $(pure t) $(pure (methodResult method))|]
+    [t|Matcher $(pure t) $(varT m) $(pure (methodResult method))|]
   where
     mkPredicate argTy
       | null tyVars && null cx = [t|Predicate $(pure argTy)|]
