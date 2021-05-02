@@ -1,6 +1,11 @@
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
+
 module HMock.Internal.Predicates where
 
 import Data.List (isInfixOf, isPrefixOf, isSuffixOf)
+import Data.Typeable
 import GHC.Stack
   ( HasCallStack,
     callStack,
@@ -122,3 +127,16 @@ suchThat_ f =
       }
   where
     locs = map snd (getCallStack callStack)
+
+-- | Converts a 'Predicate' to a new type.  Typically used with visible type
+-- application, as in @'typed_' @Int ('lt_' 42)@.  This will only match if the
+-- argument is an Int, and also less than 42.
+typed_ :: forall a b. (Typeable a, Typeable b) => Predicate a -> Predicate b
+typed_ p =
+  Predicate
+    { showPredicate =
+        showPredicate p ++ " :: " ++ show (typeRep (Proxy :: Proxy a)),
+      accept = \x -> case cast x of
+        Nothing -> False
+        Just y -> accept p y
+    }
