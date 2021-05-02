@@ -34,6 +34,36 @@ We don't need to assume `Eq` and `Show` instances this time.  Instead, we can
 add them to the function context where they are needed.  Only polymorphic
 functions cannot be exactly matched.
 
+## More priorities for actions
+
+Currently, it's an error when more than one `Matcher` in the expectations
+applies to the current `Action`.  It's more common in other mock frameworks to
+adopt rules for choosing which match to prefer.
+
+* One such rule is to choose the most specific match.  This would mean adding
+  some kind of partial order on predicates.  We'd probably just adopt a
+  three-tier system, where `eq x` > anythiong else matching `x` >
+  `__`.  Then instead of looking for a unique match, we're looking for a
+  unique maximally specific match.
+* Another rule is to have user-specified priorities.  A simple answer along
+  these lines would be to have `whenever` get lower priority than `expect` and
+  `expectN`, so it can be used to set a default action when there's no
+  expectation.  One might then add an `expectMany` that is like `whenever` but
+  without the low priority.
+
+## Use source locations in mock messages.
+
+We should be able to use the `HasCallStack` machinery to tell the user which
+specific `expect` or `whenever` call we're referring to when talking about an
+expectation.  This is nicer than just printing the method name and argument
+predicates.  For example, if you have a sequence of three expectations, you can
+see which one failed.
+
+Similarly, we could try to capture the call stack in `mockAction` and include
+it in errors.  Instead of just knowing there was an unexpected call from
+somewhere unspecified and what the method and parameters were, you can look at
+where the call actually came from.
+
 ## Have a plan for functional dependencies
 
 ``` haskell
@@ -74,36 +104,6 @@ instance (Monad m, Typeable m) => MonadFoo2 Int (MockT (MyTestT m)) where
 
 This is a bit of a pain.  I should think about how to help people do the right
 thing here.
-
-## More priorities for actions
-
-Currently, it's an error when more than one `Matcher` in the expectations
-applies to the current `Action`.  It's more common in other mock frameworks to
-adopt rules for choosing which match to prefer.
-
-* One such rule is to choose the most specific match.  This would mean adding
-  some kind of partial order on predicates.  We'd probably just adopt a
-  three-tier system, where `eq x` > anythiong else matching `x` >
-  `__`.  Then instead of looking for a unique match, we're looking for a
-  unique maximally specific match.
-* Another rule is to have user-specified priorities.  A simple answer along
-  these lines would be to have `whenever` get lower priority than `expect` and
-  `expectN`, so it can be used to set a default action when there's no
-  expectation.  One might then add an `expectMany` that is like `whenever` but
-  without the low priority.
-
-## Use source locations in mock messages.
-
-We should be able to use the `HasCallStack` machinery to tell the user which
-specific `expect` or `whenever` call we're referring to when talking about an
-expectation.  This is nicer than just printing the method name and argument
-predicates.  For example, if you have a sequence of three expectations, you can
-see which one failed.
-
-Similarly, we could try to capture the call stack in `mockAction` and include
-it in errors.  Instead of just knowing there was an unexpected call from
-somewhere unspecified and what the method and parameters were, you can look at
-where the call actually came from.
 
 ## Mockable with polymorphic return values.
 
