@@ -1,9 +1,3 @@
-## Verify TH code with more different types
-
-The TH code is not particularly hardened.  I suspect you would be able to break
-it with lots of innocuous or cosmetic changes.  It needs some work toward
-systematic completeness.
-
 ## Easier TH API for simple types
 
 Especially since best practice is now to derive polymorphic instances for
