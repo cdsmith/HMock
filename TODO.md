@@ -4,50 +4,89 @@ The TH code is not particularly hardened.  I suspect you would be able to break
 it with lots of innocuous or cosmetic changes.  It needs some work toward
 systematic completeness.
 
-## Derive polymorphic multi-param Mockable
+## Easier TH API for simple types
+
+Especially since best practice is now to derive polymorphic instances for
+multi-param classes, I'd like to revert to the simpler usage (so you write
+`makeMockable ''MonadFoo` instead of `makeMockable [t|MonadFoo|]`).  The type
+usage can be renamed.
+
+## Derive ExactMockable more often
+
+Currently, we only derive ExactMockable when the arguments to all methods are
+monomorphic and instances of `Eq` and `Show`.  If the argument is typed by a
+type class parameter, then we can add the necessary `Eq` and `Show` constraints
+to the instance context.
+
+Another thought is that it's unfortunate that `ExactMockable` is derived (or
+not) for the entire class, when *almost* all methods might be exactly mockable
+after all.  One wonders if a different design might be more convenient.  For
+instance, exact versions could just be top-level functions, which are defined
+for precisely the methods where they make sense, and have the necessary context
+built in.  For instance:
 
 ``` haskell
 class MonadFoo a m where
-    foo :: a -> m ()
+    f :: String -> m ()
+    g :: Num b => b -> m ()
+    h :: a -> m ()
+
+instance Typeable a => Mockable (MonadFoo a) where
+    data Matcher (MonadFoo a) :: * -> * where
+        F_ :: Predicate String -> Matcher (MonadFoo a) ()
+        G_ :: (forall b. Num b => Predicate b) -> Matcher (MonadFoo a) ()
+        H_ :: Predicate a -> Matcher (MonadFoo a) ()
+    ...
+
+-- An exact matcher for f, since it has 
+f_ :: Typeable a => String -> Matcher (MonadFoo a) ()
+f_ x = F_ (eq_ x)
+
+-- A parameterized exact matcher for h, since it is typed by a class param.
+h_ :: (Typeable a, Eq a, Show a) -> Matcher (MonadFoo a) ()
+h_ x = H_ (eq_ x)
+```
+
+## Have a plan for functional dependencies
+
+``` haskell
+class MonadFoo a m | m -> a where
+  foo :: a -> m ()
 
 makeMockable [t| MonadFoo |]
 ```
 
-This is an error, because `MonadFoo` has the kind `* -> (* -> *) -> Constraint`
-instead of the expected `(* -> *) -> Constraint`.  However, we can define a
-polymorphic `instance Typeable a => Mockable (MonadFoo a)`.  This polymorphic
-instance is less capable than a concrete instance for something like
-`MonadFoo Int`, because the matchers now have to be (rank 2) polymorphic, as
-well:
+This fails, because the derived instance for `MonadFoo a (MockT m)` doesn't
+satisfy the functional dependency: the same `MockT m` could be used for many
+choices of `a`.
+
+One can do this instead:
 
 ``` haskell
-Foo_ :: (forall a. Typeable a => Predicate a) -> Matcher (MonadFoo a) ()
+deriveMockable [t|MonadFoo2|]
+
+instance (Monad m, Typeable m) => MonadFoo2 Int (MockT m) where
+  foo2 x = mockMethod (Foo2 x)
 ```
 
-Still, this instance is useful.  In particular, it's enough to define a
-`Predicate` based on `Dynamic` that matches calls of any individual type, such
-as `typed_ @Int (gt_ 0)`.  We also cannot get any more general, since the
-`Typeable` constraint is needed to store expectations for the class in `MockT`.
-So this is a compelling default point in the design space.
+However, this is actually kind of anti-modular.  If anyone later ends up
+defining an instance for `String` instead of `Int`, in anything that you import,
+you get an error.
 
-## Specify base monad for MockT instances
+A work-around for this is to declare a `newtype`, like this:
 
 ``` haskell
-class MonadFoo2 a m | m -> a where
-  foo2 :: a -> m ()
+deriveMockable [t|MonadFoo2|]
 
-makeMockableWithOptions (def {mockPrefix = "Str"}) [t|MonadFoo2 String|]
-makeMockableWithOptions (def {mockPrefix = "Int"}) [t|MonadFoo2 Int|]
+newtype MyTestT m a = MyTestT {runMyTestT :: m a}
+  deriving (Functor, Applicative, Monad)
+
+instance (Monad m, Typeable m) => MonadFoo2 Int (MockT (MyTestT m)) where
+  foo2 x = mockMethod (Foo2 x)
 ```
 
-This fails.  Both versions of `makeMockableWithOptions` try to define an
-instance of `MockT m`, but with different choices of `a`, and this violates the
-functional dependency.  The work-around is to use `deriveMockableWithOptions`
-instead, and then write your own `MockT` instances with different base monads.
-
-In `deriveForMockT`, we could let you specify the base monad, so you could use
-the same workaround without manually writing the `MockT` instance.  The instance
-isn't hard to write, so it's a pretty minor point.
+This is a bit of a pain.  I should think about how to help people do the right
+thing here.
 
 ## More priorities for actions
 
