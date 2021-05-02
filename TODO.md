@@ -157,5 +157,11 @@ mock $ whenever $ Foo_ __ :=> \(Foo x) -> return x
 
 `(:=>)` has an ambiguous type here.  My instinct is to try to promote the
 ambiguous type to a rank 2 type, thereby limiting what the programmer may write
-to those things which can unify with *any* type acceptable to `foo`.  I haven't
-yet worked out what that would look like.
+to those things which can unify with *any* type acceptable to `foo`.  In order
+to represent the relationships between types and return values, the type of
+`Matcher` would probably need to mention its argument types, which could be
+done in a type-level list.
+
+If we do this right and get lucky, it could subsume the type-specific case,
+since adding the `Typeable` constraint to the method would allow you to write
+`Foo_ (typed @Int __)` as a matcher.  But I'm still working on the details.

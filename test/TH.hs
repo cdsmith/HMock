@@ -8,6 +8,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 
+{-# LANGUAGE DataKinds #-}
 module TH where
 
 import Data.Default
