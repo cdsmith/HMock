@@ -11,19 +11,15 @@ multi-param classes, I'd like to revert to the simpler usage (so you write
 `makeMockable ''MonadFoo` instead of `makeMockable [t|MonadFoo|]`).  The type
 usage can be renamed.
 
-## Derive ExactMockable more often
+## Replace ExactMockable with top-level functions
 
-Currently, we only derive ExactMockable when the arguments to all methods are
-monomorphic and instances of `Eq` and `Show`.  If the argument is typed by a
-type class parameter, then we can add the necessary `Eq` and `Show` constraints
-to the instance context.
+It's unfortunate that `ExactMockable` is derived (or not) for the entire class,
+when *almost* all methods might be exactly mockable after all.  One wonders if
+a different design might be more convenient.  For instance, exact versions could
+just be top-level functions, which are defined for precisely the methods where
+they make sense, and have the necessary context built in.
 
-Another thought is that it's unfortunate that `ExactMockable` is derived (or
-not) for the entire class, when *almost* all methods might be exactly mockable
-after all.  One wonders if a different design might be more convenient.  For
-instance, exact versions could just be top-level functions, which are defined
-for precisely the methods where they make sense, and have the necessary context
-built in.  For instance:
+For instance:
 
 ``` haskell
 class MonadFoo a m where
@@ -46,6 +42,10 @@ f_ x = F_ (eq x)
 h_ :: (Typeable a, Eq a, Show a) -> Matcher (MonadFoo a) ()
 h_ x = H_ (eq x)
 ```
+
+We don't need to assume `Eq` and `Show` instances this time.  Instead, we can
+add them to the function context where they are needed.  Only polymorphic
+functions cannot be exactly matched.
 
 ## Have a plan for functional dependencies
 
