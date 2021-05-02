@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TupleSections #-}
 
@@ -21,6 +22,14 @@ newtype MockableOptions = MockableOptions
 instance Default MockableOptions where
   def = MockableOptions {mockPrefix = ""}
 
+checkExts :: [Extension] -> Q ()
+checkExts = mapM_ checkExt
+  where
+    checkExt e = do
+      enabled <- isExtEnabled e
+      unless enabled $
+        fail $ "Please enable " ++ show e ++ " to generate this mock."
+
 unappliedName :: Type -> Maybe Name
 unappliedName (AppT a _) = unappliedName a
 unappliedName (ConT a) = Just a
@@ -42,13 +51,14 @@ withClass t f = do
 
 getClassVars :: Type -> Q [(Name, Type)]
 getClassVars t = withClass t $
-  \(ClassD _ _ binders _ _) -> return (fst $ matchVars t binders)
+  \(ClassD _ _ binders _ _) -> fst <$> matchVars t binders
   where
-    matchVars (ConT _) vs = ([], vs)
-    matchVars (AppT a b) vs = case matchVars a vs of
-      (tbl, v : vs') -> ((tvName v, b) : tbl, vs')
-      (tbl, []) -> (tbl, [])
-    matchVars _ vs = ([], vs)
+    matchVars (ConT _) vs = return ([], vs)
+    matchVars (AppT a b) vs = matchVars a vs >>= \case
+      (tbl, v : vs') ->
+        checkExts [FlexibleInstances] >> return ((tvName v, b) : tbl, vs')
+      (tbl, []) -> return (tbl, [])
+    matchVars _ vs = return ([], vs)
 
 substTypeVars :: [(Name, Type)] -> Type -> Type
 substTypeVars classVars = everywhere (mkT subst)
@@ -113,6 +123,8 @@ deriveMockable = deriveMockableWithOptions def
 
 deriveMockableWithOptions :: MockableOptions -> Q Type -> Q [Dec]
 deriveMockableWithOptions options qt = do
+  checkExts [GADTs, TypeFamilies]
+
   t <- qt
   methods <- getMethods t
 
@@ -192,9 +204,10 @@ matcherConstructor options t method =
     [t|Matcher $(pure t) $(pure (methodResult method))|]
   where
     mkPredicate argTy
-      | null (methodTyVars method) && null (methodCxt method) =
-        [t|Predicate $(pure argTy)|]
-      | otherwise = forallT tyVars (pure cx) [t|Predicate $(pure argTy)|]
+      | null tyVars && null cx = [t|Predicate $(pure argTy)|]
+      | otherwise = do
+        checkExts [RankNTypes]
+        forallT tyVars (pure cx) [t|Predicate $(pure argTy)|]
       where
         (tyVars, cx) =
           relevantContext argTy (methodTyVars method, methodCxt method)
@@ -271,7 +284,7 @@ showMatcherClauses options method = do
   where
     actionArg a t ty
       | null (freeTypeVars ty) = varP a
-      | otherwise = sigP (varP a) (varT t)
+      | otherwise = checkExts [ScopedTypeVariables] >> sigP (varP a) (varT t)
 
     printedArg p t ty
       | null (freeTypeVars ty) = [|"«" ++ showPredicate $(varE p) ++ "»"|]
