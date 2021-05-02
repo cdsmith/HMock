@@ -5,6 +5,12 @@ module HMock.TH
     deriveMockableWithOptions,
     deriveForMockT,
     deriveForMockTWithOptions,
+    makeMockableType,
+    makeMockableTypeWithOptions,
+    deriveMockableType,
+    deriveMockableTypeWithOptions,
+    deriveTypeForMockT,
+    deriveTypeForMockTWithOptions,
     MockableOptions (..),
   )
 where

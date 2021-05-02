@@ -145,19 +145,31 @@ hasNiceFields method = allM isNiceField (methodArgs method)
 varsToConstraints :: TypeQ -> [Name] -> CxtQ
 varsToConstraints ty = traverse (appT ty . varT)
 
-makeMockable :: Q Type -> Q [Dec]
-makeMockable = makeMockableWithOptions def
+makeMockable :: Name -> Q [Dec]
+makeMockable = makeMockableType . conT
 
-makeMockableWithOptions :: MockableOptions -> Q Type -> Q [Dec]
-makeMockableWithOptions options qt =
-  (++) <$> deriveMockableWithOptions options qt
-    <*> deriveForMockTWithOptions options qt
+makeMockableType :: Q Type -> Q [Dec]
+makeMockableType = makeMockableTypeWithOptions def
 
-deriveMockable :: Q Type -> Q [Dec]
-deriveMockable = deriveMockableWithOptions def
+makeMockableWithOptions :: MockableOptions -> Name -> Q [Dec]
+makeMockableWithOptions options = makeMockableTypeWithOptions options . conT
 
-deriveMockableWithOptions :: MockableOptions -> Q Type -> Q [Dec]
-deriveMockableWithOptions options qt = do
+makeMockableTypeWithOptions :: MockableOptions -> Q Type -> Q [Dec]
+makeMockableTypeWithOptions options qt =
+  (++) <$> deriveMockableTypeWithOptions options qt
+    <*> deriveTypeForMockTWithOptions options qt
+
+deriveMockable :: Name -> Q [Dec]
+deriveMockable = deriveMockableType . conT
+
+deriveMockableType :: Q Type -> Q [Dec]
+deriveMockableType = deriveMockableTypeWithOptions def
+
+deriveMockableWithOptions :: MockableOptions -> Name -> Q [Dec]
+deriveMockableWithOptions options = deriveMockableTypeWithOptions options . conT
+
+deriveMockableTypeWithOptions :: MockableOptions -> Q Type -> Q [Dec]
+deriveMockableTypeWithOptions options qt = do
   checkExts [GADTs, TypeFamilies]
 
   t <- qt
@@ -375,11 +387,17 @@ exactlyClause options method = do
     makeBody [] e = e
     makeBody (v : vs) e = makeBody vs [|$e (eq $(varE v))|]
 
-deriveForMockT :: Q Type -> Q [Dec]
-deriveForMockT = deriveForMockTWithOptions def
+deriveForMockT :: Name -> Q [Dec]
+deriveForMockT = deriveTypeForMockT . conT
 
-deriveForMockTWithOptions :: MockableOptions -> Q Type -> Q [Dec]
-deriveForMockTWithOptions options qt = do
+deriveTypeForMockT :: Q Type -> Q [Dec]
+deriveTypeForMockT = deriveTypeForMockTWithOptions def
+
+deriveForMockTWithOptions :: MockableOptions -> Name -> Q [Dec]
+deriveForMockTWithOptions options = deriveTypeForMockTWithOptions options . conT
+
+deriveTypeForMockTWithOptions :: MockableOptions -> Q Type -> Q [Dec]
+deriveTypeForMockTWithOptions options qt = do
   t <- qt
   inst <- getInstance t
 

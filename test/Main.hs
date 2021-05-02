@@ -22,7 +22,7 @@ instance MonadFS IO where
   readFile = Prelude.readFile
   writeFile = Prelude.writeFile
 
-makeMockable [t|MonadFS|]
+makeMockable ''MonadFS
 
 copyFile :: MonadFS m => FilePath -> FilePath -> m ()
 copyFile a b = readFile a >>= writeFile b
@@ -33,7 +33,7 @@ class MonadExtraneousMembers m where
 
   mockableMethod :: Int -> m ()
 
-deriveMockable [t|MonadExtraneousMembers|]
+deriveMockable ''MonadExtraneousMembers
 
 instance (Typeable m, Monad m) => MonadExtraneousMembers (MockT m) where
   data SomeDataType (MockT m) = FooCon
@@ -43,12 +43,12 @@ instance (Typeable m, Monad m) => MonadExtraneousMembers (MockT m) where
 class MonadMultiParam a m | m -> a where
   multiParamMethod :: a -> m ()
 
-deriveMockable [t|MonadMultiParam String|]
+deriveMockableType [t|MonadMultiParam String|]
 
 class MonadUnshowable m where
     unshowableArgs :: (Int -> Int) -> m Int
 
-makeMockable [t| MonadUnshowable |]
+makeMockable ''MonadUnshowable
 
 main :: IO ()
 main = hspec $ do

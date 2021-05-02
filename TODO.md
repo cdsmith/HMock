@@ -1,10 +1,3 @@
-## Easier TH API for simple types
-
-Especially since best practice is now to derive polymorphic instances for
-multi-param classes, I'd like to revert to the simpler usage (so you write
-`makeMockable ''MonadFoo` instead of `makeMockable [t|MonadFoo|]`).  The type
-usage can be renamed.
-
 ## Replace ExactMockable with top-level functions
 
 It's unfortunate that `ExactMockable` is derived (or not) for the entire class,

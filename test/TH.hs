@@ -22,12 +22,12 @@ import HMock.TH
 class MonadFoo1 m where
   foo1 :: String -> m ()
 
-makeMockable [t|MonadFoo1|]
+makeMockable ''MonadFoo1
 
 class MonadFoo2 a m | m -> a where
   foo2 :: a -> m ()
 
-deriveMockable [t|MonadFoo2|]
+deriveMockable ''MonadFoo2
 
 newtype MyTestT m a = MyTestT {runMyTestT :: m a}
   deriving (Functor, Applicative, Monad)
@@ -38,9 +38,9 @@ instance (Monad m, Typeable m) => MonadFoo2 Int (MockT (MyTestT m)) where
 class MonadFoo3 m where
   foo3 :: Enum a => String -> a -> b -> m ()
 
-makeMockable [t|MonadFoo3|]
+makeMockable ''MonadFoo3
 
 class MonadFoo4 m where
     foo :: (Int -> m ()) -> m ()
 
-makeMockable [t|MonadFoo4|]
+makeMockable ''MonadFoo4
