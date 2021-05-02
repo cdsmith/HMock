@@ -96,7 +96,6 @@ freeTypeVars = everythingWithContext [] (++) (mkQ ([],) go)
 hasNiceFields :: Method -> Q Bool
 hasNiceFields method = allM isNiceField (methodArgs method)
   where
-    isNiceField :: Type -> Q Bool
     isNiceField ty
       | not (null (freeTypeVars ty)) = return False
       | otherwise = (&&) <$> isInstance ''Eq [ty] <*> isInstance ''Show [ty]
