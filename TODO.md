@@ -167,10 +167,9 @@ class MonadFoo m where
     foo :: (Int -> m ()) -> m ()
 ```
 
-In addition to being a non- `Show` able argument (see above), this poses a
-problem because `Action MonadFoo a` doesn't specify the monad, which one needs
-to know in order to set expectations properly.
+This poses a problem because `Action MonadFoo a` doesn't specify the monad,
+which one needs to know in order to set expectations properly.
 
 It's possible this could be solved by changing the `Action` and `Match` types
 to have the monad as a phantom parameter, similar to what was done with
-`Expected` , so that `match` could unify them.
+`Expected`, so that `match` could unify them.
