@@ -55,13 +55,13 @@ main = hspec $ do
   describe "MonadFS" $ do
     it "copies a file" $
       example . runMockT $ do
-        mock $ expect $ ReadFile "foo.txt" |-> "lorem ipsum"
-        mock $ expect $ WriteFile "bar.txt" "lorem ipsum" |-> ()
+        mock $ expect $ readFile_ "foo.txt" |-> "lorem ipsum"
+        mock $ expect $ writeFile_ "bar.txt" "lorem ipsum" |-> ()
 
         copyFile "foo.txt" "bar.txt"
 
   describe "MonadExtraneousMembers" $ do
     it "mocks mockableMethod" $
       example . runMockT $ do
-        mock $ expect $ MockableMethod 42 |-> ()
+        mock $ expect $ mockableMethod_ 42 |-> ()
         mockableMethod 42

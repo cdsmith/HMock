@@ -9,6 +9,7 @@ import Control.Monad.Extra
 import Data.Char
 import Data.Default
 import Data.Generics
+import qualified Data.Kind
 import Data.List
 import Data.Maybe
 import HMock.Internal.Core
@@ -17,11 +18,11 @@ import Language.Haskell.TH hiding (match)
 import Language.Haskell.TH.Syntax
 
 newtype MockableOptions = MockableOptions
-  { mockPrefix :: String
+  { mockSuffix :: String
   }
 
 instance Default MockableOptions where
-  def = MockableOptions {mockPrefix = ""}
+  def = MockableOptions {mockSuffix = ""}
 
 checkExts :: [Extension] -> Q ()
 checkExts = mapM_ checkExt
@@ -76,9 +77,10 @@ getInstance t = withClass t go
             Instance _ _ [] ->
               fail $ "Too many parameters for type class " ++ nameBase className
             Instance {} -> internalError
-        matchVars _ | null params =
-          fail $
-            "Constraint " ++ pprint t ++ " is missing a parameter for a monad."
+        matchVars _
+          | null params =
+            fail $
+              "Constraint " ++ pprint t ++ " is missing a parameter for a monad."
         matchVars _ = do
           let vars = map tvName params
           return
@@ -116,8 +118,9 @@ parseMethod inst (SigD name ty)
     AppT (VarT _) result <- last argsAndReturn =
     Just (Method name tvs cx (map replaceMonadVar (init argsAndReturn)) result)
   where
-    replaceMonadVar = substTypeVars
-      [(monadVar inst, AppT (ConT ''MockT) (VarT (monadVar inst)))] 
+    replaceMonadVar =
+      substTypeVars
+        [(monadVar inst, AppT (ConT ''MockT) (VarT (monadVar inst)))]
     splitType :: Type -> ([TyVarBndr], [Pred], [Type])
     splitType (ForallT tv cx b) =
       let (tvs, cxs, parts) = splitType b in (tv ++ tvs, cx ++ cxs, parts)
@@ -182,8 +185,9 @@ deriveMockableTypeWithOptions options qt = do
         ++ " has no members in mtl MonadFoo style."
 
   let m = last (generalizedParams inst)
-  let mockableInst =
-        instanceD
+  (++)
+    <$> sequenceA
+      [ instanceD
           (varsToConstraints (conT ''Typeable) (init (generalizedParams inst)))
           [t|Mockable $(pure (instanceType inst))|]
           [ defineActionType options (instanceType inst) m methods,
@@ -192,29 +196,24 @@ deriveMockableTypeWithOptions options qt = do
             defineShowMatcher options methods,
             defineMatch options methods
           ]
-
-  exact <- allM hasNiceFields methods
-  let exactMockableInst
-        | exact =
-          [ instanceD
-              (pure [])
-              [t|ExactMockable $(pure (instanceType inst))|]
-              [defineExactly options methods]
-          ]
-        | otherwise = []
-
-  sequenceA (mockableInst : exactMockableInst)
+      ]
+    <*> defineExactMatchers options (instanceType inst) m methods
 
 defineActionType :: MockableOptions -> Type -> Name -> [Method] -> DecQ
 defineActionType options t m methods = do
-  kind <- [t| (* -> *) -> * -> * |]
+  kind <-
+    [t|
+      (Data.Kind.Type -> Data.Kind.Type) ->
+      Data.Kind.Type ->
+      Data.Kind.Type
+      |]
   let cons = actionConstructor options t m <$> methods
   dataInstD (pure []) ''Action [pure t] (Just kind) cons []
 
 actionConstructor :: MockableOptions -> Type -> Name -> Method -> ConQ
 actionConstructor options t m method = do
   forallC [] (return (methodCxt method)) $
-     gadtC
+    gadtC
       [getActionName options method]
       [ return (Bang NoSourceUnpackedness NoSourceStrictness, argTy)
         | argTy <- methodArgs method
@@ -222,13 +221,18 @@ actionConstructor options t m method = do
       [t|Action $(pure t) $(varT m) $(pure (methodResult method))|]
 
 getActionName :: MockableOptions -> Method -> Name
-getActionName options method = mkName (mockPrefix options ++ toUpper c : cs)
+getActionName options method = mkName (toUpper c : cs ++ mockSuffix options)
   where
     (c : cs) = nameBase (methodName method)
 
 defineMatcherType :: MockableOptions -> Type -> Name -> [Method] -> Q Dec
 defineMatcherType options t m methods = do
-  kind <- [t| (* -> *) -> * -> * |]
+  kind <-
+    [t|
+      (Data.Kind.Type -> Data.Kind.Type) ->
+      Data.Kind.Type ->
+      Data.Kind.Type
+      |]
   let cons = matcherConstructor options t m <$> methods
   dataInstD (pure []) ''Matcher [pure t] (Just kind) cons []
 
@@ -252,7 +256,7 @@ matcherConstructor options t m method = do
 
 getMatcherName :: MockableOptions -> Method -> Name
 getMatcherName options name =
-  mkName (mockPrefix options ++ toUpper c : cs ++ "_")
+  mkName (toUpper c : cs ++ mockSuffix options ++ "_")
   where
     (c : cs) = nameBase (methodName name)
 
@@ -372,20 +376,79 @@ matchClause options method = do
   where
     mkAccept (p, a) = [|accept $(return (VarE p)) $(return (VarE a))|]
 
-defineExactly :: MockableOptions -> [Method] -> Q Dec
-defineExactly options methods =
-  funD 'exactly (exactlyClause options <$> methods)
+defineExactMatchers :: MockableOptions -> Type -> Name -> [Method] -> Q [Dec]
+defineExactMatchers options t m = concatMapM (defineExactMatcher options t m)
 
-exactlyClause :: MockableOptions -> Method -> Q Clause
-exactlyClause options method = do
-  argVars <- replicateM (length (methodArgs method)) (newName "a")
-  clause
-    [conP (getActionName options method) (varP <$> argVars)]
-    (normalB (makeBody argVars (conE (getMatcherName options method))))
-    []
+getExactMatcherName :: MockableOptions -> Method -> Name
+getExactMatcherName options name =
+  mkName (nameBase (methodName name) ++ mockSuffix options ++ "_")
+
+defineExactMatcher :: MockableOptions -> Type -> Name -> Method -> Q [Dec]
+defineExactMatcher options t m method = do
+  maybeCxt <- wholeCxt (methodArgs method)
+  case maybeCxt of
+    Just cx -> do
+      argVars <- replicateM (length (methodArgs method)) (newName "a")
+      sequenceA
+        [ sigD
+            (getExactMatcherName options method)
+            ( forallT
+                []
+                (pure (methodCxt method ++ cx))
+                ( foldr
+                    (\argTy ty -> [t|$(pure argTy) -> $ty|])
+                    [t|
+                      Matcher
+                        $(pure t)
+                        $(varT m)
+                        $(pure (methodResult method))
+                      |]
+                    (methodArgs method)
+                )
+            ),
+          funD
+            (getExactMatcherName options method)
+            [ clause
+                [varP v | v <- argVars]
+                ( normalB
+                    (makeBody argVars (conE (getMatcherName options method)))
+                )
+                []
+            ]
+        ]
+    _ -> pure []
   where
     makeBody [] e = e
     makeBody (v : vs) e = makeBody vs [|$e (eq $(varE v))|]
+
+    wholeCxt :: [Type] -> Q (Maybe Cxt)
+    wholeCxt (ty : ts) = do
+      thisCxt <- argCxt ty
+      otherCxt <- wholeCxt ts
+      return ((++) <$> thisCxt <*> otherCxt)
+    wholeCxt [] = return (Just [])
+
+    argCxt :: Type -> Q (Maybe Cxt)
+    argCxt argTy
+      | not (isKnownType argTy) = return Nothing
+      | VarT v <- argTy =
+        Just <$> sequenceA [[t|Eq $(varT v)|], [t|Show $(varT v)|]]
+      | otherwise = do
+        eqInstances <- reifyInstances ''Eq [argTy]
+        showInstances <- reifyInstances ''Show [argTy]
+        case (eqInstances, showInstances) of
+          ([InstanceD _ eqCxt _ _], [InstanceD _ showCxt _ _]) ->
+            return (Just (filterCxt argTy eqCxt ++ filterCxt argTy showCxt))
+          _ -> return Nothing
+      | otherwise = return Nothing
+
+    filterCxt :: Type -> Cxt -> Cxt
+    filterCxt ty = filter (all (`elem` freeTypeVars ty) . freeTypeVars)
+
+    isKnownType argTy = null tyVars && null cx
+      where
+        (tyVars, cx) =
+          relevantContext argTy (methodTyVars method, methodCxt method)
 
 deriveForMockT :: Name -> Q [Dec]
 deriveForMockT = deriveTypeForMockT . conT

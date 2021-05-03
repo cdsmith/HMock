@@ -140,16 +140,6 @@ class Typeable ctx => Mockable (ctx :: (* -> *) -> Constraint) where
   -- Attempts to match an 'Action' with a 'Matcher'.
   match :: Matcher ctx m a -> Action ctx m b -> MatchResult a b
 
--- | A class for 'Monad' subclasses whose methods can be mocked and compared
--- for exact equality.  Only those classes whose methods have nice enough
--- arguments (which can be printed and compared for equality) may be instances
--- of this subclass.
-class Mockable ctx => ExactMockable ctx where
-  -- Converts an 'Action' into a 'Matcher' that will only match those exact
-  -- parameter values.  This is sometimes more convenient than writing
-  -- 'HMock.eq_' everywhere.
-  exactly :: Action ctx m a -> Matcher ctx m a
-
 -- | Monad transformer for running mocks.
 newtype MockT m a where
   MockT :: StateT (Expected m) m a -> MockT m a
@@ -172,29 +162,17 @@ data WithResult (ctx :: (* -> *) -> Constraint) (m :: * -> *) where
   -- | Matches an 'Action' and performs a response in the 'MockT' monad.  This
   -- is a vary flexible response, which can look at arguments, do things in the
   -- base monad, set up more expectations, etc.
-  (:=>) :: Matcher ctx m a -> (Action ctx m a -> MockT m a) -> WithResult ctx m
+  (:->) :: Matcher ctx m a -> (Action ctx m a -> MockT m a) -> WithResult ctx m
 
 -- | Matches an 'Action' and returns a constant response.  This is more
 -- convenient than '(:=>)' in the common case where you just want to return a
 -- known result.
-(|=>) ::
+(|->) ::
   (Mockable ctx, Monad m) =>
   Matcher ctx m a ->
   a ->
   WithResult ctx m
-m |=> r = m :=> const (return r)
-
--- | Matches an exact 'Action' and returns a constant response.  This is the
--- simplest way to write an expectation, and is more readable than '(:=>)' or
--- '(|=>)' when you know the exact arguments that must be passed to the
--- method.  However, it can lead to over-assertion if used too often, which can
--- make your tests brittle and less useful.
-(|->) ::
-  (ExactMockable ctx, Monad m) =>
-  Action ctx m a ->
-  a ->
-  WithResult ctx m
-a |-> b = exactly a |=> b
+m |-> r = m :-> const (return r)
 
 -- | Implements a method in a 'Mockable' monad by delegating to the mock
 -- framework.  This is typically used only in generated code.
@@ -219,7 +197,7 @@ mockMethod a = MockT $ do
             (String, StateT (Expected m) m a)
         )
     tryMatch (Step _ step, e)
-      | Just (m :=> impl) <-
+      | Just (m :-> impl) <-
           fromDynamic step :: Maybe (WithResult ctx m) =
         case match m a of
           NoMatch -> Nothing
@@ -283,7 +261,7 @@ expectN ::
   -- | The action and its response.
   WithResult ctx m ->
   Expected m
-expectN card wr@(m :=> (_ :: Action ctx m a -> MockT m a)) =
+expectN card wr@(m :-> (_ :: Action ctx m a -> MockT m a)) =
   Expect card (Step (showMatcher Nothing m) (toDyn wr))
 
 -- Creates an expectation that an action is performed once.  This is equivalent

@@ -1,39 +1,3 @@
-## Replace ExactMockable with top-level functions
-
-It's unfortunate that `ExactMockable` is derived (or not) for the entire class,
-when *almost* all methods might be exactly mockable after all.  One wonders if
-a different design might be more convenient.  For instance, exact versions could
-just be top-level functions, which are defined for precisely the methods where
-they make sense, and have the necessary context built in.
-
-For instance:
-
-``` haskell
-class MonadFoo a m where
-    f :: String -> m ()
-    g :: Num b => b -> m ()
-    h :: a -> m ()
-
-instance Typeable a => Mockable (MonadFoo a) where
-    data Matcher (MonadFoo a) :: * -> * where
-        F_ :: Predicate String -> Matcher (MonadFoo a) ()
-        G_ :: (forall b. Num b => Predicate b) -> Matcher (MonadFoo a) ()
-        H_ :: Predicate a -> Matcher (MonadFoo a) ()
-    ...
-
--- An exact matcher for f, since it has 
-f_ :: Typeable a => String -> Matcher (MonadFoo a) ()
-f_ x = F_ (eq x)
-
--- A parameterized exact matcher for h, since it is typed by a class param.
-h_ :: (Typeable a, Eq a, Show a) -> Matcher (MonadFoo a) ()
-h_ x = H_ (eq x)
-```
-
-We don't need to assume `Eq` and `Show` instances this time.  Instead, we can
-add them to the function context where they are needed.  Only polymorphic
-functions cannot be exactly matched.
-
 ## More priorities for actions
 
 Currently, it's an error when more than one `Matcher` in the expectations
@@ -151,4 +115,6 @@ done in a type-level list.
 
 If we do this right and get lucky, it could subsume the type-specific case,
 since adding the `Typeable` constraint to the method would allow you to write
-`Foo_ (typed @Int __)` as a matcher.  But I'm still working on the details.
+`Foo_ (typed @Int __)` as a matcher.  Ideally, this should also replace the
+existing behavior for polymorphic arguments.  But I have not worked out all the
+details.
