@@ -14,41 +14,18 @@ import Test.Hspec hiding (Expectation)
 import Prelude hiding (readFile, writeFile)
 import qualified Prelude
 
-class Monad m => MonadFS m where
+class Monad m => MonadFilesystem m where
   readFile :: FilePath -> m String
   writeFile :: FilePath -> String -> m ()
 
-instance MonadFS IO where
+instance MonadFilesystem IO where
   readFile = Prelude.readFile
   writeFile = Prelude.writeFile
 
-makeMockable ''MonadFS
+makeMockable ''MonadFilesystem
 
-copyFile :: MonadFS m => FilePath -> FilePath -> m ()
+copyFile :: MonadFilesystem m => FilePath -> FilePath -> m ()
 copyFile a b = readFile a >>= writeFile b
-
-class MonadExtraneousMembers m where
-  data SomeDataType m
-  favoriteNumber :: SomeDataType m -> Int
-
-  mockableMethod :: Int -> m ()
-
-deriveMockable ''MonadExtraneousMembers
-
-instance (Typeable m, Monad m) => MonadExtraneousMembers (MockT m) where
-  data SomeDataType (MockT m) = FooCon
-  favoriteNumber _ = 42
-  mockableMethod a = mockMethod (MockableMethod a)
-
-class MonadMultiParam a m | m -> a where
-  multiParamMethod :: a -> m ()
-
-deriveMockableType [t|MonadMultiParam String|]
-
-class MonadUnshowable m where
-    unshowableArgs :: (Int -> Int) -> m Int
-
-makeMockable ''MonadUnshowable
 
 main :: IO ()
 main = hspec $ do
@@ -60,8 +37,45 @@ main = hspec $ do
 
         copyFile "foo.txt" "bar.txt"
 
-  describe "MonadExtraneousMembers" $ do
-    it "mocks mockableMethod" $
+    it "matches flexible cardinality" $ do
       example . runMockT $ do
-        mock $ expect $ mockableMethod_ 42 |-> ()
-        mockableMethod 42
+        mock $ expectAny $ readFile_ "foo.txt" |-> "lorem ipsum"
+        mock $ expect $ writeFile_ "bar.txt" "lorem ipsum" |-> ()
+
+        copyFile "foo.txt" "bar.txt"
+
+    it "enforces complex nested sequences" $
+      example . runMockT $ do
+        mock $
+          inSequence
+            [ inAnyOrder
+                [ expect $ readFile_ "1.txt" |-> "1",
+                  expect $ readFile_ "2.txt" |-> "2"
+                ],
+              expect $ readFile_ "3.txt" |-> "3"
+            ]
+
+        readFile "2.txt"
+        readFile "1.txt"
+        readFile "3.txt"
+        return ()
+
+    it "overrides default responses" $ do
+      example $ do
+        (r1, r2) <- runMockT $ do
+          mock $ whenever $ readFile_ "a.txt" |-> "the default"
+          mock $ expect $ readFile_ "a.txt" |-> "the override"
+
+          (,) <$> readFile "a.txt" <*> readFile "a.txt"
+        r1 `shouldBe` "the override"
+        r2 `shouldBe` "the default"
+
+    it "consumes optional calls in sequences" $ do
+      example . runMockT $ do
+        mock $
+          inSequence
+            [ expectAny $ writeFile_ "foo.txt" "foo" |-> (),
+              expect $ writeFile_ "foo.txt" "bar" |-> ()
+            ]
+        writeFile "foo.txt" "foo"
+        writeFile "foo.txt" "bar"

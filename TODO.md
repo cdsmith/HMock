@@ -1,19 +1,14 @@
-## More priorities for actions
+## Ambiguity resolution
 
 Currently, it's an error when more than one `Matcher` in the expectations
 applies to the current `Action`.  It's more common in other mock frameworks to
-adopt rules for choosing which match to prefer.
+adopt rules for choosing which match to prefer.  For example, sometimes they
+choose the most specific match, or just the most recently added.
 
-* One such rule is to choose the most specific match.  This would mean adding
-  some kind of partial order on predicates.  We'd probably just adopt a
-  three-tier system, where `eq x` > anythiong else matching `x` >
-  `__`.  Then instead of looking for a unique match, we're looking for a
-  unique maximally specific match.
-* Another rule is to have user-specified priorities.  A simple answer along
-  these lines would be to have `whenever` get lower priority than `expect` and
-  `expectN`, so it can be used to set a default action when there's no
-  expectation.  One might then add an `expectMany` that is like `whenever` but
-  without the low priority.
+I definitely don't like gMock's "most recently added" rule, but most specific is
+appealing.  This would mean adding some kind of partial order on specificity of
+predicates.  We'd probably just adopt a three-tier system, where `eq x` >
+anything else matching `x` > `__`.
 
 ## Use source locations in mock messages.
 

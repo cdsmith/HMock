@@ -7,12 +7,12 @@
 
 module HMock.Internal.Core where
 
-import Control.Arrow (Arrow (second))
 import Control.Monad.State (MonadState (get, put), StateT (..), modify)
 import Data.Constraint (Constraint)
 import Data.Dynamic (Dynamic, Typeable, fromDynamic, toDyn)
 import Data.Either (partitionEithers)
-import Data.List (intercalate, sort)
+import Data.Function (on)
+import Data.List (intercalate, sort, sortBy)
 import Data.Maybe (mapMaybe)
 import Data.Type.Equality (type (:~:) (..))
 import HMock.Internal.Cardinality
@@ -21,6 +21,14 @@ import HMock.Internal.Cardinality
     decCardinality,
     once,
   )
+
+newtype Priority = Priority Int deriving (Show, Eq, Ord)
+
+lowPriority :: Priority
+lowPriority = Priority 0
+
+normalPriority :: Priority
+normalPriority = Priority 1
 
 -- | A single step of an expectation.
 --
@@ -34,7 +42,7 @@ data Step where
 -- here.
 data Expected (m :: * -> *) where
   ExpectNothing :: Expected m
-  Expect :: Cardinality -> Step -> Expected m
+  Expect :: Priority -> Cardinality -> Step -> Expected m
   AllOf :: [Expected m] -> Expected m
   Sequence :: [Expected m] -> Expected m
 
@@ -42,9 +50,19 @@ data Expected (m :: * -> *) where
 -- the given prefix (used to indent).
 formatExpected :: String -> Expected m -> String
 formatExpected prefix ExpectNothing = prefix ++ "nothing"
-formatExpected prefix (Expect card (Step s _))
-  | card == once = prefix ++ s
-  | otherwise = prefix ++ s ++ " (" ++ show card ++ ")"
+formatExpected prefix (Expect prio card (Step s _)) =
+  prefix ++ s ++ modifierDesc
+  where
+    modifiers = prioModifier ++ cardModifier
+    prioModifier
+      | prio == lowPriority = ["low priority"]
+      | otherwise = []
+    cardModifier
+      | card == once = []
+      | otherwise = [show card]
+    modifierDesc
+      | null modifiers = ""
+      | otherwise = " (" ++ intercalate ", " modifiers ++ ")"
 formatExpected prefix (AllOf xs) =
   prefix ++ "all of (in any order):\n"
     ++ unlines (map (formatExpected (prefix ++ "  ")) xs)
@@ -54,21 +72,25 @@ formatExpected prefix (Sequence xs) =
 
 -- | Get a list of steps that can match actions right now, together with the
 -- remaining expectations if each one were to match.
-liveSteps :: Expected m -> [(Step, Expected m)]
-liveSteps = map (second simplify) . go
+liveSteps :: Expected m -> [(Priority, Step, Expected m)]
+liveSteps = map (\(p, s, e) -> (p, s, simplify e)) . go
   where
     go ExpectNothing = []
-    go (Expect card step) = case decCardinality card of
-      Nothing -> [(step, ExpectNothing)]
-      Just card' -> [(step, Expect card' step)]
+    go (Expect prio card step) = case decCardinality card of
+      Nothing -> [(prio, step, ExpectNothing)]
+      Just card' -> [(prio, step, Expect prio card' step)]
     go (AllOf es) =
-      [(a, AllOf (e' : es')) | (e, es') <- choices es, (a, e') <- go e]
+      [(p, a, AllOf (e' : es')) | (e, es') <- choices es, (p, a, e') <- go e]
       where
         choices [] = []
-        choices (x : xs) =
-          (x, xs) : (fmap (x :) <$> choices xs)
+        choices (x : xs) = (x, xs) : (fmap (x :) <$> choices xs)
     go (Sequence es) =
-      [(a, Sequence (e' : es')) | e : es' <- [es], (a, e') <- go e]
+      [(p, a, Sequence (e' : es')) | (e, es') <- choices es, (p, a, e') <- go e]
+      where
+        choices [] = []
+        choices (x : xs)
+          | ExpectNothing <- excess x = (x, xs) : choices xs
+          | otherwise = [(x, xs)]
 
 -- | Simplifies a set of expectations.  This removes unnecessary occurrences of
 -- 'ExpectNothing' and collapses nested lists with the same ordering
@@ -103,9 +125,9 @@ excess :: Expected m -> Expected m
 excess = simplify . go
   where
     go ExpectNothing = ExpectNothing
-    go (Expect (Interval lo _) step)
+    go (Expect prio (Interval lo _) step)
       | lo == 0 = ExpectNothing
-      | otherwise = Expect (Interval lo Nothing) step
+      | otherwise = Expect prio (Interval lo Nothing) step
     go (AllOf xs) = AllOf (map go xs)
     go (Sequence xs) = Sequence (map go xs)
 
@@ -183,28 +205,35 @@ mockMethod ::
   MockT m a
 mockMethod a = MockT $ do
   expected <- get
-  case partitionEithers (mapMaybe tryMatch (liveSteps expected)) of
+  let (partials, fulls) =
+        partitionEithers (mapMaybe tryMatch (liveSteps expected))
+  case (partials, dropLowPrio (sortBy (flip compare `on` \(p, _, _) -> p) fulls)) of
     ([], []) -> noMatchError a
-    (partials, []) -> partialMatchError a (map snd (sort partials))
-    (_, [(_, response)]) -> response
-    (_, successes) -> ambiguousMatchError a (map fst successes)
+    (_, []) -> partialMatchError a (map snd (sort partials))
+    (_, [(_, _, response)]) -> response
+    (_, successes) -> ambiguousMatchError a (map (\(_, m, _) -> m) successes)
   where
     tryMatch ::
-      (Step, Expected m) ->
+      (Priority, Step, Expected m) ->
       Maybe
         ( Either
             (Int, String)
-            (String, StateT (Expected m) m a)
+            (Priority, String, StateT (Expected m) m a)
         )
-    tryMatch (Step _ step, e)
+    tryMatch (prio, Step _ step, e)
       | Just (m :-> impl) <-
           fromDynamic step :: Maybe (WithResult ctx m) =
         case match m a of
           NoMatch -> Nothing
           PartialMatch Refl n -> Just (Left (n, showMatcher (Just a) m))
           FullMatch Refl
-            | MockT r <- impl a -> Just (Right (showMatcher (Just a) m, put e >> r))
+            | MockT r <- impl a ->
+              Just (Right (prio, showMatcher (Just a) m, put e >> r))
     tryMatch _ = Nothing
+
+    dropLowPrio [] = []
+    dropLowPrio ((p, c, r) : rest) =
+      (p, c, r) : takeWhile (\(p', _, _) -> p' == p) rest
 
 -- An error for an action that matches no expectations at all.
 noMatchError ::
@@ -252,6 +281,24 @@ ambiguousMatchError a matches =
 mock :: Monad m => Expected m -> MockT m ()
 mock newExpected = MockT $ modify (\e -> simplify (AllOf [e, newExpected]))
 
+makeExpect ::
+  (Mockable ctx, Typeable m1) =>
+  Priority ->
+  Cardinality ->
+  WithResult ctx m1 ->
+  Expected m2
+makeExpect prio card wr@(m :-> (_ :: Action ctx m a -> MockT m a)) =
+  Expect prio card (Step (showMatcher Nothing m) (toDyn wr))
+
+-- Creates an expectation that an action is performed once.  This is equivalent
+-- to @'expectN' 'once'@, but shorter.
+expect ::
+  forall m ctx.
+  (Typeable m, Mockable ctx) =>
+  WithResult ctx m ->
+  Expected m
+expect = makeExpect normalPriority once
+
 -- Creates an expectation that an action is performed some number of times.
 expectN ::
   forall m ctx.
@@ -261,26 +308,26 @@ expectN ::
   -- | The action and its response.
   WithResult ctx m ->
   Expected m
-expectN card wr@(m :-> (_ :: Action ctx m a -> MockT m a)) =
-  Expect card (Step (showMatcher Nothing m) (toDyn wr))
+expectN = makeExpect normalPriority
 
--- Creates an expectation that an action is performed once.  This is equivalent
--- to @'expectN' 'once'@, but shorter.
-expect ::
+-- Creates an expectation that an action is performed any number of times.  This
+-- is equivalent to @'expectN' 'anyCardinality'@, but shorter.
+expectAny ::
   forall m ctx.
   (Typeable m, Mockable ctx) =>
   WithResult ctx m ->
   Expected m
-expect = expectN once
+expectAny = makeExpect normalPriority anyCardinality
 
--- Creates an expectation that an action is performed zero or more times.  This
--- is equivalent to @'expectN' 'anyCardinality'@, but shorter.
+-- Allows an unexpected action to be performed any time, and gives a default
+-- response.  This differs from 'expectAny' because actual expectations will
+-- override this default.
 whenever ::
   forall m ctx.
   (Typeable m, Mockable ctx) =>
   WithResult ctx m ->
   Expected m
-whenever = expectN anyCardinality
+whenever = makeExpect lowPriority anyCardinality
 
 -- Creates a sequential expectation.  Other actions can still happen during the
 -- sequence, but these specific expectations must be met in this order.
@@ -291,3 +338,20 @@ whenever = expectN anyCardinality
 -- instead.  This avoids over-asserting, and keeps your tests less brittle.
 inSequence :: [Expected m] -> Expected m
 inSequence = Sequence
+
+-- Combines multiple expectations, which can occur in any order.  Most of the
+-- time, you can achieve the same thing with multiple uses of 'mock', but this
+-- can be combined with 'inSequence' to describe more complex ordering
+-- constraints, such as:
+--
+-- @
+--   mock $ inSequence
+--     [ inAnyOrder
+--         [ expect $ adjustMirrors :-> (),
+--           expect $ fastenSeatBelt :-> ()
+--         ],
+--       expect $ startCard :-> ()
+--     ]
+-- @
+inAnyOrder :: [Expected m] -> Expected m
+inAnyOrder = AllOf

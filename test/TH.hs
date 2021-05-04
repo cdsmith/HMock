@@ -44,3 +44,27 @@ class MonadFoo4 m where
     foo :: (Int -> m ()) -> m ()
 
 makeMockable ''MonadFoo4
+
+class MonadExtraneousMembers m where
+  data SomeDataType m
+  favoriteNumber :: SomeDataType m -> Int
+
+  mockableMethod :: Int -> m ()
+
+deriveMockable ''MonadExtraneousMembers
+
+instance (Typeable m, Monad m) => MonadExtraneousMembers (MockT m) where
+  data SomeDataType (MockT m) = FooCon
+  favoriteNumber _ = 42
+  mockableMethod a = mockMethod (MockableMethod a)
+
+class MonadMultiParam a m | m -> a where
+  multiParamMethod :: a -> m ()
+
+deriveMockableType [t|MonadMultiParam String|]
+
+class MonadUnshowable m where
+    unshowableArgs :: (Int -> Int) -> m Int
+
+makeMockable ''MonadUnshowable
+
