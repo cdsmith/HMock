@@ -13,7 +13,7 @@ module HMock
     whenever,
     inSequence,
     inAnyOrder,
-    Predicate(..),
+    Predicate (..),
     eq,
     neq,
     gt,
@@ -37,6 +37,6 @@ module HMock
   )
 where
 
+import HMock.Internal.Cardinality
 import HMock.Internal.Core
 import HMock.Internal.Predicates
-import HMock.Internal.Cardinality

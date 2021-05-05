@@ -6,16 +6,18 @@ module HMock.Internal.TH where
 
 import Control.Monad
 import Control.Monad.Extra
+import Data.Bool
 import Data.Char
 import Data.Default
 import Data.Generics
 import qualified Data.Kind
 import Data.List
 import Data.Maybe
+import GHC.TypeLits
 import HMock.Internal.Core
 import HMock.Internal.Predicates
-import Language.Haskell.TH hiding (match)
-import Language.Haskell.TH.Syntax
+import Language.Haskell.TH hiding (Match, match)
+import Language.Haskell.TH.Syntax hiding (Match)
 
 newtype MockableOptions = MockableOptions
   { mockSuffix :: String
@@ -98,7 +100,10 @@ substTypeVars classVars = everywhere (mkT subst)
     subst t = t
 
 getMembers :: Type -> Q [Dec]
-getMembers t = withClass t $ \(ClassD _ _ _ _ members) -> return members
+getMembers t = withClass t go
+  where
+    go (ClassD _ _ _ _ members) = return members
+    go _ = internalError
 
 data Method = Method
   { methodName :: Name,
@@ -173,7 +178,7 @@ deriveMockableWithOptions options = deriveMockableTypeWithOptions options . conT
 
 deriveMockableTypeWithOptions :: MockableOptions -> Q Type -> Q [Dec]
 deriveMockableTypeWithOptions options qt = do
-  checkExts [GADTs, TypeFamilies]
+  checkExts [GADTs, TypeFamilies, DataKinds]
 
   t <- qt
   inst <- getInstance t
@@ -203,6 +208,7 @@ defineActionType :: MockableOptions -> Type -> Name -> [Method] -> DecQ
 defineActionType options t m methods = do
   kind <-
     [t|
+      Symbol ->
       (Data.Kind.Type -> Data.Kind.Type) ->
       Data.Kind.Type ->
       Data.Kind.Type
@@ -218,17 +224,25 @@ actionConstructor options t m method = do
       [ return (Bang NoSourceUnpackedness NoSourceStrictness, argTy)
         | argTy <- methodArgs method
       ]
-      [t|Action $(pure t) $(varT m) $(pure (methodResult method))|]
+      [t|
+        Action
+          $(pure t)
+          $(litT (strTyLit (nameBase (methodName method))))
+          $(varT m)
+          $(pure (methodResult method))
+        |]
 
 getActionName :: MockableOptions -> Method -> Name
-getActionName options method = mkName (toUpper c : cs ++ mockSuffix options)
+getActionName options method =
+  mkName (map toUpper (take 1 name) ++ drop 1 name ++ mockSuffix options)
   where
-    (c : cs) = nameBase (methodName method)
+    name = nameBase (methodName method)
 
 defineMatcherType :: MockableOptions -> Type -> Name -> [Method] -> Q Dec
 defineMatcherType options t m methods = do
   kind <-
     [t|
+      Symbol ->
       (Data.Kind.Type -> Data.Kind.Type) ->
       Data.Kind.Type ->
       Data.Kind.Type
@@ -243,7 +257,13 @@ matcherConstructor options t m method = do
     [ (Bang NoSourceUnpackedness NoSourceStrictness,) <$> mkPredicate argTy
       | argTy <- methodArgs method
     ]
-    [t|Matcher $(pure t) $(varT m) $(pure (methodResult method))|]
+    [t|
+      Matcher
+        $(pure t)
+        $(litT (strTyLit (nameBase (methodName method))))
+        $(varT m)
+        $(pure (methodResult method))
+      |]
   where
     mkPredicate argTy
       | null tyVars && null cx = [t|Predicate $(pure argTy)|]
@@ -255,10 +275,10 @@ matcherConstructor options t m method = do
           relevantContext argTy (methodTyVars method, methodCxt method)
 
 getMatcherName :: MockableOptions -> Method -> Name
-getMatcherName options name =
-  mkName (toUpper c : cs ++ mockSuffix options ++ "_")
+getMatcherName options method =
+  mkName (map toUpper (take 1 name) ++ drop 1 name ++ mockSuffix options ++ "_")
   where
-    (c : cs) = nameBase (methodName name)
+    name = nameBase (methodName method)
 
 relevantContext :: Type -> ([TyVarBndr], Cxt) -> ([TyVarBndr], Cxt)
 relevantContext ty (tvs, cx) =
@@ -276,7 +296,10 @@ showActionClause :: MockableOptions -> Method -> Q Clause
 showActionClause options method = do
   argVars <- replicateM (length (methodArgs method)) (newName "a")
   clause
-    [conP (getActionName options method) (varP <$> argVars)]
+    [ conP
+        (getActionName options method)
+        (zipWith argPattern (methodArgs method) argVars)
+    ]
     ( normalB
         [|
           unwords
@@ -287,12 +310,15 @@ showActionClause options method = do
     )
     []
   where
-    showArg ty var
-      | not (null (freeTypeVars ty)) = fallback ty
-      | otherwise = do
-        showable <- isInstance ''Show [ty]
-        if showable then [|showsPrec 11 $(varE var) ""|] else fallback ty
-    fallback ty = lift ("(_ :: " ++ pprint ty ++ ")")
+    canShow ty
+      | not (null (freeTypeVars ty)) = return False
+      | otherwise = isInstance ''Show [ty]
+    argPattern ty v = canShow ty >>= bool wildP (varP v)
+    showArg ty var =
+      canShow ty
+        >>= bool
+          (lift ("(_ :: " ++ pprint ty ++ ")"))
+          [|showsPrec 11 $(varE var) ""|]
 
 defineShowMatcher :: MockableOptions -> [Method] -> Q Dec
 defineShowMatcher options methods = do
@@ -301,12 +327,12 @@ defineShowMatcher options methods = do
 
 showMatcherClauses :: MockableOptions -> Method -> Q [ClauseQ]
 showMatcherClauses options method = do
-  argVars <- replicateM (length (methodArgs method)) (newName "a")
   argTVars <- replicateM (length (methodArgs method)) (newName "t")
   predVars <- replicateM (length (methodArgs method)) (newName "p")
-  let actionArgs = zipWith3 actionArg argVars argTVars (methodArgs method)
+  let actionArgs = zipWith actionArg argTVars (methodArgs method)
   let matcherArgs = varP <$> predVars
   let printedArgs = zipWith3 printedArg predVars argTVars (methodArgs method)
+  let polyMatcherArgs = zipWith matcherArg predVars (methodArgs method)
   let printedPolyArgs = zipWith printedPolyArg predVars (methodArgs method)
   let body name args = normalB [|unwords ($(lift name) : $(listE args))|]
   return
@@ -318,15 +344,19 @@ showMatcherClauses options method = do
         [],
       clause
         [ conP 'Nothing [],
-          conP (getMatcherName options method) matcherArgs
+          conP (getMatcherName options method) polyMatcherArgs
         ]
         (body (nameBase (methodName method)) printedPolyArgs)
         []
     ]
   where
-    actionArg a t ty
-      | isKnownType ty = varP a
-      | otherwise = checkExts [ScopedTypeVariables] >> sigP (varP a) (varT t)
+    actionArg t ty
+      | isKnownType ty = wildP
+      | otherwise = checkExts [ScopedTypeVariables] >> sigP wildP (varT t)
+
+    matcherArg p ty
+      | isKnownType ty = varP p
+      | otherwise = wildP
 
     printedArg p t ty
       | isKnownType ty = [|"«" ++ showPredicate $(varE p) ++ "»"|]
@@ -343,12 +373,7 @@ showMatcherClauses options method = do
           relevantContext argTy (methodTyVars method, methodCxt method)
 
 defineMatch :: MockableOptions -> [Method] -> Q Dec
-defineMatch options methods = funD 'match clauses
-  where
-    clauses = (matchClause options <$> methods) ++ fallthrough
-    fallthrough
-      | length methods <= 1 = []
-      | otherwise = [clause [wildP, wildP] (normalB [|NoMatch|]) []]
+defineMatch options methods = funD 'match (matchClause options <$> methods)
 
 matchClause :: MockableOptions -> Method -> Q Clause
 matchClause options method = do
@@ -364,8 +389,8 @@ matchClause options method = do
       conP (getActionName options method) (varP . snd <$> argVars)
     ]
     ( guardedB
-        [ (,) <$> normalG [|$(varE mmVar) == 0|] <*> [|FullMatch Refl|],
-          (,) <$> normalG [|otherwise|] <*> [|PartialMatch Refl $(varE mmVar)|]
+        [ (,) <$> normalG [|$(varE mmVar) == 0|] <*> [|Match Refl|],
+          (,) <$> normalG [|otherwise|] <*> [|NoMatch $(varE mmVar)|]
         ]
     )
     [ valD
@@ -400,6 +425,7 @@ defineExactMatcher options t m method = do
                     [t|
                       Matcher
                         $(pure t)
+                        $(litT (strTyLit (nameBase (methodName method))))
                         $(varT m)
                         $(pure (methodResult method))
                       |]

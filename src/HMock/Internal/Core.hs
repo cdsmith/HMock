@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -15,8 +16,8 @@ import Control.Monad.Base (MonadBase)
 import Control.Monad.Catch (MonadCatch, MonadMask, MonadThrow)
 import Control.Monad.Cont (MonadCont)
 import Control.Monad.Except (MonadError)
-import Control.Monad.Reader (MonadReader)
 import Control.Monad.RWS (MonadRWS)
+import Control.Monad.Reader (MonadReader)
 import Control.Monad.State (MonadState (get, put), StateT (..), modify)
 import Control.Monad.Trans (MonadIO, MonadTrans (..))
 import Control.Monad.Writer (MonadWriter)
@@ -27,6 +28,7 @@ import Data.Function (on)
 import Data.List (intercalate, sort, sortBy)
 import Data.Maybe (mapMaybe)
 import Data.Type.Equality (type (:~:) (..))
+import GHC.TypeLits
 import HMock.Internal.Cardinality
   ( Cardinality (..),
     anyCardinality,
@@ -143,15 +145,14 @@ excess = simplify . go
     go (AllOf xs) = AllOf (map go xs)
     go (Sequence xs) = Sequence (map go xs)
 
--- | The result of matching a @'Matcher' a@ with an @'Action' b@.
+-- | The result of matching a @'Matcher' a@ with an @'Action' b@.  Because the
+-- types should already guarantee that the methods match, all that's left is to
+-- match arguments.
 data MatchResult a b where
-  -- | The 'Matcher' was for a different method.
-  NoMatch :: MatchResult a b
-  -- | The 'Matcher' was for the right method, but this number of arguments
-  -- don't match.  'Refl' witnesses equality of return types.
-  PartialMatch :: a :~: a -> Int -> MatchResult a b
-  -- | This is a match. 'Refl' witnesses equality of return types.
-  FullMatch :: a :~: b -> MatchResult a b
+  -- | No match.  The int is the number of arguments that don't match.
+  NoMatch :: Int -> MatchResult a b
+  -- | Match. 'Refl' witnesses equality of return types.
+  Match :: a :~: b -> MatchResult a b
 
 -- | A class for 'Monad' subclasses whose methods can be mocked.  You usually
 -- want to generate this instance using 'HMock.TH.makeMockable' or
@@ -159,20 +160,20 @@ data MatchResult a b where
 class Typeable ctx => Mockable (ctx :: (* -> *) -> Constraint) where
   -- An action that is performed.  This data type will have one constructor for
   -- each method.
-  data Action ctx :: (* -> *) -> * -> *
+  data Action ctx :: Symbol -> (* -> *) -> * -> *
 
   -- | A specification for matching actions.  The actual arguments should be
   -- replaced with predicates.
-  data Matcher ctx :: (* -> *) -> * -> *
+  data Matcher ctx :: Symbol -> (* -> *) -> * -> *
 
   -- Gets a text description of an 'Action', for use in error messages.
-  showAction :: Action ctx m a -> String
+  showAction :: Action ctx name m a -> String
 
   -- Gets a text description of a 'Matcher', for use in error messages.
-  showMatcher :: Maybe (Action ctx m a) -> Matcher ctx m b -> String
+  showMatcher :: Maybe (Action ctx name m a) -> Matcher ctx name m b -> String
 
   -- Attempts to match an 'Action' with a 'Matcher'.
-  match :: Matcher ctx m a -> Action ctx m b -> MatchResult a b
+  match :: Matcher ctx name m a -> Action ctx name m b -> MatchResult a b
 
 -- | Monad transformer for running mocks.
 newtype MockT m a where
@@ -213,28 +214,36 @@ runMockT (MockT test) = do
 -- | A pair of a 'Matcher' and a response for when it matches.  The matching
 -- 'Action' is passed to the response, and is guaranteed to be a match, so it's
 -- okay to just pattern match on the correct method.
-data WithResult (ctx :: (* -> *) -> Constraint) (m :: * -> *) where
+data
+  WithResult
+    (ctx :: (* -> *) -> Constraint)
+    (name :: Symbol)
+    (m :: * -> *)
+  where
   -- | Matches an 'Action' and performs a response in the 'MockT' monad.  This
   -- is a vary flexible response, which can look at arguments, do things in the
   -- base monad, set up more expectations, etc.
-  (:->) :: Matcher ctx m a -> (Action ctx m a -> MockT m a) -> WithResult ctx m
+  (:->) ::
+    Matcher ctx name m a ->
+    (Action ctx name m a -> MockT m a) ->
+    WithResult ctx name m
 
 -- | Matches an 'Action' and returns a constant response.  This is more
 -- convenient than '(:=>)' in the common case where you just want to return a
 -- known result.
 (|->) ::
   (Mockable ctx, Monad m) =>
-  Matcher ctx m a ->
+  Matcher ctx name m a ->
   a ->
-  WithResult ctx m
+  WithResult ctx name m
 m |-> r = m :-> const (return r)
 
 -- | Implements a method in a 'Mockable' monad by delegating to the mock
 -- framework.  This is typically used only in generated code.
 mockMethod ::
-  forall ctx m a.
-  (Mockable ctx, Monad m, Typeable m) =>
-  Action ctx m a ->
+  forall ctx name m a.
+  (Mockable ctx, KnownSymbol name, Monad m, Typeable m) =>
+  Action ctx name m a ->
   MockT m a
 mockMethod a = MockT $ do
   expected <- get
@@ -255,11 +264,10 @@ mockMethod a = MockT $ do
         )
     tryMatch (prio, Step _ step, e)
       | Just (m :-> impl) <-
-          fromDynamic step :: Maybe (WithResult ctx m) =
+          fromDynamic step :: Maybe (WithResult ctx name m) =
         case match m a of
-          NoMatch -> Nothing
-          PartialMatch Refl n -> Just (Left (n, showMatcher (Just a) m))
-          FullMatch Refl
+          NoMatch n -> Just (Left (n, showMatcher (Just a) m))
+          Match Refl
             | MockT r <- impl a ->
               Just (Right (prio, showMatcher (Just a) m, put e >> r))
     tryMatch _ = Nothing
@@ -272,7 +280,7 @@ mockMethod a = MockT $ do
 noMatchError ::
   Mockable ctx =>
   -- | The action that was received.
-  Action ctx m a ->
+  Action ctx name m a ->
   StateT (Expected m) m a
 noMatchError a =
   error $
@@ -284,7 +292,7 @@ noMatchError a =
 partialMatchError ::
   Mockable ctx =>
   -- | The action that was received.
-  Action ctx m a ->
+  Action ctx name m a ->
   -- | Descriptions of the matchers that most closely matched, closest first.
   [String] ->
   StateT (Expected m) m a
@@ -299,7 +307,7 @@ partialMatchError a partials =
 ambiguousMatchError ::
   Mockable ctx =>
   -- | The action that was received.
-  Action ctx m a ->
+  Action ctx name m a ->
   -- | Descriptions of the matchers that matched the action.
   [String] ->
   StateT (Expected m) m a
@@ -315,40 +323,37 @@ mock :: Monad m => Expected m -> MockT m ()
 mock newExpected = MockT $ modify (\e -> simplify (AllOf [e, newExpected]))
 
 makeExpect ::
-  (Mockable ctx, Typeable m1) =>
+  (Mockable ctx, Typeable m, KnownSymbol name) =>
   Priority ->
   Cardinality ->
-  WithResult ctx m1 ->
-  Expected m2
-makeExpect prio card wr@(m :-> (_ :: Action ctx m a -> MockT m a)) =
+  WithResult ctx name m ->
+  Expected m
+makeExpect prio card wr@(m :-> (_ :: Action ctx name m a -> MockT m a)) =
   Expect prio card (Step (showMatcher Nothing m) (toDyn wr))
 
 -- Creates an expectation that an action is performed once.  This is equivalent
 -- to @'expectN' 'once'@, but shorter.
 expect ::
-  forall m ctx.
-  (Typeable m, Mockable ctx) =>
-  WithResult ctx m ->
+  (Mockable ctx, Typeable m, KnownSymbol name) =>
+  WithResult ctx name m ->
   Expected m
 expect = makeExpect normalPriority once
 
 -- Creates an expectation that an action is performed some number of times.
 expectN ::
-  forall m ctx.
-  (Typeable m, Mockable ctx) =>
+  (Mockable ctx, Typeable m, KnownSymbol name) =>
   -- | The number of times the action should be performed.
   Cardinality ->
   -- | The action and its response.
-  WithResult ctx m ->
+  WithResult ctx name m ->
   Expected m
 expectN = makeExpect normalPriority
 
 -- Creates an expectation that an action is performed any number of times.  This
 -- is equivalent to @'expectN' 'anyCardinality'@, but shorter.
 expectAny ::
-  forall m ctx.
-  (Typeable m, Mockable ctx) =>
-  WithResult ctx m ->
+  (Mockable ctx, Typeable m, KnownSymbol name) =>
+  WithResult ctx name m ->
   Expected m
 expectAny = makeExpect normalPriority anyCardinality
 
@@ -356,9 +361,8 @@ expectAny = makeExpect normalPriority anyCardinality
 -- response.  This differs from 'expectAny' because actual expectations will
 -- override this default.
 whenever ::
-  forall m ctx.
-  (Typeable m, Mockable ctx) =>
-  WithResult ctx m ->
+  (Mockable ctx, Typeable m, KnownSymbol name) =>
+  WithResult ctx name m ->
   Expected m
 whenever = makeExpect lowPriority anyCardinality
 

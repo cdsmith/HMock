@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GADTs #-}
@@ -8,12 +9,9 @@
 import Control.Monad
 import Control.Monad.State
 import Data.List
-import Data.Typeable
 import GHC.Exception
 import HMock
-import HMock.Mockable
 import HMock.TH
-import System.IO.Error
 import TH
 import Test.Hspec
 import Prelude hiding (readFile, writeFile)
@@ -152,21 +150,24 @@ coreTests = do
 
             success1 = runMockT $ do
               setExpectations
-              readFile "1.txt"
-              readFile "2.txt"
-              readFile "3.txt"
+              _ <- readFile "1.txt"
+              _ <- readFile "2.txt"
+              _ <- readFile "3.txt"
+              return ()
 
             success2 = runMockT $ do
               setExpectations
-              readFile "2.txt"
-              readFile "1.txt"
-              readFile "3.txt"
+              _ <- readFile "2.txt"
+              _ <- readFile "1.txt"
+              _ <- readFile "3.txt"
+              return ()
 
             failure = runMockT $ do
               setExpectations
-              readFile "2.txt"
-              readFile "3.txt"
-              readFile "1.txt"
+              _ <- readFile "2.txt"
+              _ <- readFile "3.txt"
+              _ <- readFile "1.txt"
+              return ()
 
         success1
         success2
@@ -206,8 +207,9 @@ coreTests = do
         filesRead <- flip execStateT (0 :: Int) $
           runMockT $ do
             mock $ whenever $ ReadFile_ __ :-> \_ -> modify (+ 1) >> return ""
-            readFile "foo.txt"
-            readFile "bar.txt"
+            _ <- readFile "foo.txt"
+            _ <- readFile "bar.txt"
+            return ()
         filesRead `shouldBe` 2
 
     it "respects expectations added by a response" $

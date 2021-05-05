@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GADTs #-}
@@ -8,13 +9,9 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 
-{-# LANGUAGE DataKinds #-}
 module TH where
 
-import Data.Default
 import Data.Dynamic
-import Data.Kind
-import Data.Typeable
 import HMock
 import HMock.Mockable
 import HMock.TH
@@ -42,7 +39,7 @@ class MonadFoo3 m where
 makeMockable ''MonadFoo3
 
 class MonadFoo4 m where
-    foo :: (Int -> m ()) -> m ()
+  foo :: (Int -> m ()) -> m ()
 
 makeMockable ''MonadFoo4
 
@@ -65,7 +62,7 @@ class MonadMultiParam a m | m -> a where
 deriveMockableType [t|MonadMultiParam String|]
 
 class MonadUnshowable m where
-    unshowableArgs :: (Int -> Int) -> m Int
+  unshowableArgs :: (Int -> Int) -> m Int
 
 makeMockable ''MonadUnshowable
 
