@@ -38,7 +38,7 @@ gt x =
 geq :: (Show a, Ord a) => a -> Predicate a
 geq x =
   Predicate
-    { showPredicate = ">= " ++ show x,
+    { showPredicate = "≥ " ++ show x,
       accept = (>= x)
     }
 
@@ -52,14 +52,14 @@ lt x =
 leq :: (Show a, Ord a) => a -> Predicate a
 leq x =
   Predicate
-    { showPredicate = "<= " ++ show x,
+    { showPredicate = "≤ " ++ show x,
       accept = (<= x)
     }
 
-__ :: Predicate a
-__ =
+anything :: Predicate a
+anything =
   Predicate
-    { showPredicate = "any",
+    { showPredicate = "anything",
       accept = const True
     }
 

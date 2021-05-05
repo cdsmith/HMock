@@ -1,0 +1,3 @@
+ignore-project: False
+coverage: True
+library-coverage: True

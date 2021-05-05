@@ -4,6 +4,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 
 import Control.Monad
@@ -41,6 +42,100 @@ x <&&> y = (&&) <$> x <*> y
 
 coreTests :: SpecWith ()
 coreTests = do
+  describe "Cardinality" $
+    it "describes itself" $
+      example $ do
+        show once `shouldBe` "once"
+        show anyCardinality `shouldBe` "any number of times"
+        show (exactly 2) `shouldBe` "twice"
+        show (exactly 3) `shouldBe` "3 times"
+        show (atLeast 1) `shouldBe` "at least once"
+        show (atLeast 2) `shouldBe` "at least twice"
+        show (atLeast 3) `shouldBe` "at least 3 times"
+        show (atMost 1) `shouldBe` "at most once"
+        show (atMost 2) `shouldBe` "at most twice"
+        show (atMost 3) `shouldBe` "at most 3 times"
+        show (interval 2 3) `shouldBe` "2 or 3 times"
+        show (interval 2 5) `shouldBe` "2 to 5 times"
+
+  describe "Predicate" $ do
+    it "accepts the right values" $
+      example $ do
+        accept anything "foo" `shouldBe` True
+
+        accept (eq "foo") "foo" `shouldBe` True
+        accept (eq "foo") "bar" `shouldBe` False
+
+        accept (neq "foo") "foo" `shouldBe` False
+        accept (neq "foo") "bar" `shouldBe` True
+
+        accept (lt "foo") "bar" `shouldBe` True
+        accept (lt "foo") "foo" `shouldBe` False
+        accept (lt "foo") "quz" `shouldBe` False
+
+        accept (gt "foo") "bar" `shouldBe` False
+        accept (gt "foo") "foo" `shouldBe` False
+        accept (gt "foo") "quz" `shouldBe` True
+
+        accept (leq "foo") "bar" `shouldBe` True
+        accept (leq "foo") "foo" `shouldBe` True
+        accept (leq "foo") "quz" `shouldBe` False
+
+        accept (geq "foo") "bar" `shouldBe` False
+        accept (geq "foo") "foo" `shouldBe` True
+        accept (geq "foo") "quz" `shouldBe` True
+
+        accept (lt "foo" `andP` gt "bar") "eta" `shouldBe` True
+        accept (lt "foo" `andP` gt "bar") "quz" `shouldBe` False
+        accept (lt "foo" `andP` gt "bar") "alpha" `shouldBe` False
+
+        accept (lt "bar" `orP` gt "foo") "eta" `shouldBe` False
+        accept (lt "bar" `orP` gt "foo") "quz" `shouldBe` True
+        accept (lt "bar" `orP` gt "foo") "alpha" `shouldBe` True
+
+        accept (notP (gt "foo")) "bar" `shouldBe` True
+        accept (notP (gt "foo")) "quz" `shouldBe` False
+
+        accept (hasSubstr "i") "team" `shouldBe` False
+        accept (hasSubstr "ea") "team" `shouldBe` True
+
+        accept (startsWith "fun") "fungible" `shouldBe` True
+        accept (startsWith "gib") "fungible" `shouldBe` False
+
+        accept (endsWith "ing") "yearning" `shouldBe` True
+        accept (endsWith "ed") "burnt" `shouldBe` False
+
+        accept (suchThat ((> 5) . length)) "lengthy" `shouldBe` True
+        accept (suchThat ((> 5) . length)) "short" `shouldBe` False
+
+        accept (typed @String anything) () `shouldBe` False
+        accept (typed @String (eq "foo")) "bar" `shouldBe` False
+        accept (typed @String (eq "foo")) "foo" `shouldBe` True
+
+    it "describes itself" $
+      example $ do
+        showPredicate anything `shouldBe` "anything"
+        showPredicate (eq "foo") `shouldBe` "\"foo\""
+        showPredicate (neq "foo") `shouldBe` "≠ \"foo\""
+        showPredicate (lt "foo") `shouldBe` "< \"foo\""
+        showPredicate (gt "foo") `shouldBe` "> \"foo\""
+        showPredicate (leq "foo") `shouldBe` "≤ \"foo\""
+        showPredicate (geq "foo") `shouldBe` "≥ \"foo\""
+        showPredicate (lt "foo" `andP` gt "bar")
+          `shouldBe` "< \"foo\" and > \"bar\""
+        showPredicate (lt "bar" `orP` gt "foo")
+          `shouldBe` "< \"bar\" or > \"foo\""
+        showPredicate (notP (gt "foo")) `shouldBe` "not > \"foo\""
+        showPredicate (hasSubstr "i") `shouldBe` "has substring \"i\""
+        showPredicate (startsWith "fun") `shouldBe` "starts with \"fun\""
+        showPredicate (endsWith "ing") `shouldBe` "ends with \"ing\""
+        showPredicate (suchThat ((> 5) . length) :: Predicate String)
+          `shouldSatisfy` ("custom predicate at " `isInfixOf`)
+        showPredicate (typed @String anything :: Predicate Int)
+          `shouldBe` "anything :: [Char]"
+        showPredicate (typed @String (eq "foo") :: Predicate Int)
+          `shouldBe` "\"foo\" :: [Char]"
+
   describe "runMockT" $ do
     it "verifies a file copy" $
       example $ do
@@ -115,7 +210,7 @@ coreTests = do
 
     it "matches with imprecise predicates" $
       example . runMockT $ do
-        mock $ expect $ WriteFile_ (hasSubstr "bar") __ |-> ()
+        mock $ expect $ WriteFile_ (hasSubstr "bar") anything |-> ()
         writeFile "bar.txt" "unknown contents"
 
     it "stores source location in suchThat predicate" $
@@ -215,30 +310,42 @@ coreTests = do
 
     it "overrides default responses" $
       example $ do
-        (r1, r2) <- runMockT $ do
+        responses <- runMockT $ do
           mock $ whenever $ readFile_ "a.txt" |-> "the default"
-          mock $ expect $ readFile_ "a.txt" |-> "the override"
+          mock $ expectN (exactly 2) $ readFile_ "a.txt" |-> "the override"
 
-          (,) <$> readFile "a.txt" <*> readFile "a.txt"
-        r1 `shouldBe` "the override"
-        r2 `shouldBe` "the default"
+          replicateM 3 (readFile "a.txt")
+        responses `shouldBe` ["the override", "the override", "the default"]
 
-    it "consumes optional calls in sequences" $
-      example . runMockT $ do
-        mock $
-          inSequence
-            [ expectAny $ writeFile_ "foo.txt" "foo" |-> (),
-              expect $ writeFile_ "foo.txt" "bar" |-> ()
-            ]
-        writeFile "foo.txt" "foo"
-        writeFile "foo.txt" "bar"
+    it "consumes optional calls in sequences" $ example $ do
+      let setExpectations = 
+            mock $
+              inSequence
+                [ expectAny $ writeFile_ "foo.txt" "foo" |-> (),
+                  expectAny $ writeFile_ "foo.txt" "bar" |-> ()
+                ]
+
+          success = runMockT $ do
+            setExpectations
+            writeFile "foo.txt" "foo"
+            writeFile "foo.txt" "bar"
+
+          failure = runMockT $ do
+            setExpectations
+            writeFile "foo.txt" "foo"
+            writeFile "foo.txt" "bar"
+            writeFile "foo.txt" "foo"
+
+      success
+      failure `shouldThrow` errorWith ("Wrong arguments:" `isInfixOf`)
 
     it "gives access to method arguments in the response" $
       example $ do
         let test = runMockT $ do
               mock $
                 expect $
-                  ReadFile_ __ :-> \(ReadFile f) -> return ("contents of " ++ f)
+                  ReadFile_ anything
+                    :-> \(ReadFile f) -> return ("contents of " ++ f)
               readFile "foo.txt"
         test `shouldReturn` "contents of foo.txt"
 
@@ -246,7 +353,10 @@ coreTests = do
       example $ do
         filesRead <- flip execStateT (0 :: Int) $
           runMockT $ do
-            mock $ whenever $ ReadFile_ __ :-> \_ -> modify (+ 1) >> return ""
+            mock $
+              whenever $
+                ReadFile_ anything
+                  :-> \_ -> modify (+ 1) >> return ""
             _ <- readFile "foo.txt"
             _ <- readFile "bar.txt"
             return ()

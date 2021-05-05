@@ -31,16 +31,16 @@ decCardinality (Interval lo hi) =
   Just (Interval (max 0 (lo - 1)) (subtract 1 <$> hi))
 
 -- | A 'Cardinality' that means exactly this many times.
-times :: Int -> Cardinality
-times n = Interval n (Just n)
+exactly :: Int -> Cardinality
+exactly n = Interval n (Just n)
 
 -- | A 'Cardinality' that means exactly once.
 once :: Cardinality
-once = times 1
+once = exactly 1
 
 -- | A 'Cardinality' that means any number of times.
 anyCardinality :: Cardinality
-anyCardinality = Interval 0 Nothing
+anyCardinality = atLeast 0
 
 -- | A 'Cardinality' that means at least this many times.
 atLeast :: Int -> Cardinality
@@ -49,3 +49,6 @@ atLeast n = Interval n Nothing
 -- | A 'Cardinality' that means at most this many times.
 atMost :: Int -> Cardinality
 atMost n = Interval 0 (Just n)
+
+interval :: Int -> Int -> Cardinality
+interval m n = Interval (min m n) (Just (max m n))

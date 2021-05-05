@@ -47,7 +47,6 @@ test-suite tests
                       hmock,
                       hspec,
                       mtl,
-                      regex-tdfa,
     hs-source-dirs:   test
     default-language: Haskell2010
     ghc-options:      -Wall -Wincomplete-uni-patterns

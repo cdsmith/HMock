@@ -2,7 +2,7 @@ module HMock.Internal.Util where
 
 import GHC.Stack
 
-newtype Loc = Loc (Maybe String) deriving (Show, Eq, Ord)
+newtype Loc = Loc (Maybe String) deriving (Eq, Ord)
 
 getSrcLoc :: CallStack -> Loc
 getSrcLoc stack = Loc $ case map snd (getCallStack stack) of

@@ -20,7 +20,7 @@ module HMock
     geq,
     lt,
     leq,
-    __,
+    anything,
     andP,
     orP,
     notP,
@@ -28,12 +28,14 @@ module HMock
     endsWith,
     hasSubstr,
     suchThat,
+    typed,
     Cardinality,
     once,
-    times,
+    anyCardinality,
+    exactly,
     atLeast,
     atMost,
-    anyCardinality,
+    interval,
   )
 where
 
