@@ -208,7 +208,7 @@ runMockT (MockT test) = do
     ExpectNothing -> return a
     missing ->
       error $
-        "Missing expectations:\n" ++ formatExpected "  " missing
+        "Unmet expectations:\n" ++ formatExpected "  " missing
 
 -- | A pair of a 'Matcher' and a response for when it matches.  The matching
 -- 'Action' is passed to the response, and is guaranteed to be a match, so it's

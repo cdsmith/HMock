@@ -6,12 +6,7 @@ module HMock.Internal.Predicates where
 
 import Data.List (isInfixOf, isPrefixOf, isSuffixOf)
 import Data.Typeable
-import GHC.Stack
-  ( HasCallStack,
-    callStack,
-    getCallStack,
-    withFrozenCallStack,
-  )
+import GHC.Stack (HasCallStack, callStack, getCallStack, prettySrcLoc)
 
 data Predicate a = Predicate
   { showPredicate :: String,
@@ -111,13 +106,12 @@ hasSubstr s =
 
 suchThat :: HasCallStack => (a -> Bool) -> Predicate a
 suchThat f =
-  withFrozenCallStack $
-    Predicate
-      { showPredicate = case locs of
-          (loc : _) -> "custom predicate at " ++ show loc
-          _ -> "custom predicate",
-        accept = f
-      }
+  Predicate
+    { showPredicate = case locs of
+        (loc : _) -> "custom predicate at " ++ prettySrcLoc loc
+        _ -> "custom predicate",
+      accept = f
+    }
   where
     locs = map snd (getCallStack callStack)
 

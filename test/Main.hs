@@ -7,10 +7,13 @@
 
 import Control.Monad
 import Control.Monad.State
+import Data.List
 import Data.Typeable
+import GHC.Exception
 import HMock
 import HMock.Mockable
 import HMock.TH
+import System.IO.Error
 import TH
 import Test.Hspec
 import Prelude hiding (readFile, writeFile)
@@ -25,6 +28,9 @@ instance MonadFilesystem IO where
   writeFile = Prelude.writeFile
 
 makeMockable ''MonadFilesystem
+
+errorWithSubstring :: String -> ErrorCall -> Bool
+errorWithSubstring s (ErrorCall msg) = s `isInfixOf` msg
 
 coreTests :: SpecWith ()
 coreTests = do
@@ -55,22 +61,32 @@ coreTests = do
     it "catches unmet expectations" $
       example $ do
         runMockT (mock $ expect $ writeFile_ "bar.txt" "bar" |-> ())
-          `shouldThrow` anyErrorCall
+          `shouldThrow` errorWithSubstring "Unmet expectations"
 
     it "catches unexpected actions" $
-      example $ runMockT (writeFile "bar.txt" "bar") `shouldThrow` anyErrorCall
+      example $
+        runMockT (writeFile "bar.txt" "bar")
+          `shouldThrow` errorWithSubstring "Unexpected action"
 
-    it "catches incorrect parameters" $
+    it "catches incorrect arguments" $
       example $ do
         let test = runMockT $ do
               mock $ expect $ writeFile_ "bar.txt" "bar" |-> ()
               writeFile "bar.txt" "incorrect"
-        test `shouldThrow` anyErrorCall
+        test `shouldThrow` errorWithSubstring "Wrong arguments"
 
     it "matches with imprecise predicates" $
       example . runMockT $ do
         mock $ expect $ WriteFile_ (hasSubstr "bar") __ |-> ()
         writeFile "bar.txt" "unknown contents"
+
+    it "stores source location in suchThat predicate" $
+      example $ do
+        let test = runMockT $ do
+              mock $
+                expect $ ReadFile_ (suchThat ("foo" `isPrefixOf`)) |-> "foo"
+              readFile "bar.txt"
+        test `shouldThrow` errorWithSubstring "Main.hs"
 
     it "fails when responses are ambiguous" $
       example $ do
@@ -78,7 +94,7 @@ coreTests = do
               mock $ whenever $ readFile_ "foo.txt" |-> "a"
               mock $ whenever $ readFile_ "foo.txt" |-> "b"
               readFile "foo.txt"
-        test `shouldThrow` anyErrorCall
+        test `shouldThrow` errorWithSubstring "Ambiguous matches"
 
     it "matches flexible cardinality" $
       example $ do
