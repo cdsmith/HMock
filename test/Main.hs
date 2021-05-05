@@ -5,6 +5,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 
+import Control.Monad
 import Data.Typeable
 import HMock
 import HMock.Mockable
@@ -27,40 +28,134 @@ makeMockable ''MonadFilesystem
 copyFile :: MonadFilesystem m => FilePath -> FilePath -> m ()
 copyFile a b = readFile a >>= writeFile b
 
+badCopyFile :: MonadFilesystem m => FilePath -> FilePath -> m ()
+badCopyFile a b = readFile b >>= writeFile a
+
 main :: IO ()
 main = hspec $ do
-  describe "MonadFS" $ do
-    it "copies a file" $
+  describe "runMockT" $ do
+    it "verifies a file copy" $
+      example $ do
+        let setExpectations = do
+              mock $ expect $ readFile_ "foo.txt" |-> "lorem ipsum"
+              mock $ expect $ writeFile_ "bar.txt" "lorem ipsum" |-> ()
+
+            success = runMockT $ do
+              setExpectations
+              copyFile "foo.txt" "bar.txt"
+
+            failure = runMockT $ do
+              setExpectations
+              badCopyFile "foo.txt" "bar.txt"
+
+        success
+        failure `shouldThrow` anyErrorCall
+
+    it "catches unmet expectations" $
+      example $ do
+        runMockT (mock $ expect $ writeFile_ "bar.txt" "bar" |-> ())
+          `shouldThrow` anyErrorCall
+
+    it "catches unexpected actions" $
+      example $ runMockT (writeFile "bar.txt" "bar") `shouldThrow` anyErrorCall
+
+    it "catches incorrect parameters" $
+      example $ do
+        let test = runMockT $ do
+              mock $ expect $ writeFile_ "bar.txt" "bar" |-> ()
+              writeFile "bar.txt" "incorrect"
+        test `shouldThrow` anyErrorCall
+
+    it "matches with imprecise predicates" $
       example . runMockT $ do
-        mock $ expect $ readFile_ "foo.txt" |-> "lorem ipsum"
-        mock $ expect $ writeFile_ "bar.txt" "lorem ipsum" |-> ()
+        mock $ expect $ WriteFile_ (hasSubstr "bar") __ |-> ()
+        writeFile "bar.txt" "unknown contents"
 
-        copyFile "foo.txt" "bar.txt"
+    it "fails when responses are ambiguous" $
+      example $ do
+        let test = runMockT $ do
+              mock $ whenever $ readFile_ "foo.txt" |-> "a"
+              mock $ whenever $ readFile_ "foo.txt" |-> "b"
+              readFile "foo.txt"
+        test `shouldThrow` anyErrorCall
 
-    it "matches flexible cardinality" $ do
-      example . runMockT $ do
-        mock $ expectAny $ readFile_ "foo.txt" |-> "lorem ipsum"
-        mock $ expect $ writeFile_ "bar.txt" "lorem ipsum" |-> ()
+    it "matches flexible cardinality" $
+      example $ do
+        let setExpectations = do
+              mock $ expectN (atLeast 3) $ readFile_ "foo.txt" |-> "foo"
+              mock $ expectN (atMost 2) $ readFile_ "bar.txt" |-> "bar"
+              mock $ expectAny $ readFile_ "baz.txt" |-> "baz"
 
-        copyFile "foo.txt" "bar.txt"
+            success1 = runMockT $ do
+              setExpectations
+              replicateM_ 3 $ readFile "foo.txt"
+
+            success2 = runMockT $ do
+              setExpectations
+              replicateM_ 4 $ readFile "foo.txt"
+
+            success3 = runMockT $ do
+              setExpectations
+              replicateM_ 3 $ readFile "foo.txt"
+              replicateM_ 2 $ readFile "bar.txt"
+
+            success4 = runMockT $ do
+              setExpectations
+              replicateM_ 3 $ readFile "foo.txt"
+              replicateM_ 2 $ readFile "bar.txt"
+              replicateM_ 5 $ readFile "baz.txt"
+
+            failure1 = runMockT $ do
+              setExpectations
+              replicateM_ 1 $ readFile "foo.txt"
+
+            failure2 = runMockT $ do
+              setExpectations
+              replicateM_ 3 $ readFile "foo.txt"
+              replicateM_ 3 $ readFile "bar.txt"
+
+        success1
+        success2
+        success3
+        success4
+        failure1 `shouldThrow` anyErrorCall
+        failure2 `shouldThrow` anyErrorCall
 
     it "enforces complex nested sequences" $
-      example . runMockT $ do
-        mock $
-          inSequence
-            [ inAnyOrder
-                [ expect $ readFile_ "1.txt" |-> "1",
-                  expect $ readFile_ "2.txt" |-> "2"
-                ],
-              expect $ readFile_ "3.txt" |-> "3"
-            ]
+      example $ do
+        let setExpectations =
+              mock $
+                inSequence
+                  [ inAnyOrder
+                      [ expect $ readFile_ "1.txt" |-> "1",
+                        expect $ readFile_ "2.txt" |-> "2"
+                      ],
+                    expect $ readFile_ "3.txt" |-> "3"
+                  ]
 
-        readFile "2.txt"
-        readFile "1.txt"
-        readFile "3.txt"
-        return ()
+            success1 = runMockT $ do
+              setExpectations
+              readFile "1.txt"
+              readFile "2.txt"
+              readFile "3.txt"
 
-    it "overrides default responses" $ do
+            success2 = runMockT $ do
+              setExpectations
+              readFile "2.txt"
+              readFile "1.txt"
+              readFile "3.txt"
+
+            failure = runMockT $ do
+              setExpectations
+              readFile "2.txt"
+              readFile "3.txt"
+              readFile "1.txt"
+
+        success1
+        success2
+        failure `shouldThrow` anyErrorCall
+
+    it "overrides default responses" $
       example $ do
         (r1, r2) <- runMockT $ do
           mock $ whenever $ readFile_ "a.txt" |-> "the default"
@@ -70,7 +165,7 @@ main = hspec $ do
         r1 `shouldBe` "the override"
         r2 `shouldBe` "the default"
 
-    it "consumes optional calls in sequences" $ do
+    it "consumes optional calls in sequences" $
       example . runMockT $ do
         mock $
           inSequence
