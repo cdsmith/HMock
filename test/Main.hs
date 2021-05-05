@@ -308,36 +308,57 @@ coreTests = do
         success2
         failure `shouldThrow` anyErrorCall
 
+    it "handles nested sequences" $
+      example . runMockT $ do
+        mock $
+          inSequence
+            [ inSequence
+                [ expect $ readFile_ "a" |-> "a",
+                  expect $ readFile_ "b" |-> "b"
+                ],
+              expect $ readFile_ "c" |-> "c"
+            ]
+        _ <- readFile "a"
+        _ <- readFile "b"
+        _ <- readFile "c"
+        return ()
+
     it "overrides default responses" $
       example $ do
         responses <- runMockT $ do
-          mock $ whenever $ readFile_ "a.txt" |-> "the default"
-          mock $ expectN (exactly 2) $ readFile_ "a.txt" |-> "the override"
+          mock $ whenever $ ReadFile_ anything |-> "default"
+          mock $
+            inSequence
+              [ expect $ readFile_ "a.txt" |-> "A1",
+                expectN (exactly 2) $ readFile_ "a.txt" |-> "A2"
+              ]
+          mock $ expectAny $ readFile_ "b.txt" |-> "B"
 
-          replicateM 3 (readFile "a.txt")
-        responses `shouldBe` ["the override", "the override", "the default"]
+          mapM readFile (replicate 4 "a.txt" ++ replicate 2 "b.txt")
+        responses `shouldBe` ["A1", "A2", "A2", "default", "B", "B"]
 
-    it "consumes optional calls in sequences" $ example $ do
-      let setExpectations = 
-            mock $
-              inSequence
-                [ expectAny $ writeFile_ "foo.txt" "foo" |-> (),
-                  expectAny $ writeFile_ "foo.txt" "bar" |-> ()
-                ]
+    it "consumes optional calls in sequences" $
+      example $ do
+        let setExpectations =
+              mock $
+                inSequence
+                  [ expectAny $ writeFile_ "foo.txt" "foo" |-> (),
+                    expectAny $ writeFile_ "foo.txt" "bar" |-> ()
+                  ]
 
-          success = runMockT $ do
-            setExpectations
-            writeFile "foo.txt" "foo"
-            writeFile "foo.txt" "bar"
+            success = runMockT $ do
+              setExpectations
+              writeFile "foo.txt" "foo"
+              writeFile "foo.txt" "bar"
 
-          failure = runMockT $ do
-            setExpectations
-            writeFile "foo.txt" "foo"
-            writeFile "foo.txt" "bar"
-            writeFile "foo.txt" "foo"
+            failure = runMockT $ do
+              setExpectations
+              writeFile "foo.txt" "foo"
+              writeFile "foo.txt" "bar"
+              writeFile "foo.txt" "foo"
 
-      success
-      failure `shouldThrow` errorWith ("Wrong arguments:" `isInfixOf`)
+        success
+        failure `shouldThrow` errorWith ("Wrong arguments:" `isInfixOf`)
 
     it "gives access to method arguments in the response" $
       example $ do

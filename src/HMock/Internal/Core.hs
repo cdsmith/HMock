@@ -117,17 +117,14 @@ simplify e = case e of
   (Sequence xs) -> simplifyMulti True xs
   _ -> e
   where
-    simplifyMulti :: Bool -> [Expected m] -> Expected m
     simplifyMulti order =
       construct order . concatMap (expand order . simplify)
 
-    expand :: Bool -> Expected m -> [Expected m]
     expand _ ExpectNothing = []
     expand order (Sequence xs) | order = xs
     expand order (AllOf xs) | not order = xs
     expand _ other = [other]
 
-    construct :: Bool -> [Expected m] -> Expected m
     construct _ [] = ExpectNothing
     construct _ [x] = x
     construct order xs
