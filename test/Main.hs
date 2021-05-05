@@ -27,6 +27,12 @@ instance MonadFilesystem IO where
 
 makeMockable ''MonadFilesystem
 
+class Monad m => MonadDB a m where
+  storeDB :: String -> a -> m ()
+  lookupDB :: String -> m a
+
+makeMockable ''MonadDB
+
 errorWith :: (String -> Bool) -> ErrorCall -> Bool
 errorWith p (ErrorCall msg) = p msg
 
@@ -58,6 +64,34 @@ coreTests = do
 
         success
         failure `shouldThrow` anyErrorCall
+
+    it "tracks expectations across multiple classes" $
+      example $ do
+        let setExpectations =
+              mock $
+                inSequence
+                  [ expect $ readFile_ "key.txt" |-> "alpha",
+                    expect $ lookupDB_ "alpha" |-> "beta",
+                    expect $ writeFile_ "key.txt" "beta" |-> (),
+                    expect $ storeDB_ "alpha" "newVal" |-> ()
+                  ]
+
+            success = runMockT $ do
+              setExpectations
+              key <- readFile "key.txt"
+              val <- lookupDB key
+              writeFile "key.txt" val
+              storeDB key "newVal"
+
+            failure = runMockT $ do
+              setExpectations
+              key <- readFile "key.txt"
+              val <- lookupDB key
+              storeDB key "newVal"
+              writeFile "key.txt" val
+
+        success
+        failure `shouldThrow` errorWith ("Unexpected action: storeDB" `isInfixOf`)
 
     it "catches unmet expectations" $
       example $
