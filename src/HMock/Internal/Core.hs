@@ -48,7 +48,7 @@ normalPriority = Priority 1
 
 -- | A single step of an expectation.
 --
--- The 'Dynamic' is always a @'WithResult' ctx m@ for some choice of @ctx@ and
+-- The 'Dynamic' is always a @'Rule' ctx m@ for some choice of @ctx@ and
 -- @m@.
 data Step where
   Step :: Loc -> String -> Dynamic -> Step
@@ -216,28 +216,19 @@ runMockT (MockT test) = do
 -- | A pair of a 'Matcher' and a response for when it matches.  The matching
 -- 'Action' is passed to the response, and is guaranteed to be a match, so it's
 -- okay to just pattern match on the correct method.
-data
-  WithResult
-    (ctx :: (* -> *) -> Constraint)
-    (name :: Symbol)
-    (m :: * -> *)
-  where
+data Rule (ctx :: (* -> *) -> Constraint) (name :: Symbol) (m :: * -> *) where
   -- | Matches an 'Action' and performs a response in the 'MockT' monad.  This
   -- is a vary flexible response, which can look at arguments, do things in the
   -- base monad, set up more expectations, etc.
   (:->) ::
     Matcher ctx name m a ->
     (Action ctx name m a -> MockT m a) ->
-    WithResult ctx name m
+    Rule ctx name m
 
 -- | Matches an 'Action' and returns a constant response.  This is more
 -- convenient than '(:=>)' in the common case where you just want to return a
 -- known result.
-(|->) ::
-  (Mockable ctx, Monad m) =>
-  Matcher ctx name m a ->
-  a ->
-  WithResult ctx name m
+(|->) :: (Mockable ctx, Monad m) => Matcher ctx name m a -> a -> Rule ctx name m
 m |-> r = m :-> const (return r)
 
 -- | Implements a method in a 'Mockable' monad by delegating to the mock
@@ -275,7 +266,7 @@ mockMethod a = withFrozenCallStack $
         )
     tryMatch (prio, Step loc _ step, e)
       | Just (m :-> impl) <-
-          fromDynamic step :: Maybe (WithResult ctx name m) =
+          fromDynamic step :: Maybe (Rule ctx name m) =
         case match m a of
           NoMatch n -> Just (Left (n, loc, showMatcher (Just a) m))
           Match Refl
@@ -338,7 +329,7 @@ makeExpect ::
   CallStack ->
   Priority ->
   Cardinality ->
-  WithResult ctx name m ->
+  Rule ctx name m ->
   Expected m
 makeExpect cs prio card wr@(m :-> (_ :: Action ctx name m a -> MockT m a)) =
   Expect prio card (Step (getSrcLoc cs) (showMatcher Nothing m) (toDyn wr))
@@ -347,7 +338,7 @@ makeExpect cs prio card wr@(m :-> (_ :: Action ctx name m a -> MockT m a)) =
 -- to @'expectN' 'once'@, but shorter.
 expect ::
   (HasCallStack, Mockable ctx, Typeable m, KnownSymbol name) =>
-  WithResult ctx name m ->
+  Rule ctx name m ->
   Expected m
 expect = makeExpect callStack normalPriority once
 
@@ -357,7 +348,7 @@ expectN ::
   -- | The number of times the action should be performed.
   Cardinality ->
   -- | The action and its response.
-  WithResult ctx name m ->
+  Rule ctx name m ->
   Expected m
 expectN = makeExpect callStack normalPriority
 
@@ -365,7 +356,7 @@ expectN = makeExpect callStack normalPriority
 -- is equivalent to @'expectN' 'anyCardinality'@, but shorter.
 expectAny ::
   (HasCallStack, Mockable ctx, Typeable m, KnownSymbol name) =>
-  WithResult ctx name m ->
+  Rule ctx name m ->
   Expected m
 expectAny = makeExpect callStack normalPriority anyCardinality
 
@@ -374,7 +365,7 @@ expectAny = makeExpect callStack normalPriority anyCardinality
 -- override this default.
 whenever ::
   (HasCallStack, Mockable ctx, Typeable m, KnownSymbol name) =>
-  WithResult ctx name m ->
+  Rule ctx name m ->
   Expected m
 whenever = makeExpect callStack lowPriority anyCardinality
 

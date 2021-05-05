@@ -3,7 +3,7 @@ module HMock
   ( MockT,
     runMockT,
     Mockable (Action, Matcher),
-    WithResult ((:->)),
+    Rule ((:->)),
     (|->),
     Expected,
     mock,
