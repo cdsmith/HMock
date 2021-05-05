@@ -18,6 +18,7 @@ import Data.Typeable
 import HMock
 import HMock.Mockable
 import HMock.TH
+import Test.Hspec
 
 class MonadFoo1 m where
   foo1 :: String -> m ()
@@ -68,3 +69,5 @@ class MonadUnshowable m where
 
 makeMockable ''MonadUnshowable
 
+thTests :: SpecWith ()
+thTests = return ()

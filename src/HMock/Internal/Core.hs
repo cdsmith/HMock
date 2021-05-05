@@ -1,13 +1,25 @@
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 module HMock.Internal.Core where
 
+import Control.Monad.Base (MonadBase)
+import Control.Monad.Catch (MonadCatch, MonadMask, MonadThrow)
+import Control.Monad.Cont (MonadCont)
+import Control.Monad.Except (MonadError)
+import Control.Monad.Reader (MonadReader)
+import Control.Monad.RWS (MonadRWS)
 import Control.Monad.State (MonadState (get, put), StateT (..), modify)
+import Control.Monad.Trans (MonadIO, MonadTrans (..))
+import Control.Monad.Writer (MonadWriter)
 import Data.Constraint (Constraint)
 import Data.Dynamic (Dynamic, Typeable, fromDynamic, toDyn)
 import Data.Either (partitionEithers)
@@ -165,7 +177,28 @@ class Typeable ctx => Mockable (ctx :: (* -> *) -> Constraint) where
 -- | Monad transformer for running mocks.
 newtype MockT m a where
   MockT :: StateT (Expected m) m a -> MockT m a
-  deriving (Functor, Applicative, Monad)
+  deriving
+    ( Functor,
+      Applicative,
+      Monad,
+      MonadIO,
+      MonadReader r,
+      MonadWriter w,
+      MonadRWS r w s,
+      MonadError e,
+      MonadCont,
+      MonadBase b,
+      MonadCatch,
+      MonadMask,
+      MonadThrow
+    )
+
+instance MonadTrans MockT where
+  lift = MockT . lift
+
+instance MonadState s m => MonadState s (MockT m) where
+  get = lift get
+  put = lift . put
 
 -- | Runs a test in the 'MockT' monad, handling all of the mocks.
 runMockT :: Monad m => MockT m a -> m a

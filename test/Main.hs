@@ -6,12 +6,13 @@
 {-# LANGUAGE TypeFamilies #-}
 
 import Control.Monad
+import Control.Monad.State
 import Data.Typeable
 import HMock
 import HMock.Mockable
 import HMock.TH
 import TH
-import Test.Hspec hiding (Expectation)
+import Test.Hspec
 import Prelude hiding (readFile, writeFile)
 import qualified Prelude
 
@@ -25,18 +26,18 @@ instance MonadFilesystem IO where
 
 makeMockable ''MonadFilesystem
 
-copyFile :: MonadFilesystem m => FilePath -> FilePath -> m ()
-copyFile a b = readFile a >>= writeFile b
-
-badCopyFile :: MonadFilesystem m => FilePath -> FilePath -> m ()
-badCopyFile a b = readFile b >>= writeFile a
-
-main :: IO ()
-main = hspec $ do
+coreTests :: SpecWith ()
+coreTests = do
   describe "runMockT" $ do
     it "verifies a file copy" $
       example $ do
-        let setExpectations = do
+        let copyFile :: MonadFilesystem m => FilePath -> FilePath -> m ()
+            copyFile a b = readFile a >>= writeFile b
+
+            badCopyFile :: MonadFilesystem m => FilePath -> FilePath -> m ()
+            badCopyFile a b = readFile b >>= writeFile a
+
+            setExpectations = do
               mock $ expect $ readFile_ "foo.txt" |-> "lorem ipsum"
               mock $ expect $ writeFile_ "bar.txt" "lorem ipsum" |-> ()
 
@@ -174,3 +175,39 @@ main = hspec $ do
             ]
         writeFile "foo.txt" "foo"
         writeFile "foo.txt" "bar"
+
+    it "gives access to method arguments in the response" $
+      example $ do
+        let test = runMockT $ do
+              mock $
+                expect $
+                  ReadFile_ __ :-> \(ReadFile f) -> return ("contents of " ++ f)
+              readFile "foo.txt"
+        test `shouldReturn` "contents of foo.txt"
+
+    it "allows responses to run in the underlying monad" $
+      example $ do
+        filesRead <- flip execStateT (0 :: Int) $
+          runMockT $ do
+            mock $ whenever $ ReadFile_ __ :-> \_ -> modify (+ 1) >> return ""
+            readFile "foo.txt"
+            readFile "bar.txt"
+        filesRead `shouldBe` 2
+
+    it "respects expectations added by a response" $
+      example $ do
+        result <- runMockT $ do
+          mock $
+            whenever $
+              readFile_ "foo.txt" :-> \_ -> do
+                mock $ expect $ readFile_ "bar.txt" |-> "final"
+                return "bar.txt"
+
+          readFile "foo.txt" >>= readFile
+
+        result `shouldBe` "final"
+
+main :: IO ()
+main = hspec $ do
+  coreTests
+  thTests
