@@ -28,13 +28,15 @@ import Data.Function (on)
 import Data.List (intercalate, sort, sortBy)
 import Data.Maybe (mapMaybe)
 import Data.Type.Equality (type (:~:) (..))
-import GHC.TypeLits
+import GHC.Stack (CallStack, HasCallStack, callStack, withFrozenCallStack)
+import GHC.TypeLits (KnownSymbol, Symbol)
 import HMock.Internal.Cardinality
   ( Cardinality (..),
     anyCardinality,
     decCardinality,
     once,
   )
+import HMock.Internal.Util (Loc, getSrcLoc, showWithLoc)
 
 newtype Priority = Priority Int deriving (Show, Eq, Ord)
 
@@ -49,7 +51,7 @@ normalPriority = Priority 1
 -- The 'Dynamic' is always a @'WithResult' ctx m@ for some choice of @ctx@ and
 -- @m@.
 data Step where
-  Step :: String -> Dynamic -> Step
+  Step :: Loc -> String -> Dynamic -> Step
 
 -- | A set of expected actions and their responses.  An entire test with mocks
 -- is expected to run in a single base 'Monad', which is the type parameter
@@ -64,8 +66,8 @@ data Expected (m :: * -> *) where
 -- the given prefix (used to indent).
 formatExpected :: String -> Expected m -> String
 formatExpected prefix ExpectNothing = prefix ++ "nothing"
-formatExpected prefix (Expect prio card (Step s _)) =
-  prefix ++ s ++ modifierDesc
+formatExpected prefix (Expect prio card (Step loc s _)) =
+  showWithLoc loc (prefix ++ s) ++ modifierDesc
   where
     modifiers = prioModifier ++ cardModifier
     prioModifier
@@ -242,43 +244,52 @@ m |-> r = m :-> const (return r)
 -- framework.  This is typically used only in generated code.
 mockMethod ::
   forall ctx name m a.
-  (Mockable ctx, KnownSymbol name, Monad m, Typeable m) =>
+  (HasCallStack, Mockable ctx, KnownSymbol name, Monad m, Typeable m) =>
   Action ctx name m a ->
   MockT m a
-mockMethod a = MockT $ do
-  expected <- get
-  let (partials, fulls) =
-        partitionEithers (mapMaybe tryMatch (liveSteps expected))
-  case (partials, dropLowPrio (sortBy (flip compare `on` \(p, _, _) -> p) fulls)) of
-    ([], []) -> noMatchError a
-    (_, []) -> partialMatchError a (map snd (sort partials))
-    (_, [(_, _, response)]) -> response
-    (_, successes) -> ambiguousMatchError a (map (\(_, m, _) -> m) successes)
+mockMethod a = withFrozenCallStack $
+  MockT $ do
+    expected <- get
+    let (partials, fulls) =
+          partitionEithers (mapMaybe tryMatch (liveSteps expected))
+    let maxPrioFulls =
+          dropLowPrio (sortBy (flip compare `on` \(p, _, _, _) -> p) fulls)
+    case (partials, maxPrioFulls) of
+      ([], []) -> noMatchError a
+      (_, []) ->
+        partialMatchError
+          a
+          (map (\(_, loc, m) -> showWithLoc loc m) (sort partials))
+      (_, [(_, _, _, response)]) -> response
+      (_, successes) ->
+        ambiguousMatchError
+          a
+          (map (\(_, loc, m, _) -> showWithLoc loc m) successes)
   where
     tryMatch ::
       (Priority, Step, Expected m) ->
       Maybe
         ( Either
-            (Int, String)
-            (Priority, String, StateT (Expected m) m a)
+            (Int, Loc, String)
+            (Priority, Loc, String, StateT (Expected m) m a)
         )
-    tryMatch (prio, Step _ step, e)
+    tryMatch (prio, Step loc _ step, e)
       | Just (m :-> impl) <-
           fromDynamic step :: Maybe (WithResult ctx name m) =
         case match m a of
-          NoMatch n -> Just (Left (n, showMatcher (Just a) m))
+          NoMatch n -> Just (Left (n, loc, showMatcher (Just a) m))
           Match Refl
             | MockT r <- impl a ->
-              Just (Right (prio, showMatcher (Just a) m, put e >> r))
+              Just (Right (prio, loc, showMatcher (Just a) m, put e >> r))
     tryMatch _ = Nothing
 
     dropLowPrio [] = []
-    dropLowPrio ((p, c, r) : rest) =
-      (p, c, r) : takeWhile (\(p', _, _) -> p' == p) rest
+    dropLowPrio ((p, l, c, r) : rest) =
+      (p, l, c, r) : takeWhile (\(p', _, _, _) -> p' == p) rest
 
 -- An error for an action that matches no expectations at all.
 noMatchError ::
-  Mockable ctx =>
+  (HasCallStack, Mockable ctx) =>
   -- | The action that was received.
   Action ctx name m a ->
   StateT (Expected m) m a
@@ -290,7 +301,7 @@ noMatchError a =
 -- An error for an action that doesn't match the argument predicates for any
 -- of the method's expectations.
 partialMatchError ::
-  Mockable ctx =>
+  (HasCallStack, Mockable ctx) =>
   -- | The action that was received.
   Action ctx name m a ->
   -- | Descriptions of the matchers that most closely matched, closest first.
@@ -301,11 +312,11 @@ partialMatchError a partials =
     "Wrong arguments: "
       ++ showAction a
       ++ "\n\nClosest matches:\n - "
-      ++ intercalate "\n - " partials
+      ++ intercalate "\n - " (take 5 partials)
 
 -- An error for an action that matched more than one expectation.
 ambiguousMatchError ::
-  Mockable ctx =>
+  (HasCallStack, Mockable ctx) =>
   -- | The action that was received.
   Action ctx name m a ->
   -- | Descriptions of the matchers that matched the action.
@@ -324,47 +335,48 @@ mock newExpected = MockT $ modify (\e -> simplify (AllOf [e, newExpected]))
 
 makeExpect ::
   (Mockable ctx, Typeable m, KnownSymbol name) =>
+  CallStack ->
   Priority ->
   Cardinality ->
   WithResult ctx name m ->
   Expected m
-makeExpect prio card wr@(m :-> (_ :: Action ctx name m a -> MockT m a)) =
-  Expect prio card (Step (showMatcher Nothing m) (toDyn wr))
+makeExpect cs prio card wr@(m :-> (_ :: Action ctx name m a -> MockT m a)) =
+  Expect prio card (Step (getSrcLoc cs) (showMatcher Nothing m) (toDyn wr))
 
 -- Creates an expectation that an action is performed once.  This is equivalent
 -- to @'expectN' 'once'@, but shorter.
 expect ::
-  (Mockable ctx, Typeable m, KnownSymbol name) =>
+  (HasCallStack, Mockable ctx, Typeable m, KnownSymbol name) =>
   WithResult ctx name m ->
   Expected m
-expect = makeExpect normalPriority once
+expect = makeExpect callStack normalPriority once
 
 -- Creates an expectation that an action is performed some number of times.
 expectN ::
-  (Mockable ctx, Typeable m, KnownSymbol name) =>
+  (HasCallStack, Mockable ctx, Typeable m, KnownSymbol name) =>
   -- | The number of times the action should be performed.
   Cardinality ->
   -- | The action and its response.
   WithResult ctx name m ->
   Expected m
-expectN = makeExpect normalPriority
+expectN = makeExpect callStack normalPriority
 
 -- Creates an expectation that an action is performed any number of times.  This
 -- is equivalent to @'expectN' 'anyCardinality'@, but shorter.
 expectAny ::
-  (Mockable ctx, Typeable m, KnownSymbol name) =>
+  (HasCallStack, Mockable ctx, Typeable m, KnownSymbol name) =>
   WithResult ctx name m ->
   Expected m
-expectAny = makeExpect normalPriority anyCardinality
+expectAny = makeExpect callStack normalPriority anyCardinality
 
 -- Allows an unexpected action to be performed any time, and gives a default
 -- response.  This differs from 'expectAny' because actual expectations will
 -- override this default.
 whenever ::
-  (Mockable ctx, Typeable m, KnownSymbol name) =>
+  (HasCallStack, Mockable ctx, Typeable m, KnownSymbol name) =>
   WithResult ctx name m ->
   Expected m
-whenever = makeExpect lowPriority anyCardinality
+whenever = makeExpect callStack lowPriority anyCardinality
 
 -- Creates a sequential expectation.  Other actions can still happen during the
 -- sequence, but these specific expectations must be met in this order.

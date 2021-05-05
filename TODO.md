@@ -10,19 +10,6 @@ appealing.  This would mean adding some kind of partial order on specificity of
 predicates.  We'd probably just adopt a three-tier system, where `eq x` >
 anything else matching `x` > `__`.
 
-## Use source locations in mock messages.
-
-We should be able to use the `HasCallStack` machinery to tell the user which
-specific `expect` or `whenever` call we're referring to when talking about an
-expectation.  This is nicer than just printing the method name and argument
-predicates.  For example, if you have a sequence of three expectations, you can
-see which one failed.
-
-Similarly, we could try to capture the call stack in `mockAction` and include
-it in errors.  Instead of just knowing there was an unexpected call from
-somewhere unspecified and what the method and parameters were, you can look at
-where the call actually came from.
-
 ## Have a plan for functional dependencies
 
 ``` haskell

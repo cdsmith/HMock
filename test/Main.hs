@@ -27,8 +27,11 @@ instance MonadFilesystem IO where
 
 makeMockable ''MonadFilesystem
 
-errorWithSubstring :: String -> ErrorCall -> Bool
-errorWithSubstring s (ErrorCall msg) = s `isInfixOf` msg
+errorWith :: (String -> Bool) -> ErrorCall -> Bool
+errorWith p (ErrorCall msg) = p msg
+
+(<&&>) :: Applicative f => f Bool -> f Bool -> f Bool
+x <&&> y = (&&) <$> x <*> y
 
 coreTests :: SpecWith ()
 coreTests = do
@@ -57,21 +60,24 @@ coreTests = do
         failure `shouldThrow` anyErrorCall
 
     it "catches unmet expectations" $
-      example $ do
+      example $
         runMockT (mock $ expect $ writeFile_ "bar.txt" "bar" |-> ())
-          `shouldThrow` errorWithSubstring "Unmet expectations"
+          `shouldThrow` errorWith
+            (("Unmet expectations" `isInfixOf`) <&&> ("Main.hs:" `isInfixOf`))
 
     it "catches unexpected actions" $
       example $
         runMockT (writeFile "bar.txt" "bar")
-          `shouldThrow` errorWithSubstring "Unexpected action"
+          `shouldThrow` errorWith ("Unexpected action: writeFile" `isInfixOf`)
 
     it "catches incorrect arguments" $
       example $ do
         let test = runMockT $ do
               mock $ expect $ writeFile_ "bar.txt" "bar" |-> ()
               writeFile "bar.txt" "incorrect"
-        test `shouldThrow` errorWithSubstring "Wrong arguments"
+        test
+          `shouldThrow` errorWith
+            (("Wrong arguments" `isInfixOf`) <&&> ("Main.hs:" `isInfixOf`))
 
     it "matches with imprecise predicates" $
       example . runMockT $ do
@@ -84,7 +90,7 @@ coreTests = do
               mock $
                 expect $ ReadFile_ (suchThat ("foo" `isPrefixOf`)) |-> "foo"
               readFile "bar.txt"
-        test `shouldThrow` errorWithSubstring "Main.hs"
+        test `shouldThrow` errorWith ("Main.hs" `isInfixOf`)
 
     it "fails when responses are ambiguous" $
       example $ do
@@ -92,7 +98,7 @@ coreTests = do
               mock $ whenever $ readFile_ "foo.txt" |-> "a"
               mock $ whenever $ readFile_ "foo.txt" |-> "b"
               readFile "foo.txt"
-        test `shouldThrow` errorWithSubstring "Ambiguous matches"
+        test `shouldThrow` errorWith ("Ambiguous matches" `isInfixOf`)
 
     it "matches flexible cardinality" $
       example $ do

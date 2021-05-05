@@ -6,7 +6,8 @@ module HMock.Internal.Predicates where
 
 import Data.List (isInfixOf, isPrefixOf, isSuffixOf)
 import Data.Typeable
-import GHC.Stack (HasCallStack, callStack, getCallStack, prettySrcLoc)
+import GHC.Stack (HasCallStack, callStack)
+import HMock.Internal.Util
 
 data Predicate a = Predicate
   { showPredicate :: String,
@@ -107,13 +108,9 @@ hasSubstr s =
 suchThat :: HasCallStack => (a -> Bool) -> Predicate a
 suchThat f =
   Predicate
-    { showPredicate = case locs of
-        (loc : _) -> "custom predicate at " ++ prettySrcLoc loc
-        _ -> "custom predicate",
+    { showPredicate = showWithLoc (getSrcLoc callStack) "custom predicate",
       accept = f
     }
-  where
-    locs = map snd (getCallStack callStack)
 
 -- | Converts a 'Predicate' to a new type.  Typically used with visible type
 -- application, as in @'typed' @Int ('lt' 42)@.  This will only match if the
