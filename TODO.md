@@ -1,8 +1,13 @@
 ## Mock the Quasi monad to test TH
 
 One really powerful way to demonstrate the power of HMock would be to test its
-own TH code by mocking the Quasi type class.  It definitely has some stuff that
-isn't mockable, but maybe we aren't using those parts?
+own TH code by mocking the Quasi type class.
+
+## Handle Superclasses
+
+This came up with `Quasi`.  Aside from other reasons that `makeMockable` would
+fail, it fails because the `MockT` instance needs `MonadFail` and `MonadIO` as
+superclasses.  TH code needs to handle this.
 
 ## Ambiguity resolution
 
