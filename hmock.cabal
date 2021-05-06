@@ -40,7 +40,7 @@ library
 test-suite tests
     type:             exitcode-stdio-1.0
     main-is:          Main.hs
-    other-modules:    TH
+    other-modules:    Classes
     build-depends:    base ^>=4.14.1.0,
                       data-default,
                       directory,

@@ -13,7 +13,7 @@ import Data.List
 import GHC.Exception
 import HMock
 import HMock.TH
-import TH
+import Classes ()
 import Test.Hspec
 import Prelude hiding (readFile, writeFile)
 import qualified Prelude
@@ -40,8 +40,8 @@ errorWith p (ErrorCall msg) = p msg
 (<&&>) :: Applicative f => f Bool -> f Bool -> f Bool
 x <&&> y = (&&) <$> x <*> y
 
-coreTests :: SpecWith ()
-coreTests = do
+cardinalityTests :: SpecWith ()
+cardinalityTests = do
   describe "Cardinality" $
     it "describes itself" $
       example $ do
@@ -58,6 +58,8 @@ coreTests = do
         show (interval 2 3) `shouldBe` "2 or 3 times"
         show (interval 2 5) `shouldBe` "2 to 5 times"
 
+predicateTests :: SpecWith ()
+predicateTests = do
   describe "Predicate" $ do
     it "accepts the right values" $
       example $ do
@@ -136,7 +138,9 @@ coreTests = do
         showPredicate (typed @String (eq "foo") :: Predicate Int)
           `shouldBe` "\"foo\" :: [Char]"
 
-  describe "runMockT" $ do
+coreTests :: SpecWith ()
+coreTests = do
+  describe "HMock core" $ do
     it "verifies a file copy" $
       example $ do
         let copyFile :: MonadFilesystem m => FilePath -> FilePath -> m ()
@@ -398,5 +402,6 @@ coreTests = do
 
 main :: IO ()
 main = hspec $ do
+  cardinalityTests
+  predicateTests
   coreTests
-  thTests
