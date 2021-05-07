@@ -10,13 +10,13 @@ is some type ambiguity.  Perhaps a type class would solve the problem?
 - Arguments with rank n types.  Not top-level, because that leads to
   impredicative types in predicates, but nested under an arrow is okay.
 
-## Handle superclasses
+## Superclasses are broken.
 
 This came up with `Quasi`.  Aside from other reasons that `makeMockable` would
 fail, it fails because the `MockT` instance needs `MonadFail` and `MonadIO` as
 superclasses.  TH code needs to handle this.
 
-## Do something about rank n arguments
+## Do something about rank-n arguments
 
 Right now, if a monad has forall in an argument, makeMockable generates code
 that won't compile because of impredicative types.  Sure, QL is coming soon to

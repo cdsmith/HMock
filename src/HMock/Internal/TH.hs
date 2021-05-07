@@ -460,7 +460,6 @@ defineExactMatcher options t m method = do
           ([InstanceD _ eqCxt _ _], [InstanceD _ showCxt _ _]) ->
             return (Just (filterCxt argTy eqCxt ++ filterCxt argTy showCxt))
           _ -> return Nothing
-      | otherwise = return Nothing
 
     filterCxt :: Type -> Cxt -> Cxt
     filterCxt ty = filter (all (`elem` freeTypeVars ty) . freeTypeVars)

@@ -86,13 +86,37 @@ coreTests = do
               writeFile "key.txt" val
 
         success
-        failure `shouldThrow` errorWith ("Unexpected action: storeDB" `isInfixOf`)
+
+        failure
+          `shouldThrow` errorWith ("Unexpected action: storeDB" `isInfixOf`)
 
     it "catches unmet expectations" $
       example $
         runMockT (mock $ expect $ writeFile_ "bar.txt" "bar" |-> ())
           `shouldThrow` errorWith
             (("Unmet expectations" `isInfixOf`) <&&> ("Core.hs:" `isInfixOf`))
+
+    it "catches partially unmet expectations" $
+      example $ do
+        let test = runMockT $ do
+              mock $ expect $ writeFile_ "foo.txt" "foo" |-> ()
+              mock $ expect $ writeFile_ "bar.txt" "bar" |-> ()
+
+              writeFile "foo.txt" "foo"
+        test `shouldThrow` errorWith ("Unmet expectations" `isInfixOf`)
+
+    it "catches partially unmet sequences" $
+      example $ do
+        let test = runMockT $ do
+              mock $
+                inSequence
+                  [ expect $ writeFile_ "foo.txt" "foo" |-> (),
+                    expect $ writeFile_ "bar.txt" "bar" |-> (),
+                    expect $ writeFile_ "baz.txt" "baz" |-> ()
+                  ]
+
+              writeFile "foo.txt" "foo"
+        test `shouldThrow` errorWith ("Unmet expectations" `isInfixOf`)
 
     it "catches unexpected actions" $
       example $
