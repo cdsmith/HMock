@@ -8,17 +8,11 @@ This is annoying.  I should be able to just say `expect $ ...`.  The problem is
 that `expect` can also be used as part of `inSequence` or `inAnyOrder`, so there
 is some type ambiguity.  Perhaps a type class would solve the problem?
 
-## Extra testing
-
-- Classes with constraints (on monad, and on other params)
-- Arguments with rank n types.  Not top-level, because that leads to
-  impredicative types in predicates, but nested under an arrow is okay.
-
 ## Superclasses are broken.
 
 This came up with `Quasi`.  Aside from other reasons that `makeMockable` would
 fail, it fails because the `MockT` instance needs `MonadFail` and `MonadIO` as
-superclasses.  TH code needs to handle this.
+superclasses.  TH code needs to handle this, and there should be tests for it.
 
 ## Do something about rank-n arguments
 
@@ -26,6 +20,9 @@ Right now, if a monad has forall in an argument, makeMockable generates code
 that won't compile because of impredicative types.  Sure, QL is coming soon to
 fix that, but still it's not a great look to generate broken code, so we should
 do something about it.  Probably skip generating the method.
+
+We should also test the case for rank n types inside of arguments (but not at
+the top level).  These should be fine, if they are arguments to `(->)`.
 
 ## Ambiguity resolution
 
