@@ -7,23 +7,18 @@
 
 module Core where
 
+import Control.Exception
 import Control.Monad
 import Control.Monad.State
 import Data.List
-import GHC.Exception
 import HMock
 import HMock.TH
 import Test.Hspec
 import Prelude hiding (readFile, writeFile)
-import qualified Prelude
 
 class Monad m => MonadFilesystem m where
   readFile :: FilePath -> m String
   writeFile :: FilePath -> String -> m ()
-
-instance MonadFilesystem IO where
-  readFile = Prelude.readFile
-  writeFile = Prelude.writeFile
 
 makeMockable ''MonadFilesystem
 
@@ -33,8 +28,8 @@ class Monad m => MonadDB a m where
 
 makeMockable ''MonadDB
 
-errorWith :: (String -> Bool) -> ErrorCall -> Bool
-errorWith p (ErrorCall msg) = p msg
+errorWith :: (String -> Bool) -> SomeException -> Bool
+errorWith p e = p (show e)
 
 (<&&>) :: Applicative f => f Bool -> f Bool -> f Bool
 x <&&> y = (&&) <$> x <*> y
@@ -63,7 +58,7 @@ coreTests = do
               badCopyFile "foo.txt" "bar.txt"
 
         success
-        failure `shouldThrow` anyErrorCall
+        failure `shouldThrow` anyException
 
     it "tracks expectations across multiple classes" $
       example $ do
@@ -173,8 +168,8 @@ coreTests = do
         success2
         success3
         success4
-        failure1 `shouldThrow` anyErrorCall
-        failure2 `shouldThrow` anyErrorCall
+        failure1 `shouldThrow` anyException
+        failure2 `shouldThrow` anyException
 
     it "enforces complex nested sequences" $
       example $ do
@@ -211,7 +206,7 @@ coreTests = do
 
         success1
         success2
-        failure `shouldThrow` anyErrorCall
+        failure `shouldThrow` anyException
 
     it "handles nested sequences" $
       example . runMockT $ do
