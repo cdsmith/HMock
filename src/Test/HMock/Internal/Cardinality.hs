@@ -1,4 +1,4 @@
-module HMock.Internal.Cardinality where
+module Test.HMock.Internal.Cardinality where
 
 -- | An acceptable range of times for an action to be performed.
 --

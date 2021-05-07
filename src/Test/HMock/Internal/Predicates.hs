@@ -2,12 +2,12 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 
-module HMock.Internal.Predicates where
+module Test.HMock.Internal.Predicates where
 
 import Data.List (isInfixOf, isPrefixOf, isSuffixOf)
 import Data.Typeable
 import GHC.Stack (HasCallStack, callStack)
-import HMock.Internal.Util
+import Test.HMock.Internal.Util
 
 -- | A predicate, which tests values and either accepts or rejects them.  This
 -- is similar to @a -> 'Bool'@, but also has a 'Show' instance to describe what

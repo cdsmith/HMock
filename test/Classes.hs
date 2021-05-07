@@ -16,12 +16,12 @@ import Control.DeepSeq (NFData (rnf))
 import Control.Exception (evaluate)
 import Data.Default (Default (def))
 import Data.Dynamic (Typeable)
-import HMock
-import HMock.Mockable (mockMethod)
-import HMock.TH
 import Language.Haskell.TH (Extension (..), runQ)
 import QuasiMock
 import THUtil (reifyStatic)
+import Test.HMock
+import Test.HMock.Mockable (mockMethod)
+import Test.HMock.TH
 import Test.Hspec
 
 class MonadSimple m where

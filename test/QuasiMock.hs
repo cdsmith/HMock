@@ -14,12 +14,12 @@ module QuasiMock where
 
 import Control.Monad.Trans (MonadIO, liftIO)
 import Data.Generics (Typeable, everything, mkQ)
-import HMock
-import HMock.Mockable
-import HMock.TH
 import Language.Haskell.TH hiding (Match)
 import Language.Haskell.TH.Syntax hiding (Match)
 import THUtil
+import Test.HMock
+import Test.HMock.Mockable
+import Test.HMock.TH
 
 deriveMockable ''Quasi
 

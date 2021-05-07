@@ -1,6 +1,6 @@
 -- | This module provides Template Haskell splices that can be used to derive
 -- boilerplate instances for HMock.
-module HMock.TH
+module Test.HMock.TH
   ( makeMockable,
     makeMockableWithOptions,
     deriveMockable,
@@ -17,4 +17,4 @@ module HMock.TH
   )
 where
 
-import HMock.Internal.TH
+import Test.HMock.Internal.TH

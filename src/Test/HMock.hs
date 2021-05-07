@@ -1,5 +1,5 @@
 -- | This module provides the framework for writing test cases with HMock.
-module HMock
+module Test.HMock
   ( MockT,
     runMockT,
     Mockable (Action, Matcher),
@@ -39,6 +39,6 @@ module HMock
   )
 where
 
-import HMock.Internal.Cardinality
-import HMock.Internal.Core
-import HMock.Internal.Predicates
+import Test.HMock.Internal.Cardinality
+import Test.HMock.Internal.Core
+import Test.HMock.Internal.Predicates

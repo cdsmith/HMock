@@ -11,8 +11,8 @@ import Control.Exception
 import Control.Monad
 import Control.Monad.State
 import Data.List
-import HMock
-import HMock.TH
+import Test.HMock
+import Test.HMock.TH
 import Test.Hspec
 import Prelude hiding (readFile, writeFile)
 

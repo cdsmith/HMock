@@ -3,7 +3,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TupleSections #-}
 
-module HMock.Internal.TH where
+module Test.HMock.Internal.TH where
 
 import Control.Monad (replicateM, unless, when)
 import Control.Monad.Extra (concatMapM)
@@ -18,15 +18,14 @@ import Data.Type.Equality (type (:~:) (Refl))
 import Data.Typeable (Typeable)
 import GHC.Stack
 import GHC.TypeLits (Symbol)
-import HMock.Internal.Core
-import HMock.Internal.Predicates (Predicate (accept, showPredicate), eq)
 import Language.Haskell.TH hiding (Match, match)
 import Language.Haskell.TH.Syntax (Lift (lift))
+import Test.HMock.Internal.Core
+import Test.HMock.Internal.Predicates (Predicate (accept, showPredicate), eq)
 
 -- | Custom options for deriving a 'Mockable' class.
 newtype MockableOptions = MockableOptions
-  {
-    -- | Suffix to add to 'Action' and 'Matcher' names.  Defaults to @""@.
+  { -- | Suffix to add to 'Action' and 'Matcher' names.  Defaults to @""@.
     mockSuffix :: String
   }
 
@@ -86,24 +85,24 @@ deriveMockableTypeWithOptions :: MockableOptions -> Q Type -> Q [Dec]
 deriveMockableTypeWithOptions = deriveMockableImpl
 
 -- | Defines an instance of the given class for 'MockT', delegating all of its
--- methods to 'mockAction' to be handled by HMock.
+-- methods to 'mockMethod' to be handled by HMock.
 deriveForMockT :: Name -> Q [Dec]
 deriveForMockT = deriveTypeForMockT . conT
 
 -- | Defines an instance of the given constraint type for 'MockT', delegating
--- all of its methods to 'mockAction' to be handled by HMock.  The type should
+-- all of its methods to 'mockMethod' to be handled by HMock.  The type should
 -- be a class applied to zero or more type arguments.
 deriveTypeForMockT :: Q Type -> Q [Dec]
 deriveTypeForMockT = deriveTypeForMockTWithOptions def
 
 -- | Defines an instance of the given class for 'MockT', delegating all of its
--- methods to 'mockAction' to be handled by HMock.  This is like
+-- methods to 'mockMethod' to be handled by HMock.  This is like
 -- 'deriveForMockT', but with the ability to specify custom options.
 deriveForMockTWithOptions :: MockableOptions -> Name -> Q [Dec]
 deriveForMockTWithOptions options = deriveTypeForMockTWithOptions options . conT
 
 -- | Defines an instance of the given constraint type for 'MockT', delegating
--- all of its methods to 'mockAction' to be handled by HMock.  The type should
+-- all of its methods to 'mockMethod' to be handled by HMock.  The type should
 -- be a class applied to zero or more type arguments.  This is like
 -- 'deriveTypeForMockT', but with the ability to specify custom options.
 deriveTypeForMockTWithOptions :: MockableOptions -> Q Type -> Q [Dec]

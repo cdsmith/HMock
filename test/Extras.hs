@@ -3,7 +3,7 @@
 module Extras where
 
 import Data.List (isPrefixOf)
-import HMock
+import Test.HMock
 import Test.Hspec
 
 cardinalityTests :: SpecWith ()

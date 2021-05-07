@@ -10,7 +10,7 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module HMock.Internal.Core where
+module Test.HMock.Internal.Core where
 
 import Control.Monad.Base (MonadBase)
 import Control.Monad.Catch (MonadCatch, MonadMask, MonadThrow)
@@ -30,13 +30,13 @@ import Data.Maybe (mapMaybe)
 import Data.Type.Equality (type (:~:) (..))
 import GHC.Stack (CallStack, HasCallStack, callStack, withFrozenCallStack)
 import GHC.TypeLits (KnownSymbol, Symbol)
-import HMock.Internal.Cardinality
+import Test.HMock.Internal.Cardinality
   ( Cardinality (..),
     anyCardinality,
     decCardinality,
     once,
   )
-import HMock.Internal.Util (Loc, getSrcLoc, showWithLoc)
+import Test.HMock.Internal.Util (Loc, getSrcLoc, showWithLoc)
 
 newtype Priority = Priority Int deriving (Show, Eq, Ord)
 
@@ -154,8 +154,8 @@ data MatchResult a b where
   Match :: a :~: b -> MatchResult a b
 
 -- | A class for 'Monad' subclasses whose methods can be mocked.  You usually
--- want to generate this instance using 'HMock.TH.makeMockable' or
--- 'HMock.TH.deriveMockable', because it's just a lot of boilerplate.
+-- want to generate this instance using 'Test.HMock.TH.makeMockable' or
+-- 'Test.HMock.TH.deriveMockable', because it's just a lot of boilerplate.
 class Typeable ctx => Mockable (ctx :: (* -> *) -> Constraint) where
   -- | An action that is performed.  This data type will have one constructor
   -- for each method.

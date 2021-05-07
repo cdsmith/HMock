@@ -1,5 +1,3 @@
-## Change module to `Test.HMock`
-
 ## Write good module docs.
 
 ## Get rid of `mock $ expect $ ...`
