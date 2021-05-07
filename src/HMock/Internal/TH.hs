@@ -80,7 +80,7 @@ getInstance ty = withClass ty go
       where
         matchVars :: Type -> [Type] -> [Name] -> Q Instance
         matchVars (AppT _ _) _ [_] =
-          fail $ pprint ty ++ " is applied has too many arguments."
+          fail $ pprint ty ++ " is applied to too many arguments."
         matchVars (AppT a b) ts (_ : ps) =
           checkExts [FlexibleInstances] >> matchVars a (b : ts) ps
         matchVars _ ts ps =

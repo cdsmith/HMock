@@ -1,3 +1,9 @@
+## Get rid of `mock $ expect $ ...`
+
+This is annoying.  I should be able to just say `expect $ ...`.  The problem is
+that `expect` can also be used as part of `inSequence` or `inAnyOrder`, so there
+is some type ambiguity.  Perhaps a type class would solve the problem?
+
 ## Extra testing
 
 - Classes with constraints (on monad, and on other params)

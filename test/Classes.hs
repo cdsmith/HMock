@@ -37,8 +37,80 @@ simpleTests = describe "MonadSimple" $ do
         setupQuasi
         mock $
           whenever $ qReify_ ''MonadSimple |-> $(reifyStatic ''MonadSimple)
+
         runQ (makeMockable ''MonadSimple)
       evaluate (rnf decs)
+
+  it "doesn't require unnecessary extensions for simple cases" $
+    example . runMockT $ do
+      setupQuasi
+      mock $
+        whenever $ qReify_ ''MonadSimple |-> $(reifyStatic ''MonadSimple)
+      mock $ expectAny $ qIsExtEnabled_ FlexibleInstances |-> False
+      mock $ expectAny $ qIsExtEnabled_ ScopedTypeVariables |-> False
+      mock $ expectAny $ qIsExtEnabled_ RankNTypes |-> False
+
+      _ <- runQ (makeMockable ''MonadSimple)
+      return ()
+
+  it "fails when GADTs is disabled" $
+    example $ do
+      let missingGADTs = runMockT $ do
+            setupQuasi
+            mock $ expectAny $ qIsExtEnabled_ GADTs |-> False
+            mock $
+              expect $
+                QReport_ anything (hasSubstr "Please enable GADTs") |-> ()
+
+            _ <- runQ (makeMockable ''MonadSimple)
+            return ()
+
+      missingGADTs `shouldThrow` anyIOException
+
+  it "fails when TypeFamilies is disabled" $
+    example $ do
+      let missingTypeFamilies = runMockT $ do
+            setupQuasi
+            mock $ expectAny $ qIsExtEnabled_ TypeFamilies |-> False
+            mock $
+              expect $
+                QReport_ anything (hasSubstr "Please enable TypeFamilies")
+                  |-> ()
+
+            _ <- runQ (makeMockable ''MonadSimple)
+            return ()
+
+      missingTypeFamilies `shouldThrow` anyIOException
+
+  it "fails when DataKinds is disabled" $
+    example $ do
+      let missingDataKinds = runMockT $ do
+            setupQuasi
+            mock $ expectAny $ qIsExtEnabled_ DataKinds |-> False
+            mock $
+              expect $
+                QReport_ anything (hasSubstr "Please enable DataKinds") |-> ()
+
+            _ <- runQ (makeMockable ''MonadSimple)
+            return ()
+
+      missingDataKinds `shouldThrow` anyIOException
+
+  it "fails when too many params are given" $
+    example $ do
+      let tooManyParams = runMockT $ do
+            setupQuasi
+            mock $
+              whenever $ qReify_ ''MonadSimple |-> $(reifyStatic ''MonadSimple)
+            mock $
+              expect $
+                QReport_ anything (hasSubstr "is applied to too many arguments")
+                  |-> ()
+
+            _ <- runQ (makeMockableType [t|MonadSimple IO|])
+            return ()
+
+      tooManyParams `shouldThrow` anyIOException
 
   it "generates mock impl with a suffix" $
     example $ do
@@ -46,6 +118,7 @@ simpleTests = describe "MonadSimple" $ do
         setupQuasi
         mock $
           whenever $ qReify_ ''MonadSimple |-> $(reifyStatic ''MonadSimple)
+
         runQ (makeMockableWithOptions def {mockSuffix = "Blah"} ''MonadSimple)
       evaluate (rnf decs)
 
@@ -75,6 +148,7 @@ mptcTests = describe "MonadMPTC" $ do
         setupQuasi
         mock $
           whenever $ qReify_ ''MonadMPTC |-> $(reifyStatic ''MonadMPTC)
+
         runQ (makeMockable ''MonadMPTC)
       evaluate (rnf decs)
 
@@ -106,8 +180,28 @@ fdSpecializedTests = describe "MonadFDSpecialized" $ do
           whenever $
             qReify_ ''MonadFDSpecialized
               |-> $(reifyStatic ''MonadFDSpecialized)
+
         runQ (makeMockableType [t|MonadFDSpecialized String|])
       evaluate (rnf decs)
+
+  it "fails without FlexibleInstances" $
+    example $ do
+      let missingFlexibleInstances = runMockT $ do
+            setupQuasi
+            mock $
+              whenever $
+                qReify_ ''MonadFDSpecialized
+                  |-> $(reifyStatic ''MonadFDSpecialized)
+            mock $ expectAny $ qIsExtEnabled_ FlexibleInstances |-> False
+            mock $
+              expect $
+                QReport_ anything (hasSubstr "Please enable FlexibleInstances")
+                  |-> ()
+
+            _ <- runQ (makeMockableType [t|MonadFDSpecialized String|])
+            return ()
+
+      missingFlexibleInstances `shouldThrow` anyIOException
 
   it "is mockable" $
     example $ do
@@ -146,6 +240,7 @@ fdGeneralTests = describe "MonadFDGeneral" $ do
           whenever $
             qReify_ ''MonadFDGeneral
               |-> $(reifyStatic ''MonadFDGeneral)
+
         runQ (deriveMockable ''MonadFDGeneral)
       evaluate (rnf decs)
 
@@ -178,8 +273,10 @@ fdMixedTests = describe "MonadFDMixed" $ do
           whenever $
             qReify_ ''MonadFDMixed
               |-> $(reifyStatic ''MonadFDMixed)
-        decs1 <- runQ (deriveMockable ''MonadFDMixed)
-        decs2 <- runQ (deriveTypeForMockT [t|MonadFDMixed String|])
+
+        decs1 <- runQ (deriveMockableType [t|MonadFDMixed String Int|])
+        decs2 <-
+          runQ (deriveTypeForMockT [t|MonadFDMixed String Int String ()|])
         return (decs1 ++ decs2)
       evaluate (rnf decs)
 
@@ -209,23 +306,62 @@ polyArgTests = describe "MonadPolyArg" $ do
         setupQuasi
         mock $
           whenever $
-            qReify_ ''MonadPolyArg
-              |-> $(reifyStatic ''MonadPolyArg)
+            qReify_ ''MonadPolyArg |-> $(reifyStatic ''MonadPolyArg)
+
         runQ (makeMockable ''MonadPolyArg)
       evaluate (rnf decs)
+
+  it "fails without ScopedTypeVariables" $
+    example $ do
+      let missingScopedTypeVariables = runMockT $ do
+            setupQuasi
+            mock $
+              whenever $
+                qReify_ ''MonadPolyArg |-> $(reifyStatic ''MonadPolyArg)
+            mock $ expectAny $ qIsExtEnabled_ ScopedTypeVariables |-> False
+            mock $
+              expect $
+                QReport_
+                  anything
+                  (hasSubstr "Please enable ScopedTypeVariables")
+                  |-> ()
+
+            _ <- runQ (makeMockable ''MonadPolyArg)
+            return ()
+
+      missingScopedTypeVariables `shouldThrow` anyException
+
+  it "fails without RankNTypes" $
+    example $ do
+      let missingRankNTypes = runMockT $ do
+            setupQuasi
+            mock $
+              whenever $
+                qReify_ ''MonadPolyArg |-> $(reifyStatic ''MonadPolyArg)
+            mock $ expectAny $ qIsExtEnabled_ RankNTypes |-> False
+            mock $
+              expect $
+                QReport_ anything (hasSubstr "Please enable RankNTypes") |-> ()
+
+            _ <- runQ (makeMockable ''MonadPolyArg)
+            return ()
+
+      missingRankNTypes `shouldThrow` anyException
 
   it "is mockable" $
     example $ do
       let success = runMyBase . runMockT $ do
             mock $
               expect $
-                PolyArg_ (eq "foo") (suchThat ((== 1) . fromEnum)) anything |-> ()
+                PolyArg_ (eq "foo") (suchThat ((== 1) . fromEnum)) anything
+                  |-> ()
             polyArg "foo" (toEnum 1 :: Bool) "hello"
 
           failure = runMyBase . runMockT $ do
             mock $
               expect $
-                PolyArg_ (eq "foo") (suchThat ((== 1) . fromEnum)) anything |-> ()
+                PolyArg_ (eq "foo") (suchThat ((== 1) . fromEnum)) anything
+                  |-> ()
             polyArg "foo" (toEnum 2 :: Bool) "hello"
 
       success
@@ -246,6 +382,7 @@ unshowableArgTests = describe "MonadUnshowableArg" $ do
           whenever $
             qReify_ ''MonadUnshowableArg
               |-> $(reifyStatic ''MonadUnshowableArg)
+
         runQ (makeMockable ''MonadUnshowableArg)
       evaluate (rnf decs)
 
@@ -257,6 +394,7 @@ unshowableArgTests = describe "MonadUnshowableArg" $ do
 
           failure = runMyBase . runMockT $ do
             mock $ expect $ UnshowableArg_ anything |-> ()
+
             unshowableArg (+ 1)
             unshowableArg (+ 1)
 
@@ -278,6 +416,7 @@ monadInArgTests = describe "MonadInArg" $ do
           whenever $
             qReify_ ''MonadInArg
               |-> $(reifyStatic ''MonadInArg)
+
         runQ (makeMockable ''MonadInArg)
       evaluate (rnf decs)
 
@@ -289,6 +428,7 @@ monadInArgTests = describe "MonadInArg" $ do
 
           failure = runMyBase . runMockT $ do
             mock $ expect $ UnshowableArg_ anything |-> ()
+
             monadInArg (const (return ()))
             monadInArg (const (return ()))
 
@@ -318,8 +458,26 @@ extraneousMembersTests = describe "MonadExtraneousMembers" $ do
           whenever $
             qReify_ ''MonadExtraneousMembers
               |-> $(reifyStatic ''MonadExtraneousMembers)
+
         runQ (deriveMockable ''MonadExtraneousMembers)
       evaluate (rnf decs)
+
+  it "fails to derive MockT when class has extra methods" $
+    example $ do
+      let unmockableMethods = runMockT $ do
+            setupQuasi
+            mock $
+              whenever $
+                qReify_ ''MonadExtraneousMembers
+                  |-> $(reifyStatic ''MonadExtraneousMembers)
+            mock $
+              expect $
+                QReport_ anything (hasSubstr "has unmockable methods") |-> ()
+
+            _ <- runQ (makeMockable ''MonadExtraneousMembers)
+            return ()
+
+      unmockableMethods `shouldThrow` anyIOException
 
   it "is mockable" $
     example $ do
@@ -340,78 +498,6 @@ $(return []) -- Hack to get the error classes into the TH environment.
 
 errorTests :: SpecWith ()
 errorTests = describe "errors" $ do
-  it "fails when GADTs is disabled" $
-    example $ do
-      let missingGADTs = runMockT $ do
-            setupQuasi
-            mock $ expectAny $ qIsExtEnabled_ GADTs |-> False
-            mock $
-              expect $
-                QReport_ anything (hasSubstr "Please enable GADTs") |-> ()
-            _ <- runQ (makeMockable ''MonadSimple)
-            return ()
-
-      missingGADTs `shouldThrow` anyIOException
-
-  it "fails when TypeFamilies is disabled" $
-    example $ do
-      let missingTypeFamilies = runMockT $ do
-            setupQuasi
-            mock $ expectAny $ qIsExtEnabled_ TypeFamilies |-> False
-            mock $
-              expect $
-                QReport_ anything (hasSubstr "Please enable TypeFamilies")
-                  |-> ()
-            _ <- runQ (makeMockable ''MonadSimple)
-            return ()
-
-      missingTypeFamilies `shouldThrow` anyIOException
-
-  it "fails when DataKinds is disabled" $
-    example $ do
-      let missingDataKinds = runMockT $ do
-            setupQuasi
-            mock $ expectAny $ qIsExtEnabled_ DataKinds |-> False
-            mock $
-              expect $
-                QReport_ anything (hasSubstr "Please enable DataKinds")
-                  |-> ()
-            _ <- runQ (makeMockable ''MonadSimple)
-            return ()
-
-      missingDataKinds `shouldThrow` anyIOException
-
-  it "usually succeeds without FlexibleInstances" $
-    example $ do
-      let success = runMockT $ do
-            setupQuasi
-            mock $
-              whenever $
-                qReify_ ''MonadSimple |-> $(reifyStatic ''MonadSimple)
-            mock $ expectAny $ qIsExtEnabled_ FlexibleInstances |-> False
-            _ <- runQ (makeMockable ''MonadSimple)
-            return ()
-
-      success
-
-  it "fails without FlexibleInstances when needed" $
-    example $ do
-      let missingFlexibleInstances = runMockT $ do
-            setupQuasi
-            mock $
-              whenever $
-                qReify_ ''MonadFDSpecialized
-                  |-> $(reifyStatic ''MonadFDSpecialized)
-            mock $ expectAny $ qIsExtEnabled_ FlexibleInstances |-> False
-            mock $
-              expect $
-                QReport_ anything (hasSubstr "Please enable FlexibleInstances")
-                  |-> ()
-            _ <- runQ (makeMockableType [t|MonadFDSpecialized String|])
-            return ()
-
-      missingFlexibleInstances `shouldThrow` anyIOException
-
   it "fails when given a type instead of a class" $
     example $ do
       let wrongKind = runMockT $ do
@@ -423,6 +509,7 @@ errorTests = describe "errors" $ do
                   anything
                   (hasSubstr "Expected GHC.Types.Int to be a class")
                   |-> ()
+
             _ <- runQ (makeMockable ''Int)
             return ()
 
@@ -434,27 +521,11 @@ errorTests = describe "errors" $ do
             setupQuasi
             mock $
               expect $ QReport_ anything (hasSubstr "Expected a class") |-> ()
+
             _ <- runQ (makeMockableType [t|(Int, String)|])
             return ()
 
       notClass `shouldThrow` anyIOException
-
-  it "fails when too many params are given" $
-    example $ do
-      let tooManyParams = runMockT $ do
-            setupQuasi
-            mock $
-              whenever $ qReify_ ''MonadSimple |-> $(reifyStatic ''MonadSimple)
-            mock $
-              expect $
-                QReport_
-                  anything
-                  (hasSubstr "is applied has too many arguments")
-                  |-> ()
-            _ <- runQ (makeMockableType [t|MonadSimple IO|])
-            return ()
-
-      tooManyParams `shouldThrow` anyIOException
 
   it "fails when class has no params" $
     example $ do
@@ -470,6 +541,7 @@ errorTests = describe "errors" $ do
                   anything
                   (hasSubstr "ClassWithNoParams has no type parameters")
                   |-> ()
+
             _ <- runQ (makeMockable ''ClassWithNoParams)
             return ()
 
@@ -482,36 +554,12 @@ errorTests = describe "errors" $ do
             mock $ whenever $ qReify_ ''Show |-> $(reifyStatic ''Show)
             mock $
               expect $
-                QReport_
-                  anything
-                  (hasSubstr "has no mockable methods")
-                  |-> ()
+                QReport_ anything (hasSubstr "has no mockable methods") |-> ()
+
             _ <- runQ (deriveMockable ''Show)
             return ()
 
       noMockableMethods `shouldThrow` anyIOException
-
-  it "fails to derive MockT when class has extra methods" $
-    example $ do
-      let unmockableMethods = runMockT $ do
-            setupQuasi
-            mock $
-              whenever $
-                qReify_ ''MonadExtraneousMembers
-                  |-> $(reifyStatic ''MonadExtraneousMembers)
-            mock $
-              expect $
-                QReport_
-                  anything
-                  (hasSubstr "has unmockable methods")
-                  |-> ()
-            _ <- runQ (makeMockable ''MonadExtraneousMembers)
-            return ()
-
-      unmockableMethods `shouldThrow` anyIOException
-
-  it "requires ScopedTypeVariables & RankNTypes with poly args" $
-    example $ return ()
 
 classTests :: SpecWith ()
 classTests = describe "makeMockable" $ do

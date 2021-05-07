@@ -55,6 +55,7 @@ instance (Typeable m, MonadFail m, MonadIO m) => Quasi (MockT m) where
   qRecover = error "qRecover"
   qReifyAnnotations = error "qReifyAnnotations"
 
+-- | Sets up some common default behaviors for the Quasi type class.
 setupQuasi :: (Typeable m, MonadIO m, MonadFail m) => MockT m ()
 setupQuasi = do
   mock $ whenever $ QIsExtEnabled_ anything |-> True
