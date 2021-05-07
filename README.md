@@ -315,12 +315,34 @@ You have two choices here:
 
 HMock is compatible with stack traces using `HasCallStack`.  These can be very
 convenient for find out where your code went wrong and did the wrong thing.
-However, the stack traces are mostly useless unless you add a `HasCallStack`
-constraint to the methods of your class.
+However, the stack traces are useless unless you add a `HasCallStack` constraint
+to the methods of your class.
 
 This is unfortunate, but not really avoidable with the current state of Haskell.
 You can add the constraint when troubleshooting, and remove it again when you
 are done.
+
+### What should I do about orphan instance warnings?
+
+If you have the warning enabled, GHC will usually warn about orphan instances
+when you use `makeMockable` or other splices.  We recommend disabling this
+warning for the modules that use `makeMockable`, by adding the line
+`{-# OPTIONS_GHC -Wno-orphans #-}` to the top of these modules.
+
+Prohibiting orphan instances is just a *heuristic* to make it less likely that
+two different instances will be defined for the same type class and parameters.
+The heuristic works well for most application code.  It does **not** work so
+well for HMock, because the class you are mocking is non-test code, but the
+`Mockable` and `MockT` instances should be defined in test code.
+
+Since the orphan heuristic doesn't work, you must take responsibility for
+managing the risk of multiple instances.  The easiest way to do so is to avoid
+defining these instances in libraries.  If you do define instances in libraries,
+try to choose a canonical location for each instance that is consistent across
+all code using the library, and try to limit visibility of these instances to code that follows the same
+convention.  Reuse of mock code can be valuable, but it must be done carefully
+and deliberately, keeping in mind that you are responsible for preventing
+conflict between instances.
 
 ### How do I migrate from `monad-mock`?
 
