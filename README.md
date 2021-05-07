@@ -385,3 +385,69 @@ runMockT $ do
 ```
 
 And you're done.
+
+## Case Study: Mocking Template Haskell
+
+As a non-trivial case study in the use of HMock, consider the problem of testing
+code that uses Template Haskell.  Template Haskell runs in a monad class called
+`Quasi`, which provides access to actions that help build code: generating fresh
+names, looking up type information, reporting errors and warnings, and so on.
+While there is an `IO` instance for the `Quasi` type class, it throws errors for
+most operations, making it unsuitable for testing any non-trivial uses of
+Template Haskell.
+
+As part of HMock's own test suite, the `Quasi` monad is made mockable (in
+`test/QuasiMock.hs`), and then used (in `test/Classes.hs`) to test HMock's
+Template Haskell based code generation splices such as `makeMockable` and
+`deriveMockable`.
+
+At first glance, this might seem unnecessary.  After all, the unit tests make
+use of `makeMockable` and `deriveMockable` for tests of the core HMock
+functionality, so surely any problems in that code that matter would cause one
+of the core tests to fail, as well.  However, writing these tests with mocks had
+two significant benefits:
+
+1. Because Template Haskell runs at compile time, test coverage cannot be
+   measured.  Template Haskell code at runtime generates accurate test coverage
+   using `hpc`.  This, in turn, helped with writing more comprehensive tests.
+
+2. Because Template Haskell errors would stop the tests from compiling, core
+   tests can only cover *successful* uses.  Mocking `Quasi` allows tests of
+   Template Haskell to check the error cases, as well.
+
+Indeed, mock `Quasi tests` were quite valuable to HMock development.  First, the
+initial tests revealed several places where tests did not exercise key logic:
+mocking classes with superclasses, and mocking classes whose methods have rank-n
+parameters.  When corresponding tests were added, both of these cases turned out
+to be incorrect!  Next, adding tests for the error cases (which would not have
+been possible to write without mocks) revealed that the code to detect mocking
+classes with too many arguments was also broken, so that instead of a nice
+helpful message, HMock printed something about an internal error, advising the
+user to report a bug.
+
+The implementation of the `Quasi` mock was not difficult, but there are a few
+places where it was illuminating:
+
+* Several methods of the `Quasi` type class could not be mocked by HMock because
+  they have polymorphic return types.  This did not prevent using HMock, but it
+  did make it necessary to combine `deriveMockable` with a hand-written `MockT`
+  instance, rather than using `makeMockable` to generate everything.
+
+* One method, `qNewName`, could have been mocked, but it wasn't the right
+  choice to do so.  Template Haskell already provides an implementation in the
+  `IO` monad, which was already suitable for testing.  This wasn't a problem, as
+  the `MockT` instance could be written to forward to the `IO` implementation.
+
+* Certain behaviors that did need to be mocked, such as looking up `Eq` and
+  `Show` instances for common types, were useful for many different tests.  To
+  help with reuse, `QuasiMock` exports a reusable action, `setupQuasi`, that
+  configures these common responses as defaults with `whenever`.
+
+* The actual mock required less than 25 lines of very straight-forward code,
+  and `setupQuasi` was about the same.  (There was, though an unfortunate need
+  to derive nearly 100 instances of `Lift` and `NFData` to make the test logic
+  work.)
+
+All things considered, the mock of Quasi was not difficult to implement, and
+improved both the experience of HMock development and confidence in its
+correctness.

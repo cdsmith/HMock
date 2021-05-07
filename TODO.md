@@ -1,3 +1,7 @@
+## Complete haddock
+
+There are some methods with missing docs, and good module docs would help.
+
 ## Get rid of `mock $ expect $ ...`
 
 This is annoying.  I should be able to just say `expect $ ...`.  The problem is
