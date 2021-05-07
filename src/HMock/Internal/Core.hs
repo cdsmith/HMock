@@ -157,21 +157,21 @@ data MatchResult a b where
 -- want to generate this instance using 'HMock.TH.makeMockable' or
 -- 'HMock.TH.deriveMockable', because it's just a lot of boilerplate.
 class Typeable ctx => Mockable (ctx :: (* -> *) -> Constraint) where
-  -- An action that is performed.  This data type will have one constructor for
-  -- each method.
+  -- | An action that is performed.  This data type will have one constructor
+  -- for each method.
   data Action ctx :: Symbol -> (* -> *) -> * -> *
 
   -- | A specification for matching actions.  The actual arguments should be
   -- replaced with predicates.
   data Matcher ctx :: Symbol -> (* -> *) -> * -> *
 
-  -- Gets a text description of an 'Action', for use in error messages.
+  -- | Gets a text description of an 'Action', for use in error messages.
   showAction :: Action ctx name m a -> String
 
-  -- Gets a text description of a 'Matcher', for use in error messages.
+  -- | Gets a text description of a 'Matcher', for use in error messages.
   showMatcher :: Maybe (Action ctx name m a) -> Matcher ctx name m b -> String
 
-  -- Attempts to match an 'Action' with a 'Matcher'.
+  -- | Attempts to match an 'Action' with a 'Matcher'.
   match :: Matcher ctx name m a -> Action ctx name m b -> MatchResult a b
 
 -- | Monad transformer for running mocks.
@@ -224,7 +224,7 @@ data Rule (ctx :: (* -> *) -> Constraint) (name :: Symbol) (m :: * -> *) where
     Rule ctx name m
 
 -- | Matches an 'Action' and returns a constant response.  This is more
--- convenient than '(:=>)' in the common case where you just want to return a
+-- convenient than '(:->)' in the common case where you just want to return a
 -- known result.
 (|->) :: (Mockable ctx, Monad m) => Matcher ctx name m a -> a -> Rule ctx name m
 m |-> r = m :-> const (return r)
@@ -318,7 +318,7 @@ ambiguousMatchError a matches =
       ++ "\nPossible matches:\n - "
       ++ intercalate "\n - " matches
 
--- Adds expectations to a test case running in 'MockT'.
+-- | Adds expectations to a test case running in 'MockT'.
 mock :: Monad m => Expected m -> MockT m ()
 mock newExpected = MockT $ modify (\e -> simplify (AllOf [e, newExpected]))
 
@@ -332,15 +332,15 @@ makeExpect ::
 makeExpect cs prio card wr@(m :-> (_ :: Action ctx name m a -> MockT m a)) =
   Expect prio card (Step (getSrcLoc cs) (showMatcher Nothing m) (toDyn wr))
 
--- Creates an expectation that an action is performed once.  This is equivalent
--- to @'expectN' 'once'@, but shorter.
+-- | Creates an expectation that an action is performed once.  This is
+-- equivalent to @'expectN' 'once'@, but shorter.
 expect ::
   (HasCallStack, Mockable ctx, Typeable m, KnownSymbol name) =>
   Rule ctx name m ->
   Expected m
 expect = makeExpect callStack normalPriority once
 
--- Creates an expectation that an action is performed some number of times.
+-- | Creates an expectation that an action is performed some number of times.
 expectN ::
   (HasCallStack, Mockable ctx, Typeable m, KnownSymbol name) =>
   -- | The number of times the action should be performed.
@@ -350,25 +350,25 @@ expectN ::
   Expected m
 expectN = makeExpect callStack normalPriority
 
--- Creates an expectation that an action is performed any number of times.  This
--- is equivalent to @'expectN' 'anyCardinality'@, but shorter.
+-- | Creates an expectation that an action is performed any number of times.
+-- This is equivalent to @'expectN' 'anyCardinality'@, but shorter.
 expectAny ::
   (HasCallStack, Mockable ctx, Typeable m, KnownSymbol name) =>
   Rule ctx name m ->
   Expected m
 expectAny = makeExpect callStack normalPriority anyCardinality
 
--- Allows an unexpected action to be performed any time, and gives a default
--- response.  This differs from 'expectAny' because actual expectations will
--- override this default.
+-- | Specifies a default response if a matching action is performed.  This
+-- differs from 'expectAny' because other expectations will always override
+-- this default.
 whenever ::
   (HasCallStack, Mockable ctx, Typeable m, KnownSymbol name) =>
   Rule ctx name m ->
   Expected m
 whenever = makeExpect callStack lowPriority anyCardinality
 
--- Creates a sequential expectation.  Other actions can still happen during the
--- sequence, but these specific expectations must be met in this order.
+-- | Creates a sequential expectation.  Other actions can still happen during
+-- the sequence, but these specific expectations must be met in this order.
 --
 -- Beware of using 'inSequence' too often.  It is appropriate when the property
 -- you are testing is that the order of effects is correct.  If that's not the
@@ -377,7 +377,7 @@ whenever = makeExpect callStack lowPriority anyCardinality
 inSequence :: [Expected m] -> Expected m
 inSequence = Sequence
 
--- Combines multiple expectations, which can occur in any order.  Most of the
+-- | Combines multiple expectations, which can occur in any order.  Most of the
 -- time, you can achieve the same thing with multiple uses of 'mock', but this
 -- can be combined with 'inSequence' to describe more complex ordering
 -- constraints, such as:

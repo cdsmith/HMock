@@ -1,6 +1,6 @@
-## Complete haddock
+## Change module to `Test.HMock`
 
-There are some methods with missing docs, and good module docs would help.
+## Write good module docs.
 
 ## Get rid of `mock $ expect $ ...`
 

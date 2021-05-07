@@ -50,5 +50,8 @@ atLeast n = Interval n Nothing
 atMost :: Int -> Cardinality
 atMost n = Interval 0 (Just n)
 
+-- | A 'Cardinality' that means any number in this interval, endpoints included.
+-- For example, @'interval' 2 3@ means 2 or 3 times, while @'interval' n n@ is
+-- equivalent to @'exactly' n@.
 interval :: Int -> Int -> Cardinality
 interval m n = Interval (min m n) (Just (max m n))
