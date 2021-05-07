@@ -1,5 +1,7 @@
 ## Write good module docs.
 
+## Test with wider range of GHC/TH versions.
+
 ## Get rid of `mock $ expect $ ...`
 
 This is annoying.  I should be able to just say `expect $ ...`.  The problem is
