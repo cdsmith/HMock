@@ -138,9 +138,9 @@ excess :: Expected m -> Expected m
 excess = simplify . go
   where
     go ExpectNothing = ExpectNothing
-    go (Expect prio (Interval lo _) step)
+    go e@(Expect _ (Interval lo _) _)
       | lo == 0 = ExpectNothing
-      | otherwise = Expect prio (Interval lo Nothing) step
+      | otherwise = e
     go (AllOf xs) = AllOf (map go xs)
     go (Sequence xs) = Sequence (map go xs)
 
@@ -181,6 +181,7 @@ newtype MockT m a where
     ( Functor,
       Applicative,
       Monad,
+      MonadFail,
       MonadIO,
       MonadReader r,
       MonadWriter w,
