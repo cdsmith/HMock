@@ -2,7 +2,9 @@
 module Test.HMock
   ( MockT,
     runMockT,
-    Mockable (Action, Matcher),
+    Mockable (..),
+    MatchResult (..),
+    mockMethod,
     Rule ((:->)),
     (|->),
     Expectable,

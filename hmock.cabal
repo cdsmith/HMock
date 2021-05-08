@@ -16,7 +16,6 @@ extra-source-files: CHANGELOG.md
 
 library
     exposed-modules:  Test.HMock,
-                      Test.HMock.Mockable,
                       Test.HMock.TH
     other-modules:    Test.HMock.Internal.Cardinality,
                       Test.HMock.Internal.Core,
