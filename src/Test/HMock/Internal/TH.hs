@@ -21,7 +21,7 @@ import GHC.TypeLits (Symbol)
 import Language.Haskell.TH hiding (Match, match)
 import Language.Haskell.TH.Syntax (Lift (lift))
 import Test.HMock.Internal.Core
-import Test.HMock.Internal.Predicates (Predicate (accept, showPredicate), eq)
+import Test.HMock.Internal.Predicates (Predicate (accept), eq)
 
 -- | Custom options for deriving a 'Mockable' class.
 newtype MockableOptions = MockableOptions
@@ -413,13 +413,13 @@ showMatcherClauses options method = do
       | otherwise = wildP
 
     printedArg p t ty
-      | isKnownType method ty = [|"«" ++ showPredicate $(varE p) ++ "»"|]
+      | isKnownType method ty = [|"«" ++ show $(varE p) ++ "»"|]
       | otherwise =
-        [|"«" ++ showPredicate ($(varE p) :: Predicate $(varT t)) ++ "»"|]
+        [|"«" ++ show ($(varE p) :: Predicate $(varT t)) ++ "»"|]
 
     printedPolyArg p ty
-      | isKnownType method ty = [|"«" ++ showPredicate $(varE p) ++ "»"|]
-      | otherwise = [|"«polymorphic»"|]
+      | isKnownType method ty = [|"«" ++ show $(varE p) ++ "»"|]
+      | otherwise = [|"(polymorphic)"|]
 
 defineMatch :: MockableOptions -> [Method] -> Q Dec
 defineMatch options methods = funD 'match (matchClause options <$> methods)

@@ -3,6 +3,7 @@
 module Extras where
 
 import Data.List (isPrefixOf)
+import Data.Typeable (Typeable)
 import Test.HMock
 import Test.Hspec
 
@@ -76,30 +77,49 @@ predicateTests = do
         accept (suchThat ((> 5) . length)) "lengthy" `shouldBe` True
         accept (suchThat ((> 5) . length)) "short" `shouldBe` False
 
-        accept (typed @String anything) () `shouldBe` False
-        accept (typed @String (eq "foo")) "bar" `shouldBe` False
-        accept (typed @String (eq "foo")) "foo" `shouldBe` True
-
     it "describes itself" $
       example $ do
-        showPredicate anything `shouldBe` "anything"
-        showPredicate (eq "foo") `shouldBe` "\"foo\""
-        showPredicate (neq "foo") `shouldBe` "≠ \"foo\""
-        showPredicate (lt "foo") `shouldBe` "< \"foo\""
-        showPredicate (gt "foo") `shouldBe` "> \"foo\""
-        showPredicate (leq "foo") `shouldBe` "≤ \"foo\""
-        showPredicate (geq "foo") `shouldBe` "≥ \"foo\""
-        showPredicate (lt "foo" `andP` gt "bar")
+        show anything `shouldBe` "anything"
+        show (eq "foo") `shouldBe` "\"foo\""
+        show (neq "foo") `shouldBe` "≠ \"foo\""
+        show (lt "foo") `shouldBe` "< \"foo\""
+        show (gt "foo") `shouldBe` "> \"foo\""
+        show (leq "foo") `shouldBe` "≤ \"foo\""
+        show (geq "foo") `shouldBe` "≥ \"foo\""
+        show (lt "foo" `andP` gt "bar")
           `shouldBe` "< \"foo\" and > \"bar\""
-        showPredicate (lt "bar" `orP` gt "foo")
+        show (lt "bar" `orP` gt "foo")
           `shouldBe` "< \"bar\" or > \"foo\""
-        showPredicate (notP (gt "foo")) `shouldBe` "not > \"foo\""
-        showPredicate (hasSubstr "i") `shouldBe` "has substring \"i\""
-        showPredicate (startsWith "fun") `shouldBe` "starts with \"fun\""
-        showPredicate (endsWith "ing") `shouldBe` "ends with \"ing\""
-        showPredicate (suchThat ((> 5) . length) :: Predicate String)
+        show (notP (gt "foo")) `shouldBe` "not > \"foo\""
+        show (hasSubstr "i") `shouldBe` "has substring \"i\""
+        show (startsWith "fun") `shouldBe` "starts with \"fun\""
+        show (endsWith "ing") `shouldBe` "ends with \"ing\""
+        show (suchThat ((> 5) . length) :: Predicate String)
           `shouldSatisfy` ("custom predicate at " `isPrefixOf`)
-        showPredicate (typed @String anything :: Predicate Int)
+
+    it "checks types" $
+      example $ do
+        let p1 :: Typeable a => Predicate a
+            p1 = typed @String anything
+
+            p2 :: Typeable a => Predicate a
+            p2 = typed @String (eq "foo")
+
+        show (p1 :: Predicate String)
           `shouldBe` "anything :: [Char]"
-        showPredicate (typed @String (eq "foo") :: Predicate Int)
+        show (p1 :: Predicate Int)
+          `shouldBe` "anything :: [Char]"
+
+        accept p1 "foo" `shouldBe` True
+        accept p1 "bar" `shouldBe` True
+        accept p1 () `shouldBe` False
+        accept p1 (5 :: Int) `shouldBe` False
+
+        show (p2 :: Predicate String)
           `shouldBe` "\"foo\" :: [Char]"
+        show (p2 :: Predicate Int)
+          `shouldBe` "\"foo\" :: [Char]"
+
+        accept p2 "foo" `shouldBe` True
+        accept p2 "bar" `shouldBe` False
+        accept p2 (5 :: Int) `shouldBe` False
