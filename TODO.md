@@ -1,7 +1,5 @@
 ## Write good module docs.
 
-## Test with wider range of GHC/TH versions.
-
 ## Superclasses are broken.
 
 This came up with `Quasi`.  Aside from other reasons that `makeMockable` would
@@ -30,6 +28,20 @@ appealing.  This would mean adding some kind of partial order on specificity of
 predicates.  We'd probably just adopt a three-tier system, where `eq x` >
 anything else matching `x` > `__`.
 
+## Test with wider range of GHC/TH versions.
+
+## Instances for effect systems
+
+An increasing number of people are using libraries like `eff`, `polysemy`,
+`fused-effects`, or `freer-simple`, which do not work with mtl-style classes.
+It would be a very compelling feature if I could also make HMock work for some
+of these effect systems.
+
+* `freer-simple`
+* `fused-effects`
+* `polysemy`
+* `eff`
+
 ## Have a plan for functional dependencies
 
 ``` haskell
@@ -47,9 +59,7 @@ One can do this instead:
 
 ``` haskell
 deriveMockable ''MonadFoo2
-
-instance (Monad m, Typeable m) => MonadFoo2 Int (MockT m) where
-  foo2 x = mockMethod (Foo2 x)
+deriveTypeForMockT [t| MonadFoo2 Int |]
 ```
 
 However, this is actually kind of anti-modular.  If you later end up defining an
