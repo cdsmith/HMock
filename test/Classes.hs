@@ -35,8 +35,7 @@ simpleTests = describe "MonadSimple" $ do
     example $ do
       decs <- runMockT $ do
         setupQuasi
-        mock $
-          whenever $ qReify_ ''MonadSimple |-> $(reifyStatic ''MonadSimple)
+        whenever $ qReify_ ''MonadSimple |-> $(reifyStatic ''MonadSimple)
 
         runQ (makeMockable ''MonadSimple)
       evaluate (rnf decs)
@@ -44,11 +43,10 @@ simpleTests = describe "MonadSimple" $ do
   it "doesn't require unnecessary extensions for simple cases" $
     example . runMockT $ do
       setupQuasi
-      mock $
-        whenever $ qReify_ ''MonadSimple |-> $(reifyStatic ''MonadSimple)
-      mock $ expectAny $ qIsExtEnabled_ FlexibleInstances |-> False
-      mock $ expectAny $ qIsExtEnabled_ ScopedTypeVariables |-> False
-      mock $ expectAny $ qIsExtEnabled_ RankNTypes |-> False
+      whenever $ qReify_ ''MonadSimple |-> $(reifyStatic ''MonadSimple)
+      expectAny $ qIsExtEnabled_ FlexibleInstances |-> False
+      expectAny $ qIsExtEnabled_ ScopedTypeVariables |-> False
+      expectAny $ qIsExtEnabled_ RankNTypes |-> False
 
       _ <- runQ (makeMockable ''MonadSimple)
       return ()
@@ -57,10 +55,8 @@ simpleTests = describe "MonadSimple" $ do
     example $ do
       let missingGADTs = runMockT $ do
             setupQuasi
-            mock $ expectAny $ qIsExtEnabled_ GADTs |-> False
-            mock $
-              expect $
-                QReport_ anything (hasSubstr "Please enable GADTs") |-> ()
+            expectAny $ qIsExtEnabled_ GADTs |-> False
+            expect $ QReport_ anything (hasSubstr "Please enable GADTs") |-> ()
 
             _ <- runQ (makeMockable ''MonadSimple)
             return ()
@@ -71,11 +67,9 @@ simpleTests = describe "MonadSimple" $ do
     example $ do
       let missingTypeFamilies = runMockT $ do
             setupQuasi
-            mock $ expectAny $ qIsExtEnabled_ TypeFamilies |-> False
-            mock $
-              expect $
-                QReport_ anything (hasSubstr "Please enable TypeFamilies")
-                  |-> ()
+            expectAny $ qIsExtEnabled_ TypeFamilies |-> False
+            expect $
+              QReport_ anything (hasSubstr "Please enable TypeFamilies") |-> ()
 
             _ <- runQ (makeMockable ''MonadSimple)
             return ()
@@ -86,10 +80,9 @@ simpleTests = describe "MonadSimple" $ do
     example $ do
       let missingDataKinds = runMockT $ do
             setupQuasi
-            mock $ expectAny $ qIsExtEnabled_ DataKinds |-> False
-            mock $
-              expect $
-                QReport_ anything (hasSubstr "Please enable DataKinds") |-> ()
+            expectAny $ qIsExtEnabled_ DataKinds |-> False
+            expect $
+              QReport_ anything (hasSubstr "Please enable DataKinds") |-> ()
 
             _ <- runQ (makeMockable ''MonadSimple)
             return ()
@@ -100,12 +93,10 @@ simpleTests = describe "MonadSimple" $ do
     example $ do
       let tooManyParams = runMockT $ do
             setupQuasi
-            mock $
-              whenever $ qReify_ ''MonadSimple |-> $(reifyStatic ''MonadSimple)
-            mock $
-              expect $
-                QReport_ anything (hasSubstr "is applied to too many arguments")
-                  |-> ()
+            whenever $ qReify_ ''MonadSimple |-> $(reifyStatic ''MonadSimple)
+            expect $
+              QReport_ anything (hasSubstr "is applied to too many arguments")
+                |-> ()
 
             _ <- runQ (makeMockableType [t|MonadSimple IO|])
             return ()
@@ -116,8 +107,7 @@ simpleTests = describe "MonadSimple" $ do
     example $ do
       decs <- runMockT $ do
         setupQuasi
-        mock $
-          whenever $ qReify_ ''MonadSimple |-> $(reifyStatic ''MonadSimple)
+        whenever $ qReify_ ''MonadSimple |-> $(reifyStatic ''MonadSimple)
 
         runQ (makeMockableWithOptions def {mockSuffix = "Blah"} ''MonadSimple)
       evaluate (rnf decs)
@@ -125,11 +115,11 @@ simpleTests = describe "MonadSimple" $ do
   it "is mockable" $
     example $ do
       let success = runMockT $ do
-            mock $ expect $ simple_ "foo" |-> ()
+            expect $ simple_ "foo" |-> ()
             simple "foo"
 
           failure = runMockT $ do
-            mock $ expect $ simple_ "foo" |-> ()
+            expect $ simple_ "foo" |-> ()
             simple "bar"
 
       success
@@ -146,8 +136,7 @@ mptcTests = describe "MonadMPTC" $ do
     example $ do
       decs <- runMockT $ do
         setupQuasi
-        mock $
-          whenever $ qReify_ ''MonadMPTC |-> $(reifyStatic ''MonadMPTC)
+        whenever $ qReify_ ''MonadMPTC |-> $(reifyStatic ''MonadMPTC)
 
         runQ (makeMockable ''MonadMPTC)
       evaluate (rnf decs)
@@ -155,11 +144,11 @@ mptcTests = describe "MonadMPTC" $ do
   it "is mockable" $
     example $ do
       let success = runMockT $ do
-            mock $ expect $ mptc_ "foo" |-> ()
+            expect $ mptc_ "foo" |-> ()
             mptc "foo"
 
           failure = runMockT $ do
-            mock $ expect $ mptc_ "foo" |-> ()
+            expect $ mptc_ "foo" |-> ()
             mptc "bar"
 
       success
@@ -176,10 +165,9 @@ fdSpecializedTests = describe "MonadFDSpecialized" $ do
     example $ do
       decs <- runMockT $ do
         setupQuasi
-        mock $
-          whenever $
-            qReify_ ''MonadFDSpecialized
-              |-> $(reifyStatic ''MonadFDSpecialized)
+        whenever $
+          qReify_ ''MonadFDSpecialized
+            |-> $(reifyStatic ''MonadFDSpecialized)
 
         runQ (makeMockableType [t|MonadFDSpecialized String|])
       evaluate (rnf decs)
@@ -188,15 +176,13 @@ fdSpecializedTests = describe "MonadFDSpecialized" $ do
     example $ do
       let missingFlexibleInstances = runMockT $ do
             setupQuasi
-            mock $
-              whenever $
-                qReify_ ''MonadFDSpecialized
-                  |-> $(reifyStatic ''MonadFDSpecialized)
-            mock $ expectAny $ qIsExtEnabled_ FlexibleInstances |-> False
-            mock $
-              expect $
-                QReport_ anything (hasSubstr "Please enable FlexibleInstances")
-                  |-> ()
+            whenever $
+              qReify_ ''MonadFDSpecialized
+                |-> $(reifyStatic ''MonadFDSpecialized)
+            expectAny $ qIsExtEnabled_ FlexibleInstances |-> False
+            expect $
+              QReport_ anything (hasSubstr "Please enable FlexibleInstances")
+                |-> ()
 
             _ <- runQ (makeMockableType [t|MonadFDSpecialized String|])
             return ()
@@ -206,11 +192,11 @@ fdSpecializedTests = describe "MonadFDSpecialized" $ do
   it "is mockable" $
     example $ do
       let success = runMockT $ do
-            mock $ expect $ fdSpecialized_ "foo" |-> ()
+            expect $ fdSpecialized_ "foo" |-> ()
             fdSpecialized "foo"
 
           failure = runMockT $ do
-            mock $ expect $ fdSpecialized_ "foo" |-> ()
+            expect $ fdSpecialized_ "foo" |-> ()
             fdSpecialized "bar"
 
       success
@@ -236,10 +222,7 @@ fdGeneralTests = describe "MonadFDGeneral" $ do
     example $ do
       decs <- runMockT $ do
         setupQuasi
-        mock $
-          whenever $
-            qReify_ ''MonadFDGeneral
-              |-> $(reifyStatic ''MonadFDGeneral)
+        whenever $ qReify_ ''MonadFDGeneral |-> $(reifyStatic ''MonadFDGeneral)
 
         runQ (deriveMockable ''MonadFDGeneral)
       evaluate (rnf decs)
@@ -247,11 +230,11 @@ fdGeneralTests = describe "MonadFDGeneral" $ do
   it "is mockable" $
     example $ do
       let success = runMyBase . runMockT $ do
-            mock $ expect $ fdGeneral_ "foo" |-> ()
+            expect $ fdGeneral_ "foo" |-> ()
             fdGeneral "foo"
 
           failure = runMyBase . runMockT $ do
-            mock $ expect $ fdGeneral_ "foo" |-> ()
+            expect $ fdGeneral_ "foo" |-> ()
             fdGeneral "bar"
 
       success
@@ -269,10 +252,7 @@ fdMixedTests = describe "MonadFDMixed" $ do
     example $ do
       decs <- runMockT $ do
         setupQuasi
-        mock $
-          whenever $
-            qReify_ ''MonadFDMixed
-              |-> $(reifyStatic ''MonadFDMixed)
+        whenever $ qReify_ ''MonadFDMixed |-> $(reifyStatic ''MonadFDMixed)
 
         decs1 <- runQ (deriveMockableType [t|MonadFDMixed String Int|])
         decs2 <-
@@ -283,11 +263,11 @@ fdMixedTests = describe "MonadFDMixed" $ do
   it "is mockable" $
     example $ do
       let success = runMockT $ do
-            mock $ expect $ fdMixed_ "foo" 1 "bar" |-> ()
+            expect $ fdMixed_ "foo" 1 "bar" |-> ()
             fdMixed "foo" 1 "bar"
 
           failure = runMockT $ do
-            mock $ expect $ fdMixed_ "foo" 1 "bar" |-> ()
+            expect $ fdMixed_ "foo" 1 "bar" |-> ()
             fdMixed "bar" 1 "foo"
 
       success
@@ -304,9 +284,7 @@ polyArgTests = describe "MonadPolyArg" $ do
     example $ do
       decs <- runMockT $ do
         setupQuasi
-        mock $
-          whenever $
-            qReify_ ''MonadPolyArg |-> $(reifyStatic ''MonadPolyArg)
+        whenever $ qReify_ ''MonadPolyArg |-> $(reifyStatic ''MonadPolyArg)
 
         runQ (makeMockable ''MonadPolyArg)
       evaluate (rnf decs)
@@ -315,16 +293,12 @@ polyArgTests = describe "MonadPolyArg" $ do
     example $ do
       let missingScopedTypeVariables = runMockT $ do
             setupQuasi
-            mock $
-              whenever $
-                qReify_ ''MonadPolyArg |-> $(reifyStatic ''MonadPolyArg)
-            mock $ expectAny $ qIsExtEnabled_ ScopedTypeVariables |-> False
-            mock $
-              expect $
-                QReport_
-                  anything
-                  (hasSubstr "Please enable ScopedTypeVariables")
-                  |-> ()
+            whenever $
+              qReify_ ''MonadPolyArg |-> $(reifyStatic ''MonadPolyArg)
+            expectAny $ qIsExtEnabled_ ScopedTypeVariables |-> False
+            expect $
+              QReport_ anything (hasSubstr "Please enable ScopedTypeVariables")
+                |-> ()
 
             _ <- runQ (makeMockable ''MonadPolyArg)
             return ()
@@ -335,13 +309,10 @@ polyArgTests = describe "MonadPolyArg" $ do
     example $ do
       let missingRankNTypes = runMockT $ do
             setupQuasi
-            mock $
-              whenever $
-                qReify_ ''MonadPolyArg |-> $(reifyStatic ''MonadPolyArg)
-            mock $ expectAny $ qIsExtEnabled_ RankNTypes |-> False
-            mock $
-              expect $
-                QReport_ anything (hasSubstr "Please enable RankNTypes") |-> ()
+            whenever $ qReify_ ''MonadPolyArg |-> $(reifyStatic ''MonadPolyArg)
+            expectAny $ qIsExtEnabled_ RankNTypes |-> False
+            expect $
+              QReport_ anything (hasSubstr "Please enable RankNTypes") |-> ()
 
             _ <- runQ (makeMockable ''MonadPolyArg)
             return ()
@@ -351,17 +322,13 @@ polyArgTests = describe "MonadPolyArg" $ do
   it "is mockable" $
     example $ do
       let success = runMyBase . runMockT $ do
-            mock $
-              expect $
-                PolyArg_ (eq "foo") (suchThat ((== 1) . fromEnum)) anything
-                  |-> ()
+            expect $
+              PolyArg_ (eq "foo") (suchThat ((== 1) . fromEnum)) anything |-> ()
             polyArg "foo" (toEnum 1 :: Bool) "hello"
 
           failure = runMyBase . runMockT $ do
-            mock $
-              expect $
-                PolyArg_ (eq "foo") (suchThat ((== 1) . fromEnum)) anything
-                  |-> ()
+            expect $
+              PolyArg_ (eq "foo") (suchThat ((== 1) . fromEnum)) anything |-> ()
             polyArg "foo" (toEnum 2 :: Bool) "hello"
 
       success
@@ -378,10 +345,8 @@ unshowableArgTests = describe "MonadUnshowableArg" $ do
     example $ do
       decs <- runMockT $ do
         setupQuasi
-        mock $
-          whenever $
-            qReify_ ''MonadUnshowableArg
-              |-> $(reifyStatic ''MonadUnshowableArg)
+        whenever $
+          qReify_ ''MonadUnshowableArg |-> $(reifyStatic ''MonadUnshowableArg)
 
         runQ (makeMockable ''MonadUnshowableArg)
       evaluate (rnf decs)
@@ -389,11 +354,11 @@ unshowableArgTests = describe "MonadUnshowableArg" $ do
   it "is mockable" $
     example $ do
       let success = runMyBase . runMockT $ do
-            mock $ expect $ UnshowableArg_ anything |-> ()
+            expect $ UnshowableArg_ anything |-> ()
             unshowableArg (+ 1)
 
           failure = runMyBase . runMockT $ do
-            mock $ expect $ UnshowableArg_ anything |-> ()
+            expect $ UnshowableArg_ anything |-> ()
 
             unshowableArg (+ 1)
             unshowableArg (+ 1)
@@ -412,10 +377,7 @@ monadInArgTests = describe "MonadInArg" $ do
     example $ do
       decs <- runMockT $ do
         setupQuasi
-        mock $
-          whenever $
-            qReify_ ''MonadInArg
-              |-> $(reifyStatic ''MonadInArg)
+        whenever $ qReify_ ''MonadInArg |-> $(reifyStatic ''MonadInArg)
 
         runQ (makeMockable ''MonadInArg)
       evaluate (rnf decs)
@@ -423,11 +385,11 @@ monadInArgTests = describe "MonadInArg" $ do
   it "is mockable" $
     example $ do
       let success = runMyBase . runMockT $ do
-            mock $ expect $ MonadInArg_ anything |-> ()
+            expect $ MonadInArg_ anything |-> ()
             monadInArg (const (return ()))
 
           failure = runMyBase . runMockT $ do
-            mock $ expect $ UnshowableArg_ anything |-> ()
+            expect $ UnshowableArg_ anything |-> ()
 
             monadInArg (const (return ()))
             monadInArg (const (return ()))
@@ -454,10 +416,9 @@ extraneousMembersTests = describe "MonadExtraneousMembers" $ do
     example $ do
       decs <- runMockT $ do
         setupQuasi
-        mock $
-          whenever $
-            qReify_ ''MonadExtraneousMembers
-              |-> $(reifyStatic ''MonadExtraneousMembers)
+        whenever $
+          qReify_ ''MonadExtraneousMembers
+            |-> $(reifyStatic ''MonadExtraneousMembers)
 
         runQ (deriveMockable ''MonadExtraneousMembers)
       evaluate (rnf decs)
@@ -466,13 +427,11 @@ extraneousMembersTests = describe "MonadExtraneousMembers" $ do
     example $ do
       let unmockableMethods = runMockT $ do
             setupQuasi
-            mock $
-              whenever $
-                qReify_ ''MonadExtraneousMembers
-                  |-> $(reifyStatic ''MonadExtraneousMembers)
-            mock $
-              expect $
-                QReport_ anything (hasSubstr "has unmockable methods") |-> ()
+            whenever $
+              qReify_ ''MonadExtraneousMembers
+                |-> $(reifyStatic ''MonadExtraneousMembers)
+            expect $
+              QReport_ anything (hasSubstr "has unmockable methods") |-> ()
 
             _ <- runQ (makeMockable ''MonadExtraneousMembers)
             return ()
@@ -482,11 +441,11 @@ extraneousMembersTests = describe "MonadExtraneousMembers" $ do
   it "is mockable" $
     example $ do
       let success = runMyBase . runMockT $ do
-            mock $ expect $ mockableMethod_ 42 |-> ()
+            expect $ mockableMethod_ 42 |-> ()
             mockableMethod (favoriteNumber (SomeCon @(MockT IO)))
 
           failure = runMyBase . runMockT $ do
-            mock $ expect $ mockableMethod_ 42 |-> ()
+            expect $ mockableMethod_ 42 |-> ()
             mockableMethod 12
 
       success
@@ -502,13 +461,12 @@ errorTests = describe "errors" $ do
     example $ do
       let wrongKind = runMockT $ do
             setupQuasi
-            mock $ whenever $ qReify_ ''Int |-> $(reifyStatic ''Int)
-            mock $
-              expect $
-                QReport_
-                  anything
-                  (hasSubstr "Expected GHC.Types.Int to be a class")
-                  |-> ()
+            whenever $ qReify_ ''Int |-> $(reifyStatic ''Int)
+            expect $
+              QReport_
+                anything
+                (hasSubstr "Expected GHC.Types.Int to be a class")
+                |-> ()
 
             _ <- runQ (makeMockable ''Int)
             return ()
@@ -519,8 +477,7 @@ errorTests = describe "errors" $ do
     example $ do
       let notClass = runMockT $ do
             setupQuasi
-            mock $
-              expect $ QReport_ anything (hasSubstr "Expected a class") |-> ()
+            expect $ QReport_ anything (hasSubstr "Expected a class") |-> ()
 
             _ <- runQ (makeMockableType [t|(Int, String)|])
             return ()
@@ -531,16 +488,13 @@ errorTests = describe "errors" $ do
     example $ do
       let tooManyParams = runMockT $ do
             setupQuasi
-            mock $
-              whenever $
-                qReify_ ''ClassWithNoParams
-                  |-> $(reifyStatic ''ClassWithNoParams)
-            mock $
-              expect $
-                QReport_
-                  anything
-                  (hasSubstr "ClassWithNoParams has no type parameters")
-                  |-> ()
+            whenever $
+              qReify_ ''ClassWithNoParams |-> $(reifyStatic ''ClassWithNoParams)
+            expect $
+              QReport_
+                anything
+                (hasSubstr "ClassWithNoParams has no type parameters")
+                |-> ()
 
             _ <- runQ (makeMockable ''ClassWithNoParams)
             return ()
@@ -551,10 +505,9 @@ errorTests = describe "errors" $ do
     example $ do
       let noMockableMethods = runMockT $ do
             setupQuasi
-            mock $ whenever $ qReify_ ''Show |-> $(reifyStatic ''Show)
-            mock $
-              expect $
-                QReport_ anything (hasSubstr "has no mockable methods") |-> ()
+            whenever $ qReify_ ''Show |-> $(reifyStatic ''Show)
+            expect $
+              QReport_ anything (hasSubstr "has no mockable methods") |-> ()
 
             _ <- runQ (deriveMockable ''Show)
             return ()

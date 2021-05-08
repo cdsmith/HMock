@@ -39,14 +39,13 @@ to Mockito for Java, GoogleMock for C++, and other mainstream languages.
     ```haskell
     test_copyFile :: IO ()
     test_copyFile = runMockT $ do
-      mock $ expect $ readFile_ "foo.txt" |-> "contents"
-      mock $ expect $ writeFile_ "bar.txt" "contents" |-> ()
+      expect $ readFile_ "foo.txt" |-> "contents"
+      expect $ writeFile_ "bar.txt" "contents" |-> ()
 
       copyFile "foo.txt" "bar.txt"
     ```
 
     * `runMockT` runs code in the `MockT` monad transformer.
-    * `mock` adds an expectation or rule to the test.
     * `expect` expects a method to be called exactly once.
     * `readFile_` and `writeFile_` match the function calls.  They are defined
       by `makeMockable`.
@@ -366,11 +365,12 @@ makeMockable ''MonadDB
 ```
 
 To convert a test using monad-mock into a test using HMock, move expectations
-from a list outside of `MockT` to a `mock` call inside `MockT`.  To preserve the
-exact behavior of the old test, use `inSequence`.  You'll also need to change
-your old action constructors to exact `Matcher`s, and change `:->` to `|->`.
+from the list argument `runMockT` to `expect` calls inside `runMockT`.  To
+preserve the exact behavior of the old test, wrap your `expect`s in a
+`inSequence`.  You'll also need to change your old action constructors (`Foo`)
+to exact `Matcher`s (`foo_`), and change `:->` to `|->`.
 
-If you previously wrote:
+If you previously wrote (with monad-mock):
 
 ``` haskell
 runMockT
@@ -380,11 +380,11 @@ runMockT
   (copyFile "foo.txt" "bar.txt")
 ```
 
-You will now write this:
+You will now write this (with HMock):
 
 ``` haskell
 runMockT $ do
-    mock $ inSequence
+    inSequence
       [ expect $ readFile_ "foo.txt" |-> "contents",
         expect $ writeFile_ "bar.txt" "contents" |-> ()
       ]
@@ -401,8 +401,8 @@ two independent expectations, instead.
 
 ``` haskell
 runMockT $ do
-    mock $ expect $ readFile_ "foo.txt" |-> "contents"
-    mock $ expect $ writeFile_ "bar.txt" "contents" |-> ()
+    expect $ readFile_ "foo.txt" |-> "contents"
+    expect $ writeFile_ "bar.txt" "contents" |-> ()
     copyFile "foo.txt" "bar.txt"
 ```
 

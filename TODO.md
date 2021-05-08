@@ -2,12 +2,6 @@
 
 ## Test with wider range of GHC/TH versions.
 
-## Get rid of `mock $ expect $ ...`
-
-This is annoying.  I should be able to just say `expect $ ...`.  The problem is
-that `expect` can also be used as part of `inSequence` or `inAnyOrder`, so there
-is some type ambiguity.  Perhaps a type class would solve the problem?
-
 ## Superclasses are broken.
 
 This came up with `Quasi`.  Aside from other reasons that `makeMockable` would
@@ -93,7 +87,7 @@ type-specific expectations like this:
 
 ``` haskell
 -- Matches foo applied only to Bool.
-mock $ whenever $ Foo_ __ :=> const (return True)
+whenever $ Foo_ __ :=> const (return True)
 ```
 
 This is a perfectly good matcher and response, since the polymorphic return
@@ -108,7 +102,7 @@ Second, you could try to write a polymorphic expectation, like this:
 
 ``` haskell
 -- Matches foo applied to any type of argument.
-mock $ whenever $ Foo_ __ :=> \(Foo x) -> return x
+whenever $ Foo_ __ :=> \(Foo x) -> return x
 ```
 
 However, `(:=>)` has an ambiguous type here.  My instinct is to try to promote

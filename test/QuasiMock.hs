@@ -58,31 +58,23 @@ instance (Typeable m, MonadFail m, MonadIO m) => Quasi (MockT m) where
 -- | Sets up some common default behaviors for the Quasi type class.
 setupQuasi :: (Typeable m, MonadIO m, MonadFail m) => MockT m ()
 setupQuasi = do
-  mock $ whenever $ QIsExtEnabled_ anything |-> True
-  mock $
-    whenever $
-      qReifyInstances_ ''Show [ConT ''String]
-        |-> $(reifyInstancesStatic ''Show [ConT ''String])
-  mock $
-    whenever $
-      qReifyInstances_ ''Eq [ConT ''String]
-        |-> $(reifyInstancesStatic ''Eq [ConT ''String])
-  mock $
-    whenever $
-      qReifyInstances_ ''Show [ConT ''Int]
-        |-> $(reifyInstancesStatic ''Show [ConT ''Int])
-  mock $
-    whenever $
-      qReifyInstances_ ''Eq [ConT ''Int]
-        |-> $(reifyInstancesStatic ''Eq [ConT ''Int])
-  mock $
-    whenever $
-      QReifyInstances_ (eq ''Show) (suchThat isFunctionType)
-        |-> []
-  mock $
-    whenever $
-      QReifyInstances_ (eq ''Eq) (suchThat isFunctionType)
-        |-> []
+  whenever $ QIsExtEnabled_ anything |-> True
+  whenever $
+    qReifyInstances_ ''Show [ConT ''String]
+      |-> $(reifyInstancesStatic ''Show [ConT ''String])
+  whenever $
+    qReifyInstances_ ''Eq [ConT ''String]
+      |-> $(reifyInstancesStatic ''Eq [ConT ''String])
+  whenever $
+    qReifyInstances_ ''Show [ConT ''Int]
+      |-> $(reifyInstancesStatic ''Show [ConT ''Int])
+  whenever $
+    qReifyInstances_ ''Eq [ConT ''Int]
+      |-> $(reifyInstancesStatic ''Eq [ConT ''Int])
+  whenever $
+    QReifyInstances_ (eq ''Show) (suchThat isFunctionType) |-> []
+  whenever $
+    QReifyInstances_ (eq ''Eq) (suchThat isFunctionType) |-> []
 
 isFunctionType :: [Type] -> Bool
 isFunctionType = everything (||) (mkQ False isArrow)
