@@ -1,5 +1,3 @@
-## Write good module docs.
-
 ## Superclasses are broken.
 
 This came up with `Quasi`.  Aside from other reasons that `makeMockable` would

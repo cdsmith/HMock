@@ -1,10 +1,16 @@
 cabal-version:      2.4
-name:               hmock
+name:               HMock
 version:            0.1.0.0
-
-synopsis:           Flexible mock framework for Haskell
-description:        TODO
-
+synopsis:           A flexible mock framework for unit testing effectful code.
+description:        A flexible mock framework for unit testing effectful code.
+                    Tests can set up expectations about actions that can or
+                    should be performed and their results, and then verify those
+                    expectations when the test is complete.
+                    .
+                    For more information, see the module documentation for
+                    "Test.HMock".
+category:           Testing
+homepage:           N/A
 bug-reports:        N/A
 license:            BSD-3-Clause
 license-file:       LICENSE
@@ -49,7 +55,7 @@ test-suite tests
                       deepseq,
                       directory,
                       extra,
-                      hmock,
+                      HMock,
                       hspec,
                       mtl,
                       syb,
