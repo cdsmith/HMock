@@ -28,12 +28,6 @@ class Monad m => MonadDB a m where
 
 makeMockable ''MonadDB
 
-errorWith :: (String -> Bool) -> SomeException -> Bool
-errorWith p e = p (show e)
-
-(<&&>) :: Applicative f => f Bool -> f Bool -> f Bool
-x <&&> y = (&&) <$> x <*> y
-
 coreTests :: SpecWith ()
 coreTests = do
   describe "HMock core" $ do
@@ -320,3 +314,9 @@ coreTests = do
           readFile "foo.txt" >>= readFile
 
         result `shouldBe` "final"
+
+errorWith :: (String -> Bool) -> SomeException -> Bool
+errorWith p e = p (show e)
+
+(<&&>) :: Applicative f => f Bool -> f Bool -> f Bool
+x <&&> y = (&&) <$> x <*> y
