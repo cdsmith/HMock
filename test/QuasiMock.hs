@@ -8,7 +8,6 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# OPTIONS_GHC -Wno-orphans #-}
 
 module QuasiMock where
 
@@ -16,7 +15,8 @@ import Control.Monad.Trans (MonadIO, liftIO)
 import Data.Generics (Typeable, everything, mkQ)
 import Language.Haskell.TH hiding (Match)
 import Language.Haskell.TH.Syntax hiding (Match)
-import THUtil
+import qualified Language.Haskell.TH.Syntax
+import THUtil (deriveRecursive)
 import Test.HMock
 import Test.HMock.TH
 
@@ -54,26 +54,18 @@ instance (Typeable m, MonadFail m, MonadIO m) => Quasi (MockT m) where
   qRecover = error "qRecover"
   qReifyAnnotations = error "qReifyAnnotations"
 
--- | Sets up some common default behaviors for the Quasi type class.
-setupQuasi :: (Typeable m, MonadIO m, MonadFail m) => MockT m ()
-setupQuasi = do
-  whenever $ QIsExtEnabled_ anything |-> True
-  whenever $
-    qReifyInstances_ ''Show [ConT ''String]
-      |-> $(reifyInstancesStatic ''Show [ConT ''String])
-  whenever $
-    qReifyInstances_ ''Eq [ConT ''String]
-      |-> $(reifyInstancesStatic ''Eq [ConT ''String])
-  whenever $
-    qReifyInstances_ ''Show [ConT ''Int]
-      |-> $(reifyInstancesStatic ''Show [ConT ''Int])
-  whenever $
-    qReifyInstances_ ''Eq [ConT ''Int]
-      |-> $(reifyInstancesStatic ''Eq [ConT ''Int])
-  whenever $
-    QReifyInstances_ (eq ''Show) (suchThat isFunctionType) |-> []
-  whenever $
-    QReifyInstances_ (eq ''Eq) (suchThat isFunctionType) |-> []
+-- Pre-define unnecessary low-level instances for Lift and NFData, to prevent
+-- deriveRecursive from trying.
+
+instance Lift Bytes where lift = undefined; liftTyped = undefined
+
+deriveRecursive Nothing ''Lift [''Info, ''InstanceDec]
+
+reifyStatic :: Name -> Q Exp
+reifyStatic n = reify n >>= lift
+
+reifyInstancesStatic :: Name -> [Type] -> Q Exp
+reifyInstancesStatic n ts = reifyInstances n ts >>= lift
 
 isFunctionType :: [Type] -> Bool
 isFunctionType = everything (||) (mkQ False isArrow)

@@ -1,4 +1,6 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GADTs #-}
@@ -6,6 +8,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -14,14 +17,41 @@ module Classes where
 
 import Control.DeepSeq (NFData (rnf))
 import Control.Exception (evaluate)
+import Control.Monad.Trans (MonadIO)
 import Data.Default (Default (def))
 import Data.Dynamic (Typeable)
-import Language.Haskell.TH (Extension (..), runQ)
+import Language.Haskell.TH.Syntax
 import QuasiMock
-import THUtil (reifyStatic)
+import THUtil (deriveRecursive)
 import Test.HMock
 import Test.HMock.TH
 import Test.Hspec
+
+instance NFData Bytes where rnf = undefined
+
+deriveRecursive (Just AnyclassStrategy) ''NFData [''Info, ''InstanceDec]
+
+-- | Sets up some common default behaviors for the Quasi type class.
+setupQuasi :: (Typeable m, MonadIO m, MonadFail m) => MockT m ()
+setupQuasi = do
+  whenever $ QIsExtEnabled_ anything |-> True
+
+  whenever $
+    qReifyInstances_ ''Show [ConT ''String]
+      |-> $(reifyInstancesStatic ''Show [ConT ''String])
+  whenever $
+    qReifyInstances_ ''Eq [ConT ''String]
+      |-> $(reifyInstancesStatic ''Eq [ConT ''String])
+  whenever $
+    qReifyInstances_ ''Show [ConT ''Int]
+      |-> $(reifyInstancesStatic ''Show [ConT ''Int])
+  whenever $
+    qReifyInstances_ ''Eq [ConT ''Int]
+      |-> $(reifyInstancesStatic ''Eq [ConT ''Int])
+  whenever $
+    QReifyInstances_ (eq ''Show) (suchThat isFunctionType) |-> []
+  whenever $
+    QReifyInstances_ (eq ''Eq) (suchThat isFunctionType) |-> []
 
 class MonadSimple m where
   simple :: String -> m ()
@@ -207,7 +237,7 @@ class MonadFDGeneral a m | m -> a where
 deriveMockable ''MonadFDGeneral
 
 newtype MyBase m a = MyBase {runMyBase :: m a}
-  deriving (Functor, Applicative, Monad)
+  deriving newtype (Functor, Applicative, Monad)
 
 instance
   (Monad m, Typeable m) =>

@@ -26,7 +26,7 @@ choose the most specific match, or just the most recently added.
 I definitely don't like gMock's "most recently added" rule, but most specific is
 appealing.  This would mean adding some kind of partial order on specificity of
 predicates.  We'd probably just adopt a three-tier system, where `eq x` >
-anything else matching `x` > `__`.
+anything else matching `x` > `anything`.
 
 ## Test with wider range of GHC/TH versions.
 
@@ -112,7 +112,7 @@ Second, you could try to write a polymorphic expectation, like this:
 
 ``` haskell
 -- Matches foo applied to any type of argument.
-whenever $ Foo_ __ :=> \(Foo x) -> return x
+whenever $ Foo_ anything :=> \(Foo x) -> return x
 ```
 
 However, `(:=>)` has an ambiguous type here.  My instinct is to try to promote
@@ -124,7 +124,7 @@ as well.  This could be done in a type-level list.
 
 If we do this right and get lucky, it could provide the type-specific case,
 since adding the (regrettably necessary) `Typeable` constraint to the method
-would allow you to write `Foo_ (typed @Int __)` as a matcher.  Ideally, this
-should also replace the existing behavior for polymorphic arguments, which are
-already universally quantified with rank-n types in the Matcher.  But my
+would allow you to write `Foo_ (typed @Int anything)` as a matcher.  Ideally,
+this should also replace the existing behavior for polymorphic arguments, which
+are already universally quantified with rank-n types in the Matcher.  But my
 attempts to make this work have so far failed.
