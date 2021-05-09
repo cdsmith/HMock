@@ -10,8 +10,8 @@ import Control.Monad.Extra
 import Control.Monad.State
 import Language.Haskell.TH
 
-deriveRecursive :: Maybe DerivStrategy -> Name -> [Name] -> Q [Dec]
-deriveRecursive strat cls ts = evalStateT (concatMapM defineIfNeeded ts) []
+deriveRecursive :: Maybe DerivStrategy -> Name -> Name -> Q [Dec]
+deriveRecursive strat cls ty = evalStateT (concatMapM defineIfNeeded [ty]) []
   where
     defineIfNeeded :: Name -> StateT [Name] Q [Dec]
     defineIfNeeded t = do

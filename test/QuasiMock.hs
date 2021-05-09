@@ -54,12 +54,11 @@ instance (Typeable m, MonadFail m, MonadIO m) => Quasi (MockT m) where
   qRecover = error "qRecover"
   qReifyAnnotations = error "qReifyAnnotations"
 
--- Pre-define unnecessary low-level instances for Lift and NFData, to prevent
--- deriveRecursive from trying.
-
+-- Pre-define low-level instance to prevent deriveRecursive from trying.
 instance Lift Bytes where lift = undefined; liftTyped = undefined
 
-deriveRecursive Nothing ''Lift [''Info, ''InstanceDec]
+deriveRecursive Nothing ''Lift ''Info
+deriveRecursive Nothing ''Lift ''InstanceDec
 
 reifyStatic :: Name -> Q Exp
 reifyStatic n = reify n >>= lift
