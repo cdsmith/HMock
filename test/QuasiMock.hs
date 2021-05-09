@@ -1,8 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveLift #-}
-{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
@@ -17,8 +15,8 @@ import Language.Haskell.TH hiding (Match)
 import Language.Haskell.TH.Syntax hiding (Match)
 import qualified Language.Haskell.TH.Syntax
 import THUtil (deriveRecursive)
-import Test.HMock
-import Test.HMock.TH
+import Test.HMock (MockT, mockMethod)
+import Test.HMock.TH (deriveMockable)
 
 deriveMockable ''Quasi
 

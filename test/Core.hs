@@ -7,12 +7,12 @@
 
 module Core where
 
-import Control.Exception
-import Control.Monad
-import Control.Monad.State
-import Data.List
+import Control.Exception (SomeException)
+import Control.Monad (replicateM_)
+import Control.Monad.State (execStateT, modify)
+import Data.List (isInfixOf, isPrefixOf)
 import Test.HMock
-import Test.HMock.TH
+import Test.HMock.TH (makeMockable)
 import Test.Hspec
 import Prelude hiding (readFile, writeFile)
 

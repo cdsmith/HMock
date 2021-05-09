@@ -1,12 +1,6 @@
-{-# LANGUAGE DeriveAnyClass #-}
-{-# LANGUAGE DeriveLift #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE TemplateHaskellQuotes #-}
-
 module THUtil where
 
-import Control.Monad.Extra
+import Control.Monad.Extra (concatMapM)
 import Control.Monad.State
 import Language.Haskell.TH
 
@@ -16,9 +10,7 @@ deriveRecursive strat cls ty = evalStateT (concatMapM defineIfNeeded [ty]) []
     defineIfNeeded :: Name -> StateT [Name] Q [Dec]
     defineIfNeeded t = do
       done <- gets (t `elem`)
-      if done then return [] else do
-        modify (t :)
-        defineInstance t
+      if done then return [] else modify (t :) >> defineInstance t
 
     defineInstance :: Name -> StateT [Name] Q [Dec]
     defineInstance t = do
@@ -32,14 +24,16 @@ deriveRecursive strat cls ty = evalStateT (concatMapM defineIfNeeded [ty]) []
     defineTypeAndCons :: Name -> [Con] -> StateT [Name] Q [Dec]
     defineTypeAndCons t cons = do
       hasInstance <- lift (isInstance cls [ConT t])
-      if hasInstance then return [] else do
-        fieldDecls <-
-          concatMapM defineIfNeeded $
-            concatMap typeToCons (concatMap conFieldTypes cons)
-        return
-          ( StandaloneDerivD strat [] (AppT (ConT cls) (ConT t)) :
-            fieldDecls
-          )
+      if hasInstance
+        then return []
+        else do
+          fieldDecls <-
+            concatMapM defineIfNeeded $
+              concatMap typeToCons $ concatMap conFieldTypes cons
+          return
+            ( StandaloneDerivD strat [] (AppT (ConT cls) (ConT t)) :
+              fieldDecls
+            )
 
     conFieldTypes :: Con -> [Type]
     conFieldTypes (NormalC _ bts) = snd <$> bts
