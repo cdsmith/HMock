@@ -188,6 +188,7 @@ data Instance = Instance
     instRequiredContext :: Cxt,
     instExactParams :: [(Name, Type)],
     instGeneralParams :: [Name],
+    instMonadVar :: Name,
     instMethods :: [Method],
     instExtraMembers :: [Dec]
   }
@@ -201,9 +202,6 @@ data Method = Method
     methodResult :: Type
   }
   deriving (Show)
-
-monadVar :: Instance -> Name
-monadVar inst = last (instGeneralParams inst)
 
 internalError :: HasCallStack => Q a
 internalError = error "Internal error in HMock.  Please report this as a bug."
@@ -239,8 +237,16 @@ getInstance ty = withClass ty go
     go _ = internalError
 
 makeInstance :: Type -> Cxt -> [(Name, Type)] -> [Name] -> [Dec] -> Instance
-makeInstance ty cx tbl ps members = do
-  Instance ty cx tbl ps methods extraMembers
+makeInstance ty cx tbl ps members =
+  Instance
+    { instType = ty,
+      instRequiredContext = cx,
+      instExactParams = tbl,
+      instGeneralParams = init ps,
+      instMonadVar = last ps,
+      instMethods = methods,
+      instExtraMembers = extraMembers
+    }
   where
     (extraMembers, methods) =
       partitionEithers
@@ -258,7 +264,14 @@ getMethod m tbl (SigD name ty)
           map
             (substTypeVars [(m, AppT (ConT ''MockT) (VarT m))])
             (init argsAndReturn)
-     in Just (Method name tvs cx argTypes result)
+     in Just $
+          Method
+            { methodName = name,
+              methodTyVars = tvs,
+              methodCxt = cx,
+              methodArgs = argTypes,
+              methodResult = result
+            }
 getMethod _ _ _ = Nothing
 
 isKnownType :: Method -> Type -> Bool
@@ -306,7 +319,7 @@ deriveMockableImpl options qt = do
   (++)
     <$> sequenceA
       [ instanceD
-          (constrainVars (conT ''Typeable) (init (instGeneralParams inst)))
+          (constrainVars (conT ''Typeable) (instGeneralParams inst))
           [t|Mockable $(pure (instType inst))|]
           [ defineActionType options inst,
             defineMatcherType options inst,
@@ -341,7 +354,7 @@ actionConstructor options inst method = do
         Action
           $(pure (instType inst))
           $(litT (strTyLit (nameBase (methodName method))))
-          $(varT (monadVar inst))
+          $(varT (instMonadVar inst))
           $(pure (methodResult method))
         |]
 
@@ -374,7 +387,7 @@ matcherConstructor options inst method = do
       Matcher
         $(pure (instType inst))
         $(litT (strTyLit (nameBase (methodName method))))
-        $(varT (monadVar inst))
+        $(varT (instMonadVar inst))
         $(pure (methodResult method))
       |]
   where
@@ -535,7 +548,7 @@ defineExactMatcher options inst method = do
                       Matcher
                         $(pure (instType inst))
                         $(litT (strTyLit (nameBase (methodName method))))
-                        $(varT (monadVar inst))
+                        $(varT (instMonadVar inst))
                         $(pure (methodResult method))
                       |]
                     (methodArgs method)
@@ -595,9 +608,7 @@ deriveForMockTImpl options qt = do
     [ instanceD
         ( concat
             <$> sequenceA
-              [ constrainVars
-                  (conT ''Typeable)
-                  (init (instGeneralParams inst)),
+              [ constrainVars (conT ''Typeable) (instGeneralParams inst),
                 sequenceA
                   [ [t|Typeable $(varT m)|],
                     [t|Monad $(varT m)|]
