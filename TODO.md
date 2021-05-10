@@ -5,9 +5,6 @@ that won't compile because of impredicative types.  Sure, QL is coming soon to
 fix that, but still it's not a great look to generate broken code, so we should
 do something about it.  Probably skip generating the method.
 
-We should also test the case for rank n types inside of arguments (but not at
-the top level).  These should be fine, if they are arguments to `(->)`.
-
 ## Ambiguity resolution
 
 Currently, it's an error when more than one `Matcher` in the expectations
