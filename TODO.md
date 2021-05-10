@@ -1,9 +1,3 @@
-## Superclasses are broken.
-
-This came up with `Quasi`.  Aside from other reasons that `makeMockable` would
-fail, it fails because the `MockT` instance needs `MonadFail` and `MonadIO` as
-superclasses.  TH code needs to handle this, and there should be tests for it.
-
 ## Do something about rank-n arguments
 
 Right now, if a monad has forall in an argument, makeMockable generates code
@@ -39,43 +33,6 @@ of these effect systems.
 * `fused-effects`
 * `polysemy`
 * `eff`
-
-## Have a plan for functional dependencies
-
-``` haskell
-class MonadFoo a m | m -> a where
-  foo :: a -> m ()
-
-makeMockable ''MonadFoo
-```
-
-This fails, because the derived instance for `MonadFoo a (MockT m)` doesn't
-satisfy the functional dependency: the same `MockT m` could be used for many
-choices of `a`.
-
-One can do this instead:
-
-``` haskell
-deriveMockable ''MonadFoo2
-deriveTypeForMockT [t| MonadFoo2 Int |]
-```
-
-However, this is actually kind of anti-modular.  If you later end up defining an
-instance for `String` instead of `Int`, in a different test or anything that you
-import, you get an error because of the functional dependency again.
-
-A work-around for this is to declare a `newtype`, like this:
-
-``` haskell
-newtype MyTestT m a = MyTestT {runMyTestT :: m a}
-  deriving (Functor, Applicative, Monad)
-
-instance (Monad m, Typeable m) => MonadFoo2 Int (MockT (MyTestT m)) where
-  foo2 x = mockMethod (Foo2 x)
-```
-
-This is a bit of a pain.  I should think about how to help people do the right
-thing here.
 
 ## Mockable with polymorphic return values.
 
