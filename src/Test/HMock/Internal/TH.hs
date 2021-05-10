@@ -20,7 +20,7 @@ module Test.HMock.Internal.TH
   )
 where
 
-import Control.Monad (replicateM, unless, when)
+import Control.Monad (replicateM, unless, when, zipWithM)
 import Control.Monad.Extra (concatMapM)
 import Data.Bool (bool)
 import Data.Char (toUpper)
@@ -28,7 +28,7 @@ import Data.Default (Default (..))
 import Data.Either (partitionEithers)
 import Data.Generics (everythingWithContext, everywhere, mkQ, mkT)
 import qualified Data.Kind
-import Data.List (foldl')
+import Data.List (foldl', (\\))
 import Data.Type.Equality (type (:~:) (Refl))
 import Data.Typeable (Typeable)
 import GHC.Stack
@@ -39,13 +39,14 @@ import Test.HMock.Internal.Core
 import Test.HMock.Internal.Predicates (Predicate (accept), eq)
 
 -- | Custom options for deriving a 'Mockable' class.
-newtype MockableOptions = MockableOptions
+data MockableOptions = MockableOptions
   { -- | Suffix to add to 'Action' and 'Matcher' names.  Defaults to @""@.
-    mockSuffix :: String
+    mockSuffix :: String,
+    mockVerbose :: Bool
   }
 
 instance Default MockableOptions where
-  def = MockableOptions {mockSuffix = ""}
+  def = MockableOptions {mockSuffix = "", mockVerbose = False}
 
 -- | Define all instances necessary to use HMock with the given class.
 -- Equivalent to both 'deriveMockable' and 'deriveForMockT'.
@@ -186,7 +187,6 @@ tvName (KindedTV name _) = name
 data Instance = Instance
   { instType :: Type,
     instRequiredContext :: Cxt,
-    instExactParams :: [(Name, Type)],
     instGeneralParams :: [Name],
     instMonadVar :: Name,
     instMethods :: [Method],
@@ -216,8 +216,8 @@ withClass t f = do
         _ -> fail $ "Expected " ++ show cls ++ " to be a class, but it wasn't."
     _ -> fail "Expected a class, but got something else."
 
-getInstance :: Type -> Q Instance
-getInstance ty = withClass ty go
+getInstance :: MockableOptions -> Type -> Q Instance
+getInstance options ty = withClass ty go
   where
     go (ClassD _ className [] _ _) =
       fail $ "Class " ++ nameBase className ++ " has no type parameters."
@@ -233,46 +233,70 @@ getInstance ty = withClass ty go
           let t = foldl' (\t' v -> AppT t' (VarT v)) ty (init ps)
           let tbl = zip (tvName <$> params) ts
           let cx' = substTypeVars tbl <$> cx
-          return (makeInstance t cx' tbl ps members)
+          makeInstance options t cx' tbl (init ps) (last ps) members
     go _ = internalError
 
-makeInstance :: Type -> Cxt -> [(Name, Type)] -> [Name] -> [Dec] -> Instance
-makeInstance ty cx tbl ps members =
-  Instance
-    { instType = ty,
-      instRequiredContext = cx,
-      instExactParams = tbl,
-      instGeneralParams = init ps,
-      instMonadVar = last ps,
-      instMethods = methods,
-      instExtraMembers = extraMembers
-    }
+makeInstance ::
+  MockableOptions ->
+  Type ->
+  Cxt ->
+  [(Name, Type)] ->
+  [Name] ->
+  Name ->
+  [Dec] ->
+  Q Instance
+makeInstance options ty cx tbl ps m members = do
+  (extraMembers, methods) <-
+    partitionEithers
+      <$> zipWithM memberOrMethod members (getMethod m tbl <$> members)
+  return $
+    Instance
+      { instType = ty,
+        instRequiredContext = cx,
+        instGeneralParams = ps,
+        instMonadVar = m,
+        instMethods = methods,
+        instExtraMembers = extraMembers
+      }
   where
-    (extraMembers, methods) =
-      partitionEithers
-        (zipWith coalesce members (getMethod (last ps) tbl <$> members))
-    coalesce :: a -> Maybe b -> Either a b
-    coalesce d = maybe (Left d) Right
+    memberOrMethod :: Dec -> Either String Method -> Q (Either Dec Method)
+    memberOrMethod dec (Left warning) = do
+      when (mockVerbose options) $ reportWarning warning
+      return (Left dec)
+    memberOrMethod _ (Right method) = return (Right method)
 
-getMethod :: Name -> [(Name, Type)] -> Dec -> Maybe Method
+getMethod :: Name -> [(Name, Type)] -> Dec -> Either String Method
 getMethod m tbl (SigD name ty)
-  | (tvs, cx, argsAndReturn) <- splitType (substTypeVars tbl ty),
-    AppT (VarT m') result <- last argsAndReturn,
-    m' == m,
-    ([], []) <- relevantContext result (tvs, cx) =
+  | (tvs, cx, argsAndReturn) <- splitType (substTypeVars tbl ty) = do
+    (m', result) <- case last argsAndReturn of
+      AppT (VarT m') result -> return (m', result)
+      _ ->
+        Left $
+          nameBase name
+            ++ " can't be mocked: non-monadic result."
+    when (m' /= m) $
+      Left $
+        nameBase name
+          ++ " can't be mocked: return value in wrong monad."
+    case relevantContext result (tvs, cx) of
+      ([], []) -> return ()
+      _ ->
+        Left $
+          nameBase name
+            ++ " can't be mocked: polymorphic return value."
     let argTypes =
           map
             (substTypeVars [(m, AppT (ConT ''MockT) (VarT m))])
             (init argsAndReturn)
-     in Just $
-          Method
-            { methodName = name,
-              methodTyVars = tvs,
-              methodCxt = cx,
-              methodArgs = argTypes,
-              methodResult = result
-            }
-getMethod _ _ _ = Nothing
+    return $
+      Method
+        { methodName = name,
+          methodTyVars = tvs,
+          methodCxt = cx,
+          methodArgs = argTypes,
+          methodResult = result
+        }
+getMethod _ _ _ = Left "A non-value member cannot be mocked."
 
 isKnownType :: Method -> Type -> Bool
 isKnownType method ty = null tyVars && null cx
@@ -286,7 +310,7 @@ substTypeVars classVars = everywhere (mkT subst)
     subst (VarT x) | Just t <- lookup x classVars = t
     subst t = t
 
-splitType :: Type -> ([TyVarBndr], [Pred], [Type])
+splitType :: Type -> ([TyVarBndr], Cxt, [Type])
 splitType (ForallT tv cx b) =
   let (tvs, cxs, parts) = splitType b in (tv ++ tvs, cx ++ cxs, parts)
 splitType (AppT (AppT ArrowT a) b) =
@@ -302,14 +326,14 @@ freeTypeVars = everythingWithContext [] (++) (mkQ ([],) go)
     go (ForallT vs _ _) bound = ([], map tvName vs ++ bound)
     go _ bound = ([], bound)
 
-constrainVars :: TypeQ -> [Name] -> CxtQ
-constrainVars ty = traverse (appT ty . varT)
+constrainVars :: [TypeQ] -> [Name] -> CxtQ
+constrainVars cs vs = sequence [appT c (varT v) | c <- cs, v <- vs]
 
 deriveMockableImpl :: MockableOptions -> Q Type -> Q [Dec]
 deriveMockableImpl options qt = do
   checkExts [GADTs, TypeFamilies, DataKinds]
 
-  inst <- getInstance =<< qt
+  inst <- getInstance options =<< qt
 
   when (null (instMethods inst)) $ do
     fail $
@@ -317,9 +341,9 @@ deriveMockableImpl options qt = do
         ++ " has no mockable methods."
 
   (++)
-    <$> sequenceA
+    <$> sequence
       [ instanceD
-          (constrainVars (conT ''Typeable) (instGeneralParams inst))
+          (constrainVars [conT ''Typeable] (instGeneralParams inst))
           [t|Mockable $(pure (instType inst))|]
           [ defineActionType options inst,
             defineMatcherType options inst,
@@ -536,7 +560,7 @@ defineExactMatcher options inst method = do
   case maybeCxt of
     Just cx -> do
       argVars <- replicateM (length (methodArgs method)) (newName "a")
-      sequenceA
+      sequence
         [ sigD
             (getExactMatcherName options method)
             ( forallT
@@ -580,7 +604,7 @@ defineExactMatcher options inst method = do
     argCxt argTy
       | not (isKnownType method argTy) = return Nothing
       | VarT v <- argTy =
-        Just <$> sequenceA [[t|Eq $(varT v)|], [t|Show $(varT v)|]]
+        Just <$> sequence [[t|Eq $(varT v)|], [t|Show $(varT v)|]]
       | otherwise = do
         eqInstances <- reifyInstances ''Eq [argTy]
         showInstances <- reifyInstances ''Show [argTy]
@@ -594,7 +618,7 @@ defineExactMatcher options inst method = do
 
 deriveForMockTImpl :: MockableOptions -> Q Type -> Q [Dec]
 deriveForMockTImpl options qt = do
-  inst <- getInstance =<< qt
+  inst <- getInstance options =<< qt
 
   unless (null (instExtraMembers inst)) $
     fail $
@@ -604,20 +628,27 @@ deriveForMockTImpl options qt = do
   m <- newName "m"
   let decs = map (mockMethodImpl options) (instMethods inst)
 
-  sequenceA
-    [ instanceD
-        ( concat
-            <$> sequenceA
-              [ constrainVars (conT ''Typeable) (instGeneralParams inst),
-                sequenceA
-                  [ [t|Typeable $(varT m)|],
-                    [t|Monad $(varT m)|]
-                  ]
-              ]
-        )
-        [t|$(pure (instType inst)) (MockT $(varT m))|]
-        decs
-    ]
+  let cx =
+        instRequiredContext inst
+          \\ [ AppT (ConT ''Typeable) (VarT (instMonadVar inst)),
+               AppT (ConT ''Monad) (VarT (instMonadVar inst))
+             ]
+  let hasMonadInContext = instMonadVar inst `elem` concatMap freeTypeVars cx
+  when hasMonadInContext $ checkExts [FlexibleContexts]
+  let cxMockT =
+        substTypeVars [(instMonadVar inst, AppT (ConT ''MockT) (VarT m))] <$> cx
+
+  (: [])
+    <$> instanceD
+      ( concat
+          <$> sequence
+            [ return cxMockT,
+              constrainVars [[t|Typeable|]] (instGeneralParams inst),
+              constrainVars [[t|Typeable|], [t|Monad|]] [m]
+            ]
+      )
+      [t|$(pure (instType inst)) (MockT $(varT m))|]
+      decs
 
 mockMethodImpl :: MockableOptions -> Method -> Q Dec
 mockMethodImpl options method = do

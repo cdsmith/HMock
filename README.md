@@ -274,41 +274,54 @@ the last type variable.  Then just use `makeMockable ''MonadMPTC`.
 We will consider classes of the form
 
 ``` haskell
-class MonadMPTC a m | m -> a
+class MonadMPTC a b c m | m -> a b c
 ```
 
-If you try to use `makeMockable ''MonadMPTC`, as described in the previous
-question, it will not succeed.  The functional dependency requires that `a` is
-determined by `m`, but `makeMockable` does not know how to choose `a` correctly
-for the `MockT` instance.
+If you try to use `makeMockable ''MonadMPTC` or `deriveForMockT ''MonadMTPC`, it
+will not fail.  The functional dependency requires that `a`, `b`, and `c` are
+determined by `m`, but we cannot them correctly for the `MockT` instance.
 
-You have two choices here:
+Our recommendation is that you run both derive steps separately:
 
-* **Specialize**: Use `makeMockableType [t| MonadMPTC String |]` to set up HMock
-  only when `a ~ String`, which satisfies the functional dependency.  However,
-  it's a bit anti-modular, since any other test with `a ~ Int` cannot be
-  imported in the same places as this one.
-* **Define a base monad**: Use `deriveMockable ''MonadMPTC` to derive the
-  `Mockable` instance for `MonadMPTC a`, but not the instance
-  `MonadMPTC a (MockT m)` that would violate the functional dependency.  Now, to
-  distinguish between different parameters, you will need to define your own
-  base monad, then define your own instance for `MockT (MyBase m)`.
+``` haskell
+deriveMockable ''MonadMPTC
+deriveTypeForMockT [t| MonadMPTC Int String Int |]
+```
 
-  ``` haskell
-  class MonadMPTC a m | m -> a where
-    foo :: a -> m ()
+Here, `deriveMockable` sets up the `Mockable` boilerplate so that you can write
+expectations involving `MonadMPTC`.  This is enough to everything but actually
+call `runMockT`.  For that, you need the `deriveTypeForMockT`.  This part of the
+code is anti-moduler, because you cannot import (even indirectly) two different
+instances for `MockT` with different types in the same module.  These instances
+would be *incoherent*, which Haskell doesn't typically allow.  You can minimize
+the risk by deferrring the `deriveTypeForMockT` into your top-level test code,
+rather than including it in any modules that are imported elsewhere.
 
-  deriveMockable ''MonadMPTC
+You can also just write `makeMockableType [t| MonadMPTC Int String Int |]` and
+derive all instances for the specialized types.  However, your expectations now
+depend on the concrete choice of types, so this is strictly less powerful.  You
+should limit use of `makeMockableType` in the same way you would
+`deriveTypeForMockT` to avoid problems with incoherence.
 
-  newtype StringBase m a = StringBase {runStringBase :: m a}
-    deriving (Functor, Applicative, Monad)
+If you do need to write multiple tests in the same module with different type
+parameters, you will need to use a wrapper around the base monad for `MockT` to
+disambiguate the instances.  That is a bit more involved, and requires that you
+implement the `MockT` instance by hand.  Here's an example:
 
-  instance
-    (Monad m, Typeable m) =>
-    MonadMPTC String (MockT (StringBase m))
-    where
-    foo x = mockMethod (Foo x)
-  ```
+``` haskell
+deriveMockable ''MonadMPTC
+
+newtype MyBase m a = MyBase {runMyBase :: m a}
+  deriving (Functor, Applicative, Monad)
+
+instance
+  (Monad m, Typeable m) =>
+  MonadMPTC String Int String (MockT (MyBase m))
+  where
+  foo x = mockMethod (Foo x)
+```
+
+Obviously, this is a lot of boilerplate, and best to avoid whenever possible.
 
 ### How do I get better stack traces?
 
@@ -338,10 +351,10 @@ Since the orphan heuristic doesn't work, you must take responsibility for
 managing the risk of multiple instances.  The easiest way to do so is to avoid
 defining these instances in libraries.  If you do define instances in libraries,
 try to choose a canonical location for each instance that is consistent across
-all code using the library, and try to limit visibility of these instances to code that follows the same
-convention.  Reuse of mock code can be valuable, but it must be done carefully
-and deliberately, keeping in mind that you are responsible for preventing
-conflict between instances.
+all code using the library, and try to limit reuse of these instances to code
+that follows the same conventions.  Reuse of mock code can be valuable, but it
+must be done carefully and deliberately, keeping in mind that you are
+responsible for preventing conflict between instances.
 
 ### How do I migrate from `monad-mock`?
 

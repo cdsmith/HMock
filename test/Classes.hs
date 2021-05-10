@@ -1,6 +1,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GADTs #-}
@@ -11,6 +12,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 module Classes where
 
@@ -77,6 +79,7 @@ simpleTests = describe "MonadSimple" $ do
       expectAny $ qIsExtEnabled_ FlexibleInstances |-> False
       expectAny $ qIsExtEnabled_ ScopedTypeVariables |-> False
       expectAny $ qIsExtEnabled_ RankNTypes |-> False
+      expectAny $ qIsExtEnabled_ FlexibleContexts |-> False
 
       _ <- runQ (makeMockable ''MonadSimple)
       return ()
@@ -151,6 +154,47 @@ simpleTests = describe "MonadSimple" $ do
           failure = runMockT $ do
             expect $ simple_ "foo" |-> ()
             simple "bar"
+
+      success
+      failure `shouldThrow` anyException
+
+class (MonadIO m, Monad m, Typeable m) => MonadSuper m where
+  withSuper :: m ()
+
+makeMockable ''MonadSuper
+
+superTests :: SpecWith ()
+superTests = describe "MonadSuper" $ do
+  it "generated mock impl" $
+    example $ do
+      decs <- runMockT $ do
+        setupQuasi
+        whenever $ qReify_ ''MonadSuper |-> $(reifyStatic ''MonadSuper)
+
+        runQ (makeMockable ''MonadSuper)
+      evaluate (rnf decs)
+
+  it "fails when FlexibleContexts is disabled" $ do
+    let missingFlexibleContexts = runMockT $ do
+          setupQuasi
+          expectAny $ qIsExtEnabled_ FlexibleContexts |-> False
+          whenever $ qReify_ ''MonadSuper |-> $(reifyStatic ''MonadSuper)
+          expect $
+            QReport_ anything (hasSubstr "Please enable FlexibleContexts")
+              |-> ()
+
+          _ <- runQ (makeMockable ''MonadSuper)
+          return ()
+
+    missingFlexibleContexts `shouldThrow` anyIOException
+
+  it "is mockable" $
+    example $ do
+      let success = runMockT $ do
+            expect $ withSuper_ |-> ()
+            withSuper
+
+          failure = runMockT withSuper
 
       success
       failure `shouldThrow` anyException
@@ -430,6 +474,8 @@ monadInArgTests = describe "MonadInArg" $ do
 class MonadExtraneousMembers m where
   data SomeDataType m
   favoriteNumber :: SomeDataType m -> Int
+  wrongMonad :: Monad n => m Int -> n Int
+  polyResult :: a -> m a
 
   mockableMethod :: Int -> m ()
 
@@ -438,6 +484,9 @@ deriveMockable ''MonadExtraneousMembers
 instance (Typeable m, Monad m) => MonadExtraneousMembers (MockT m) where
   data SomeDataType (MockT m) = SomeCon
   favoriteNumber SomeCon = 42
+  wrongMonad _ = return 42
+  polyResult = return
+
   mockableMethod a = mockMethod (MockableMethod a)
 
 extraneousMembersTests :: SpecWith ()
@@ -451,6 +500,33 @@ extraneousMembersTests = describe "MonadExtraneousMembers" $ do
             |-> $(reifyStatic ''MonadExtraneousMembers)
 
         runQ (deriveMockable ''MonadExtraneousMembers)
+      evaluate (rnf decs)
+
+  it "warns about non-methods" $
+    example $ do
+      decs <- runMockT $ do
+        setupQuasi
+        whenever $
+          qReify_ ''MonadExtraneousMembers
+            |-> $(reifyStatic ''MonadExtraneousMembers)
+        expect $ qReport_ False "A non-value member cannot be mocked." |-> ()
+        expect $
+          qReport_ False "favoriteNumber can't be mocked: non-monadic result."
+            |-> ()
+        expect $
+          qReport_
+            False
+            "wrongMonad can't be mocked: return value in wrong monad."
+            |-> ()
+        expect $
+          qReport_ False "polyResult can't be mocked: polymorphic return value."
+            |-> ()
+
+        runQ
+          ( deriveMockableWithOptions
+              def {mockVerbose = True}
+              ''MonadExtraneousMembers
+          )
       evaluate (rnf decs)
 
   it "fails to derive MockT when class has extra methods" $
@@ -547,6 +623,7 @@ errorTests = describe "errors" $ do
 classTests :: SpecWith ()
 classTests = describe "makeMockable" $ do
   simpleTests
+  superTests
   mptcTests
   fdSpecializedTests
   fdGeneralTests
