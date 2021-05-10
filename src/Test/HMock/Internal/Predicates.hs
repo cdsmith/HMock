@@ -4,7 +4,8 @@
 
 module Test.HMock.Internal.Predicates where
 
-import Data.List (isInfixOf, isPrefixOf, isSuffixOf)
+import Data.Foldable (toList)
+import Data.List (intercalate, isInfixOf, isPrefixOf, isSuffixOf)
 import Data.Typeable
 import GHC.Stack (HasCallStack, callStack)
 import Test.HMock.Internal.Util
@@ -110,7 +111,7 @@ startsWith :: (Eq a, Show a) => [a] -> Predicate [a]
 startsWith s =
   Predicate
     { showPredicate = "starts with " ++ show s,
-      accept = \x -> s `isPrefixOf` x
+      accept = (s `isPrefixOf`)
     }
 
 -- | A 'Predicate' that accepts lists or 'String's that and with the given
@@ -119,7 +120,7 @@ endsWith :: (Eq a, Show a) => [a] -> Predicate [a]
 endsWith s =
   Predicate
     { showPredicate = "ends with " ++ show s,
-      accept = \x -> s `isSuffixOf` x
+      accept = (s `isSuffixOf`)
     }
 
 -- | A 'Predicate' that accepts lists or 'String's that contain the given
@@ -128,7 +129,39 @@ hasSubstr :: (Eq a, Show a) => [a] -> Predicate [a]
 hasSubstr s =
   Predicate
     { showPredicate = "has substring " ++ show s,
-      accept = \x -> s `isInfixOf` x
+      accept = (s `isInfixOf`)
+    }
+
+size :: Foldable t => Predicate Int -> Predicate (t a)
+size p =
+  Predicate
+    { showPredicate = "size " ++ showPredicate p,
+      accept = accept p . length
+    }
+
+-- | A 'Predicate' that accepts lists of a fixed length, whose contents match
+-- the given list of predicates.
+elems :: Foldable t => [Predicate a] -> Predicate (t a)
+elems ps =
+  Predicate
+    { showPredicate = "[" ++ intercalate ", " (map showPredicate ps) ++ "]",
+      accept = \xs -> length xs == n && and (zipWith accept ps (toList xs))
+    }
+  where
+    n = length ps
+
+allElems :: Foldable t => Predicate a -> Predicate (t a)
+allElems p =
+  Predicate
+    { showPredicate = "all " ++ showPredicate p,
+      accept = all (accept p)
+    }
+
+anyElem :: Foldable t => Predicate a -> Predicate (t a)
+anyElem p =
+  Predicate
+    { showPredicate = "any " ++ showPredicate p,
+      accept = any (accept p)
     }
 
 -- | A conversion from @a -> 'Bool'@ to 'Predicate'.  This is a fallback that
