@@ -26,17 +26,17 @@ import Data.Bool (bool)
 import Data.Char (toUpper)
 import Data.Default (Default (..))
 import Data.Either (partitionEithers)
-import Data.Generics (everythingWithContext, everywhere, mkQ, mkT)
+import Data.Generics
 import qualified Data.Kind
 import Data.List (foldl', (\\))
-import Data.Type.Equality (type (:~:) (Refl))
-import Data.Typeable (Typeable)
-import GHC.Stack
+import Data.Maybe (catMaybes)
+import GHC.Stack (HasCallStack)
 import GHC.TypeLits (Symbol)
 import Language.Haskell.TH hiding (Match, match)
 import Language.Haskell.TH.Syntax (Lift (lift))
 import Test.HMock.Internal.Core
 import Test.HMock.Internal.Predicates (Predicate (accept), eq)
+import Test.HMock.Internal.TH.Util
 
 -- | Custom options for deriving a 'Mockable' class.
 data MockableOptions = MockableOptions
@@ -167,23 +167,6 @@ deriveForMockTWithOptions options = deriveTypeForMockTWithOptions options . conT
 deriveTypeForMockTWithOptions :: MockableOptions -> Q Type -> Q [Dec]
 deriveTypeForMockTWithOptions = deriveForMockTImpl
 
-checkExts :: [Extension] -> Q ()
-checkExts = mapM_ checkExt
-  where
-    checkExt e = do
-      enabled <- isExtEnabled e
-      unless enabled $
-        fail $ "Please enable " ++ show e ++ " to generate this mock."
-
-unappliedName :: Type -> Maybe Name
-unappliedName (AppT a _) = unappliedName a
-unappliedName (ConT a) = Just a
-unappliedName _ = Nothing
-
-tvName :: TyVarBndr -> Name
-tvName (PlainTV name) = name
-tvName (KindedTV name _) = name
-
 data Instance = Instance
   { instType :: Type,
     instRequiredContext :: Cxt,
@@ -202,9 +185,6 @@ data Method = Method
     methodResult :: Type
   }
   deriving (Show)
-
-internalError :: HasCallStack => Q a
-internalError = error "Internal error in HMock.  Please report this as a bug."
 
 withClass :: Type -> (Dec -> Q a) -> Q a
 withClass t f = do
@@ -286,7 +266,7 @@ getMethod m tbl (SigD name ty)
             ++ " can't be mocked: polymorphic return value."
     let argTypes =
           map
-            (substTypeVars [(m, AppT (ConT ''MockT) (VarT m))])
+            (substTypeVar m (AppT (ConT ''MockT) (VarT m)))
             (init argsAndReturn)
     return $
       Method
@@ -303,31 +283,6 @@ isKnownType method ty = null tyVars && null cx
   where
     (tyVars, cx) =
       relevantContext ty (methodTyVars method, methodCxt method)
-
-substTypeVars :: [(Name, Type)] -> Type -> Type
-substTypeVars classVars = everywhere (mkT subst)
-  where
-    subst (VarT x) | Just t <- lookup x classVars = t
-    subst t = t
-
-splitType :: Type -> ([TyVarBndr], Cxt, [Type])
-splitType (ForallT tv cx b) =
-  let (tvs, cxs, parts) = splitType b in (tv ++ tvs, cx ++ cxs, parts)
-splitType (AppT (AppT ArrowT a) b) =
-  let (tvs, cx, parts) = splitType b in (tvs, cx, a : parts)
-splitType r = ([], [], [r])
-
-freeTypeVars :: Type -> [Name]
-freeTypeVars = everythingWithContext [] (++) (mkQ ([],) go)
-  where
-    go (VarT v) bound
-      | v `elem` bound = ([], bound)
-      | otherwise = ([v], bound)
-    go (ForallT vs _ _) bound = ([], map tvName vs ++ bound)
-    go _ bound = ([], bound)
-
-constrainVars :: [TypeQ] -> [Name] -> CxtQ
-constrainVars cs vs = sequence [appT c (varT v) | c <- cs, v <- vs]
 
 deriveMockableImpl :: MockableOptions -> Q Type -> Q [Dec]
 deriveMockableImpl options qt = do
@@ -430,17 +385,24 @@ getMatcherName options method =
   where
     name = nameBase (methodName method)
 
-relevantContext :: Type -> ([TyVarBndr], Cxt) -> ([TyVarBndr], Cxt)
-relevantContext ty (tvs, cx) =
-  (filter (tvHasVar free) tvs, filter (cxtHasVar free) cx)
-  where
-    free = freeTypeVars ty
-    tvHasVar vars tv = tvName tv `elem` vars
-    cxtHasVar vars t = any (`elem` vars) (freeTypeVars t)
-
 defineShowAction :: MockableOptions -> [Method] -> Q Dec
 defineShowAction options methods =
   funD 'showAction (showActionClause options <$> methods)
+
+resolveInstance :: Name -> Type -> Q (Maybe Cxt)
+resolveInstance cls t = do
+  decs <- reifyInstances cls [t]
+  result <- traverse (tryInstance t) decs
+  case catMaybes result of
+    [cx] -> return (Just (filter (not . null . freeTypeVars) cx))
+    _ -> return Nothing
+  where
+    tryInstance :: Type -> InstanceDec -> Q (Maybe Cxt)
+    tryInstance actualTy (InstanceD _ cx (AppT _ genTy) _) =
+      unifyTypes genTy actualTy >>= \case
+        Just tbl -> return (Just (substTypeVars tbl <$> cx))
+        Nothing -> return Nothing
+    tryInstance _ _ = return Nothing
 
 showActionClause :: MockableOptions -> Method -> Q Clause
 showActionClause options method = do
@@ -606,15 +568,9 @@ defineExactMatcher options inst method = do
       | VarT v <- argTy =
         Just <$> sequence [[t|Eq $(varT v)|], [t|Show $(varT v)|]]
       | otherwise = do
-        eqInstances <- reifyInstances ''Eq [argTy]
-        showInstances <- reifyInstances ''Show [argTy]
-        case (eqInstances, showInstances) of
-          ([InstanceD _ eqCxt _ _], [InstanceD _ showCxt _ _]) ->
-            return (Just (filterCxt argTy eqCxt ++ filterCxt argTy showCxt))
-          _ -> return Nothing
-
-    filterCxt :: Type -> Cxt -> Cxt
-    filterCxt ty = filter (all (`elem` freeTypeVars ty) . freeTypeVars)
+        eqCxt <- resolveInstance ''Eq argTy
+        showCxt <- resolveInstance ''Show argTy
+        return ((++) <$> eqCxt <*> showCxt)
 
 deriveForMockTImpl :: MockableOptions -> Q Type -> Q [Dec]
 deriveForMockTImpl options qt = do
@@ -636,7 +592,7 @@ deriveForMockTImpl options qt = do
   let hasMonadInContext = instMonadVar inst `elem` concatMap freeTypeVars cx
   when hasMonadInContext $ checkExts [FlexibleContexts]
   let cxMockT =
-        substTypeVars [(instMonadVar inst, AppT (ConT ''MockT) (VarT m))] <$> cx
+        substTypeVar (instMonadVar inst) (AppT (ConT ''MockT) (VarT m)) <$> cx
 
   (: [])
     <$> instanceD
@@ -671,3 +627,14 @@ mockMethodImpl options method = do
   where
     actionExp [] e = e
     actionExp (v : vs) e = actionExp vs [|$e $(varE v)|]
+
+checkExts :: [Extension] -> Q ()
+checkExts = mapM_ checkExt
+  where
+    checkExt e = do
+      enabled <- isExtEnabled e
+      unless enabled $
+        fail $ "Please enable " ++ show e ++ " to generate this mock."
+
+internalError :: HasCallStack => Q a
+internalError = error "Internal error in HMock.  Please report this as a bug."

@@ -27,6 +27,7 @@ library
                       Test.HMock.Internal.Core,
                       Test.HMock.Internal.Predicates,
                       Test.HMock.Internal.TH,
+                      Test.HMock.Internal.TH.Util,
                       Test.HMock.Internal.Util
     build-depends:    base ^>=4.14.1.0,
                       constraints,

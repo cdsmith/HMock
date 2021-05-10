@@ -39,6 +39,8 @@ setupQuasi :: (Typeable m, MonadIO m, MonadFail m) => MockT m ()
 setupQuasi = do
   whenever $ QIsExtEnabled_ anything |-> True
 
+  whenever $ qReify_ ''String |-> $(reifyStatic ''String)
+  whenever $ qReify_ ''Int |-> $(reifyStatic ''Int)
   whenever $
     qReifyInstances_ ''Show [ConT ''String]
       |-> $(reifyInstancesStatic ''Show [ConT ''String])
@@ -55,6 +57,16 @@ setupQuasi = do
     QReifyInstances_ (eq ''Show) (suchThat isFunctionType) |-> []
   whenever $
     QReifyInstances_ (eq ''Eq) (suchThat isFunctionType) |-> []
+
+  let isListOfVar (AppT ListT (VarT _)) = True
+      isListOfVar _ = False
+
+  whenever $
+    QReifyInstances_ (eq ''Show) (elems [suchThat isListOfVar])
+      |-> $(reifyInstancesStatic ''Show [AppT ListT (VarT (mkName "a_0"))])
+  whenever $
+    QReifyInstances_ (eq ''Eq) (elems [suchThat isListOfVar])
+      |-> $(reifyInstancesStatic ''Eq [AppT ListT (VarT (mkName "a_0"))])
 
 class MonadSimple m where
   simple :: String -> m ()
@@ -201,6 +213,7 @@ superTests = describe "MonadSuper" $ do
 
 class MonadMPTC a m where
   mptc :: a -> m ()
+  mptcList :: [a] -> m ()
 
 makeMockable ''MonadMPTC
 
@@ -567,7 +580,6 @@ errorTests = describe "errors" $ do
     example $ do
       let wrongKind = runMockT $ do
             setupQuasi
-            whenever $ qReify_ ''Int |-> $(reifyStatic ''Int)
             expect $
               QReport_
                 anything
