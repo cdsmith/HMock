@@ -175,7 +175,7 @@ class Typeable cls => Mockable (cls :: (* -> *) -> Constraint) where
   showMatcher :: Maybe (Action cls name m a) -> Matcher cls name m b -> String
 
   -- | Attempts to match an 'Action' with a 'Matcher'.
-  match :: Matcher cls name m a -> Action cls name m b -> MatchResult a b
+  matchAction :: Matcher cls name m a -> Action cls name m b -> MatchResult a b
 
 -- | Monad transformer for running mocks.
 newtype MockT m a where
@@ -268,7 +268,7 @@ mockMethod a = withFrozenCallStack $
     tryMatch (prio, Step loc _ step, e)
       | Just (m :-> impl) <-
           fromDynamic step :: Maybe (Rule cls name m) =
-        case match m a of
+        case matchAction m a of
           NoMatch n -> Just (Left (n, loc, showMatcher (Just a) m))
           Match Refl
             | MockT r <- impl a ->

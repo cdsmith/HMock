@@ -1,9 +1,3 @@
-## TH for pattern matching predicates?
-
-It would sometimes be really great to have the ability to pattern match in a
-predicate.  Could I offer this using TH, or some other trick like catching the
-non-match errors from the response and comparing source locations?
-
 ## Do something about rank-n arguments
 
 Right now, if a monad has forall in an argument, makeMockable generates code

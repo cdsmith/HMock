@@ -73,6 +73,7 @@ module Test.HMock
     allElems,
     anyElem,
     suchThat,
+    match,
     typed,
 
     -- * Cardinality

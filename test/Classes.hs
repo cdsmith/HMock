@@ -58,14 +58,11 @@ setupQuasi = do
   whenever $
     QReifyInstances_ (eq ''Eq) (suchThat isFunctionType) |-> []
 
-  let isListOfVar (AppT ListT (VarT _)) = True
-      isListOfVar _ = False
-
   whenever $
-    QReifyInstances_ (eq ''Show) (elems [suchThat isListOfVar])
+    QReifyInstances_ (eq ''Show) (elems [$(match [p| AppT ListT (VarT _) |])])
       |-> $(reifyInstancesStatic ''Show [AppT ListT (VarT (mkName "a_0"))])
   whenever $
-    QReifyInstances_ (eq ''Eq) (elems [suchThat isListOfVar])
+    QReifyInstances_ (eq ''Eq) (elems [$(match [p| AppT ListT (VarT _) |])])
       |-> $(reifyInstancesStatic ''Eq [AppT ListT (VarT (mkName "a_0"))])
 
 class MonadSimple m where

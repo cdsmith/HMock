@@ -1,5 +1,7 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
 
 module Test.HMock.Internal.Predicates where
@@ -8,6 +10,9 @@ import Data.Foldable (toList)
 import Data.List (intercalate, isInfixOf, isPrefixOf, isSuffixOf)
 import Data.Typeable
 import GHC.Stack (HasCallStack, callStack)
+import Language.Haskell.TH (ExpQ, PatQ, pprint)
+import Language.Haskell.TH.Syntax (lift)
+import Test.HMock.Internal.TH.Util
 import Test.HMock.Internal.Util
 
 -- | A predicate, which tests values and either accepts or rejects them.  This
@@ -173,6 +178,20 @@ suchThat f =
     { showPredicate = showWithLoc (getSrcLoc callStack) "custom predicate",
       accept = f
     }
+
+-- | A Template Haskell splice that turns a pattern into a predicate that
+-- accepts values that match the pattern.
+match :: PatQ -> ExpQ
+match qpat = do
+  pat <- qpat
+  [|
+    Predicate
+      { showPredicate = $(lift (pprint (removeModNames pat))),
+        accept = \case
+          $(qpat) -> True
+          _ -> False
+      }
+    |]
 
 -- | Converts a 'Predicate' to a new type.  Typically used with visible type
 -- application, as in @'typed' @Int ('lt' 42)@.  This will only match if the

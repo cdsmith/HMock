@@ -1,4 +1,5 @@
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module Extras where
 
@@ -112,6 +113,14 @@ predicateTests = do
         show (anyElem (gt 5) :: Predicate [Int]) `shouldBe` "any > 5"
         show (suchThat ((> 5) . length) :: Predicate String)
           `shouldSatisfy` ("custom predicate at " `isPrefixOf`)
+
+    it "matches patterns" $ example $ do
+      let p = $(match [p| Just (Left _) |])
+      show p `shouldBe` "Just (Left _)"
+
+      accept p (Just (Left "foo")) `shouldBe` True
+      accept p (Just (Right "foo")) `shouldBe` False
+      accept p Nothing `shouldBe` False
 
     it "checks types" $
       example $ do

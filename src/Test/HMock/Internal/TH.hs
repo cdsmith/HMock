@@ -304,7 +304,7 @@ deriveMockableImpl options qt = do
             defineMatcherType options inst,
             defineShowAction options (instMethods inst),
             defineShowMatcher options (instMethods inst),
-            defineMatch options (instMethods inst)
+            defineMatchAction options (instMethods inst)
           ]
       ]
     <*> defineExactMatchers options inst
@@ -429,7 +429,7 @@ showActionClause options method = do
     showArg ty var =
       canShow ty
         >>= bool
-          (lift ("(_ :: " ++ pprint ty ++ ")"))
+          (lift ("(_ :: " ++ pprint (removeModNames ty) ++ ")"))
           [|showsPrec 11 $(varE var) ""|]
 
 defineShowMatcher :: MockableOptions -> [Method] -> Q Dec
@@ -479,11 +479,12 @@ showMatcherClauses options method = do
       | isKnownType method ty = [|"«" ++ show $(varE p) ++ "»"|]
       | otherwise = [|"«polymorphic»"|]
 
-defineMatch :: MockableOptions -> [Method] -> Q Dec
-defineMatch options methods = funD 'match (matchClause options <$> methods)
+defineMatchAction :: MockableOptions -> [Method] -> Q Dec
+defineMatchAction options methods =
+  funD 'matchAction (matchActionClause options <$> methods)
 
-matchClause :: MockableOptions -> Method -> Q Clause
-matchClause options method = do
+matchActionClause :: MockableOptions -> Method -> Q Clause
+matchActionClause options method = do
   argVars <-
     replicateM
       (length (methodArgs method))

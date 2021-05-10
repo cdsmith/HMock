@@ -10,12 +10,14 @@ module Test.HMock.Internal.TH.Util
     relevantContext,
     constrainVars,
     unifyTypes,
+    removeModNames,
   )
 where
 
 import Data.Generics
 import Data.Maybe (fromMaybe)
 import Language.Haskell.TH
+import Language.Haskell.TH.Syntax (NameFlavour (..))
 
 unappliedName :: Type -> Maybe Name
 unappliedName (AppT a _) = unappliedName a
@@ -105,3 +107,9 @@ compose (f : fs) x = do
   case y of
     Just y' -> compose fs y'
     _ -> return Nothing
+
+removeModNames :: Data a => a -> a
+removeModNames = everywhere (mkT unMod)
+  where
+    unMod NameG {} = NameS
+    unMod other = other
