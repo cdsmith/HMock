@@ -1,10 +1,3 @@
-## Do something about rank-n arguments
-
-Right now, if a monad has forall in an argument, makeMockable generates code
-that won't compile because of impredicative types.  Sure, QL is coming soon to
-fix that, but still it's not a great look to generate broken code, so we should
-do something about it.  Probably skip generating the method.
-
 ## Ambiguity resolution
 
 Currently, it's an error when more than one `Matcher` in the expectations

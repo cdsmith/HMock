@@ -41,6 +41,7 @@ setupQuasi = do
 
   whenever $ qReify_ ''String |-> $(reifyStatic ''String)
   whenever $ qReify_ ''Int |-> $(reifyStatic ''Int)
+  whenever $ qReify_ ''Bool |-> $(reifyStatic ''Bool)
   whenever $
     qReifyInstances_ ''Show [ConT ''String]
       |-> $(reifyInstancesStatic ''Show [ConT ''String])
@@ -54,15 +55,21 @@ setupQuasi = do
     qReifyInstances_ ''Eq [ConT ''Int]
       |-> $(reifyInstancesStatic ''Eq [ConT ''Int])
   whenever $
+    qReifyInstances_ ''Show [ConT ''Bool]
+      |-> $(reifyInstancesStatic ''Show [ConT ''Bool])
+  whenever $
+    qReifyInstances_ ''Eq [ConT ''Bool]
+      |-> $(reifyInstancesStatic ''Eq [ConT ''Bool])
+  whenever $
     QReifyInstances_ (eq ''Show) (suchThat isFunctionType) |-> []
   whenever $
     QReifyInstances_ (eq ''Eq) (suchThat isFunctionType) |-> []
 
   whenever $
-    QReifyInstances_ (eq ''Show) (elems [$(match [p| AppT ListT (VarT _) |])])
+    QReifyInstances_ (eq ''Show) (elems [$(match [p|AppT ListT (VarT _)|])])
       |-> $(reifyInstancesStatic ''Show [AppT ListT (VarT (mkName "a_0"))])
   whenever $
-    QReifyInstances_ (eq ''Eq) (elems [$(match [p| AppT ListT (VarT _) |])])
+    QReifyInstances_ (eq ''Eq) (elems [$(match [p|AppT ListT (VarT _)|])])
       |-> $(reifyInstancesStatic ''Eq [AppT ListT (VarT (mkName "a_0"))])
 
 class MonadSimple m where
@@ -486,6 +493,7 @@ class MonadExtraneousMembers m where
   favoriteNumber :: SomeDataType m -> Int
   wrongMonad :: Monad n => m Int -> n Int
   polyResult :: a -> m a
+  nestedRankN :: ((forall a. a -> Bool) -> Bool) -> m ()
 
   mockableMethod :: Int -> m ()
 
@@ -496,6 +504,7 @@ instance (Typeable m, Monad m) => MonadExtraneousMembers (MockT m) where
   favoriteNumber SomeCon = 42
   wrongMonad _ = return 42
   polyResult = return
+  nestedRankN _ = return ()
 
   mockableMethod a = mockMethod (MockableMethod a)
 
@@ -531,6 +540,11 @@ extraneousMembersTests = describe "MonadExtraneousMembers" $ do
         expect $
           qReport_ False "polyResult can't be mocked: polymorphic return value."
             |-> ()
+        expect $
+          qReport_
+            False
+            "nestedRankN can't be mocked: rank-n types nested in arguments."
+            |-> ()
 
         runQ
           ( deriveMockableWithOptions
@@ -563,6 +577,37 @@ extraneousMembersTests = describe "MonadExtraneousMembers" $ do
           failure = runMyBase . runMockT $ do
             expect $ mockableMethod_ 42 |-> ()
             mockableMethod 12
+
+      success
+      failure `shouldThrow` anyException
+
+class MonadRankN m where
+  rankN :: (forall a. a -> Bool) -> Bool -> m ()
+
+makeMockable ''MonadRankN
+
+rankNTests :: SpecWith ()
+rankNTests = describe "MonadRankN" $ do
+  it "generates mock impl" $
+    example $ do
+      decs <- runMockT $ do
+        setupQuasi
+        whenever $
+          qReify_ ''MonadRankN
+            |-> $(reifyStatic ''MonadRankN)
+
+        runQ (deriveMockable ''MonadRankN)
+      evaluate (rnf decs)
+
+  it "is mockable" $ do
+    example $ do
+      let success = runMockT $ do
+            expect $ RankN_ anything (eq True) |-> ()
+            rankN (const True) True
+
+          failure = runMockT $ do
+            expect $ RankN_ anything (eq True) |-> ()
+            rankN (const True) False
 
       success
       failure `shouldThrow` anyException
@@ -641,4 +686,5 @@ classTests = describe "makeMockable" $ do
   unshowableArgTests
   monadInArgTests
   extraneousMembersTests
+  rankNTests
   errorTests

@@ -258,16 +258,18 @@ getMethod m tbl (SigD name ty)
       Left $
         nameBase name
           ++ " can't be mocked: return value in wrong monad."
-    case relevantContext result (tvs, cx) of
-      ([], []) -> return ()
-      _ ->
-        Left $
-          nameBase name
-            ++ " can't be mocked: polymorphic return value."
+    when (relevantContext result (tvs, cx) /= ([], [])) $
+      Left $
+        nameBase name
+          ++ " can't be mocked: polymorphic return value."
     let argTypes =
           map
             (substTypeVar m (AppT (ConT ''MockT) (VarT m)))
             (init argsAndReturn)
+    when (any hasNestedPolyType argTypes) $
+      Left $
+        nameBase name
+          ++ " can't be mocked: rank-n types nested in arguments."
     return $
       Method
         { methodName = name,
@@ -371,6 +373,10 @@ matcherConstructor options inst method = do
       |]
   where
     mkPredicate argTy
+      | hasPolyType argTy = do
+        checkExts [RankNTypes]
+        v <- newName "t"
+        forallT [PlainTV v] (pure []) [t|Predicate $(varT v)|]
       | null tyVars && null cx = [t|Predicate $(pure argTy)|]
       | otherwise = do
         checkExts [RankNTypes]

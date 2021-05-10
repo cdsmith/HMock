@@ -11,6 +11,8 @@ module Test.HMock.Internal.TH.Util
     constrainVars,
     unifyTypes,
     removeModNames,
+    hasPolyType,
+    hasNestedPolyType,
   )
 where
 
@@ -113,3 +115,13 @@ removeModNames = everywhere (mkT unMod)
   where
     unMod NameG {} = NameS
     unMod other = other
+
+hasNestedPolyType :: Type -> Bool
+hasNestedPolyType (ForallT _ _ t) = hasPolyType t
+hasNestedPolyType t = hasPolyType t
+
+hasPolyType :: Type -> Bool
+hasPolyType = everything (||) (mkQ False isPolyType)
+  where
+    isPolyType ForallT {} = True
+    isPolyType _ = False
