@@ -137,6 +137,8 @@ hasSubstr s =
       accept = (s `isInfixOf`)
     }
 
+-- | A 'Predicate' that accepts lists or other 'Foldable' structures whose
+-- number of elements match the child 'Predicate'.
 size :: Foldable t => Predicate Int -> Predicate (t a)
 size p =
   Predicate
@@ -145,7 +147,7 @@ size p =
     }
 
 -- | A 'Predicate' that accepts lists of a fixed length, whose contents match
--- the given list of predicates.
+-- the corresponding 'Predicate' in the given list.
 elems :: Foldable t => [Predicate a] -> Predicate (t a)
 elems ps =
   Predicate
@@ -155,6 +157,8 @@ elems ps =
   where
     n = length ps
 
+-- | A 'Predicate' that accepts lists or other 'Foldable' structures whose
+-- elements all match the child 'Predicate'.
 allElems :: Foldable t => Predicate a -> Predicate (t a)
 allElems p =
   Predicate
@@ -162,6 +166,8 @@ allElems p =
       accept = all (accept p)
     }
 
+-- | A 'Predicate' that accepts lists or other 'Foldable' structures which
+-- contain at least one element matching the child 'Predicate'.
 anyElem :: Foldable t => Predicate a -> Predicate (t a)
 anyElem p =
   Predicate
@@ -181,6 +187,9 @@ suchThat f =
 
 -- | A Template Haskell splice that turns a pattern into a predicate that
 -- accepts values that match the pattern.
+--
+-- You would use this in a splice with a TH-quoted pattern argument, as in
+-- @$('match' [p| Just (Left _) |])@.
 match :: PatQ -> ExpQ
 match qpat = do
   pat <- qpat

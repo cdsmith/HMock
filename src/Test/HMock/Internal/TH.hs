@@ -42,6 +42,9 @@ import Test.HMock.Internal.TH.Util
 data MockableOptions = MockableOptions
   { -- | Suffix to add to 'Action' and 'Matcher' names.  Defaults to @""@.
     mockSuffix :: String,
+    -- | Whether to warn about limitations of the generated mocks.  This is
+    -- mostly useful temporarily for finding out why generated code doesn't
+    -- match your expectations.  Defaults to @'False'@.
     mockVerbose :: Bool
   }
 
