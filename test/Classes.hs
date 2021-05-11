@@ -18,7 +18,7 @@ module Classes where
 
 import Control.DeepSeq (NFData (rnf))
 import Control.Exception (evaluate)
-import Control.Monad.Trans (MonadIO)
+import Control.Monad.Trans (MonadIO, liftIO)
 import Data.Default (Default (def))
 import Data.Dynamic (Typeable)
 import Language.Haskell.TH.Syntax
@@ -246,7 +246,7 @@ mptcTests = describe "MonadMPTC" $ do
       failure `shouldThrow` anyException
 
 class MonadFDSpecialized a m | m -> a where
-  fdSpecialized :: a -> m ()
+  fdSpecialized :: a -> m a
 
 makeMockableType [t|MonadFDSpecialized String|]
 
@@ -283,23 +283,24 @@ fdSpecializedTests = describe "MonadFDSpecialized" $ do
   it "is mockable" $
     example $ do
       let success = runMockT $ do
-            expect $ fdSpecialized_ "foo" |-> ()
-            fdSpecialized "foo"
+            expect $ fdSpecialized_ "foo" |-> "bar"
+            r <- fdSpecialized "foo"
+            liftIO $ r `shouldBe` "bar"
 
           failure = runMockT $ do
-            expect $ fdSpecialized_ "foo" |-> ()
+            expect $ fdSpecialized_ "foo" |-> "bar"
             fdSpecialized "bar"
 
       success
       failure `shouldThrow` anyException
 
 class MonadFDGeneral a m | m -> a where
-  fdGeneral :: a -> m ()
+  fdGeneral :: a -> m a
 
 deriveMockable ''MonadFDGeneral
 
 newtype MyBase m a = MyBase {runMyBase :: m a}
-  deriving newtype (Functor, Applicative, Monad)
+  deriving newtype (Functor, Applicative, Monad, MonadIO)
 
 instance
   (Monad m, Typeable m) =>
@@ -321,11 +322,12 @@ fdGeneralTests = describe "MonadFDGeneral" $ do
   it "is mockable" $
     example $ do
       let success = runMyBase . runMockT $ do
-            expect $ fdGeneral_ "foo" |-> ()
-            fdGeneral "foo"
+            expect $ fdGeneral_ "foo" |-> "bar"
+            r <- fdGeneral "foo"
+            liftIO $ r `shouldBe` "bar"
 
           failure = runMyBase . runMockT $ do
-            expect $ fdGeneral_ "foo" |-> ()
+            expect $ fdGeneral_ "foo" |-> "bar"
             fdGeneral "bar"
 
       success
@@ -335,31 +337,32 @@ class MonadFDMixed a b c d m | m -> a b c d where
   fdMixed :: a -> b -> c -> m d
 
 deriveMockableType [t|MonadFDMixed String Int|]
-deriveTypeForMockT [t|MonadFDMixed String Int String ()|]
+deriveTypeForMockT [t|MonadFDMixed String Int String String|]
 
 fdMixedTests :: SpecWith ()
 fdMixedTests = describe "MonadFDMixed" $ do
   it "generates mock impl" $
-    example $ do
-      decs <- runMockT $ do
+    example . runMockT $ do
         setupQuasi
         whenever $ qReify_ ''MonadFDMixed |-> $(reifyStatic ''MonadFDMixed)
 
         decs1 <- runQ (deriveMockableType [t|MonadFDMixed String Int|])
         decs2 <-
-          runQ (deriveTypeForMockT [t|MonadFDMixed String Int String ()|])
-        return (decs1 ++ decs2)
-      evaluate (rnf decs)
+          runQ (deriveTypeForMockT [t|MonadFDMixed String Int String Int|])
+        _ <- liftIO $ evaluate (rnf (decs1 ++ decs2))
+        return ()
 
   it "is mockable" $
     example $ do
       let success = runMockT $ do
-            expect $ fdMixed_ "foo" 1 "bar" |-> ()
-            fdMixed "foo" 1 "bar"
+            expect $ fdMixed_ "foo" 1 "bar" |-> "qux"
+            r <- fdMixed "foo" 1 "bar"
+            liftIO $ r `shouldBe` "qux"
 
           failure = runMockT $ do
-            expect $ fdMixed_ "foo" 1 "bar" |-> ()
-            fdMixed "bar" 1 "foo"
+            expect $ fdMixed_ "foo" 1 "bar" |-> "qux"
+            _ <- fdMixed "bar" 1 "foo"
+            return ()
 
       success
       failure `shouldThrow` anyException
