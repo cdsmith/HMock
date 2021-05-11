@@ -56,10 +56,11 @@ instance (Typeable m, MonadFail m, MonadIO m) => Quasi (MockT m) where
 instance Lift Bytes where lift = undefined; liftTyped = undefined
 
 deriveRecursive Nothing ''Lift ''Info
-deriveRecursive Nothing ''Lift ''InstanceDec
 
 reifyStatic :: Name -> Q Exp
 reifyStatic n = reify n >>= lift
+
+deriveRecursive Nothing ''Lift ''InstanceDec
 
 reifyInstancesStatic :: Name -> [Type] -> Q Exp
 reifyInstancesStatic n ts = reifyInstances n ts >>= lift

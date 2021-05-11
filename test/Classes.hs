@@ -31,8 +31,7 @@ import Test.Hspec
 -- Pre-define low-level instance to prevent deriveRecursive from trying.
 instance NFData Bytes where rnf = undefined
 
-deriveRecursive (Just AnyclassStrategy) ''NFData ''Info
-deriveRecursive (Just AnyclassStrategy) ''NFData ''InstanceDec
+deriveRecursive (Just AnyclassStrategy) ''NFData ''Dec
 
 -- | Sets up some common default behaviors for the Quasi type class.
 setupQuasi :: (Typeable m, MonadIO m, MonadFail m) => MockT m ()
