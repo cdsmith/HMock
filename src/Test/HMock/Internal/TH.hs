@@ -182,7 +182,7 @@ data Instance = Instance
 
 data Method = Method
   { methodName :: Name,
-    methodTyVars :: [TyVarBndr],
+    methodTyVars :: [Name],
     methodCxt :: Cxt,
     methodArgs :: [Type],
     methodResult :: Type
@@ -383,7 +383,7 @@ matcherConstructor options inst method = do
       | null tyVars && null cx = [t|Predicate $(pure argTy)|]
       | otherwise = do
         checkExts [RankNTypes]
-        forallT tyVars (pure cx) [t|Predicate $(pure argTy)|]
+        forallT (PlainTV <$> tyVars) (pure cx) [t|Predicate $(pure argTy)|]
       where
         (tyVars, cx) =
           relevantContext argTy (methodTyVars method, methodCxt method)

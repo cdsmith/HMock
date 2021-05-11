@@ -39,9 +39,10 @@ substTypeVars classVars = everywhere (mkT subst)
     subst (VarT x) | Just t <- lookup x classVars = t
     subst t = t
 
-splitType :: Type -> ([TyVarBndr], Cxt, [Type])
+splitType :: Type -> ([Name], Cxt, [Type])
 splitType (ForallT tv cx b) =
-  let (tvs, cxs, parts) = splitType b in (tv ++ tvs, cx ++ cxs, parts)
+  let (tvs, cxs, parts) = splitType b
+   in (map tvName tv ++ tvs, cx ++ cxs, parts)
 splitType (AppT (AppT ArrowT a) b) =
   let (tvs, cx, parts) = splitType b in (tvs, cx, a : parts)
 splitType r = ([], [], [r])
@@ -58,12 +59,12 @@ freeTypeVars = everythingWithContext [] (++) (mkQ ([],) go)
 constrainVars :: [TypeQ] -> [Name] -> CxtQ
 constrainVars cs vs = sequence [appT c (varT v) | c <- cs, v <- vs]
 
-relevantContext :: Type -> ([TyVarBndr], Cxt) -> ([TyVarBndr], Cxt)
+relevantContext :: Type -> ([Name], Cxt) -> ([Name], Cxt)
 relevantContext ty (tvs, cx) =
   (filter (tvHasVar free) tvs, filter (cxtHasVar free) cx)
   where
     free = freeTypeVars ty
-    tvHasVar vars tv = tvName tv `elem` vars
+    tvHasVar vars tv = tv `elem` vars
     cxtHasVar vars t = any (`elem` vars) (freeTypeVars t)
 
 unifyTypes :: Type -> Type -> Q (Maybe [(Name, Type)])
