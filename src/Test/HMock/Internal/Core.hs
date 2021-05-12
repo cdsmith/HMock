@@ -245,25 +245,21 @@ mockMethod a = withFrozenCallStack $
     let (partials, fulls) =
           partitionEithers (mapMaybe tryMatch (liveSteps expected))
     let maxPrioFulls =
-          dropLowPrio (sortBy (flip compare `on` \(p, _, _, _) -> p) fulls)
+          dropLowPrio (sortBy (flip compare `on` fst) fulls)
     case (partials, maxPrioFulls) of
-      ([], []) -> noMatchError a
-      (_, []) ->
+      (_, (_, response) : _) -> response
+      ([], _) -> noMatchError a
+      _ ->
         partialMatchError
           a
           (map (\(_, loc, m) -> showWithLoc loc m) (sort partials))
-      (_, [(_, _, _, response)]) -> response
-      (_, successes) ->
-        ambiguousMatchError
-          a
-          (map (\(_, loc, m, _) -> showWithLoc loc m) successes)
   where
     tryMatch ::
       (Priority, Step, ExpectSet m ()) ->
       Maybe
         ( Either
             (Int, Loc, String)
-            (Priority, Loc, String, StateT (ExpectSet m ()) m a)
+            (Priority, StateT (ExpectSet m ()) m a)
         )
     tryMatch (prio, Step loc _ step, e)
       | Just (m :-> impl) <-
@@ -272,12 +268,11 @@ mockMethod a = withFrozenCallStack $
           NoMatch n -> Just (Left (n, loc, showMatcher (Just a) m))
           Match Refl
             | MockT r <- impl a ->
-              Just (Right (prio, loc, showMatcher (Just a) m, put e >> r))
+              Just (Right (prio, put e >> r))
     tryMatch _ = Nothing
 
     dropLowPrio [] = []
-    dropLowPrio ((p, l, c, r) : rest) =
-      (p, l, c, r) : takeWhile (\(p', _, _, _) -> p' == p) rest
+    dropLowPrio ((p, r) : rest) = (p, r) : takeWhile ((== p) . fst) rest
 
 -- An error for an action that matches no expectations at all.
 noMatchError ::
@@ -305,21 +300,6 @@ partialMatchError a partials =
       ++ showAction a
       ++ "\n\nClosest matches:\n - "
       ++ intercalate "\n - " (take 5 partials)
-
--- An error for an action that matched more than one expectation.
-ambiguousMatchError ::
-  (HasCallStack, Mockable cls) =>
-  -- | The action that was received.
-  Action cls name m a ->
-  -- | Descriptions of the matchers that matched the action.
-  [String] ->
-  StateT (ExpectSet m ()) m a
-ambiguousMatchError a matches =
-  error $
-    "Ambiguous matches for action: "
-      ++ showAction a
-      ++ "\nPossible matches:\n - "
-      ++ intercalate "\n - " matches
 
 -- | Type class for types that can represent expectations for mocks.  The only
 -- instance you need worry about is `MockT`, which expects actions to be

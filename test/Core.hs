@@ -10,6 +10,7 @@ module Core where
 import Control.Exception (SomeException)
 import Control.Monad (replicateM_)
 import Control.Monad.State (execStateT, modify)
+import Control.Monad.Trans (liftIO)
 import Data.List (isInfixOf, isPrefixOf)
 import Test.HMock
 import Test.HMock.TH (makeMockable)
@@ -140,15 +141,20 @@ coreTests = do
 
         test `shouldThrow` errorWith ("Core.hs" `isInfixOf`)
 
-    it "fails when responses are ambiguous" $
-      example $ do
-        let test = runMockT $ do
-              whenever $ readFile_ "foo.txt" |-> "a"
-              whenever $ readFile_ "foo.txt" |-> "b"
+    it "prefers most recent method match" $
+      example . runMockT $ do
+        whenever $ readFile_ "foo.txt" |-> "a"
+        whenever $ readFile_ "foo.txt" |-> "b"
+        expect $ readFile_ "foo.txt" |-> "c"
+        expect $ readFile_ "foo.txt" |-> "d"
 
-              readFile "foo.txt"
+        r1 <- readFile "foo.txt"
+        r2 <- readFile "foo.txt"
+        r3 <- readFile "foo.txt"
 
-        test `shouldThrow` errorWith ("Ambiguous matches" `isInfixOf`)
+        liftIO $ r1 `shouldBe` "d"
+        liftIO $ r2 `shouldBe` "c"
+        liftIO $ r3 `shouldBe` "b"
 
     it "matches flexible cardinality" $
       example $ do

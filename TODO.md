@@ -1,15 +1,3 @@
-## Ambiguity resolution
-
-Currently, it's an error when more than one `Matcher` in the expectations
-applies to the current `Action`.  It's more common in other mock frameworks to
-adopt rules for choosing which match to prefer.  For example, sometimes they
-choose the most specific match, or just the most recently added.
-
-I definitely don't like gMock's "most recently added" rule, but most specific is
-appealing.  This would mean adding some kind of partial order on specificity of
-predicates.  We'd probably just adopt a three-tier system, where `eq x` >
-anything else matching `x` > `anything`.
-
 ## Test with wider range of GHC/TH versions.
 
 ## Instances for effect systems
