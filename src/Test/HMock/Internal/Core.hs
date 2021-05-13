@@ -24,8 +24,8 @@ import Data.Constraint (Constraint)
 import Data.Dynamic (Dynamic, Typeable, fromDynamic, toDyn)
 import Data.Either (partitionEithers)
 import Data.Function (on)
-import Data.List (intercalate, sort, sortBy)
-import Data.Maybe (mapMaybe)
+import Data.List (intercalate, sortBy)
+import Data.Maybe (catMaybes)
 import Data.Type.Equality (type (:~:) (..))
 import GHC.Stack (CallStack, HasCallStack, callStack, withFrozenCallStack)
 import GHC.TypeLits (KnownSymbol, Symbol)
@@ -242,37 +242,23 @@ mockMethod ::
 mockMethod a = withFrozenCallStack $
   MockT $ do
     expected <- get
-    let (partials, fulls) =
-          partitionEithers (mapMaybe tryMatch (liveSteps expected))
-    let maxPrioFulls =
-          dropLowPrio (sortBy (flip compare `on` fst) fulls)
-    case (partials, maxPrioFulls) of
-      (_, (_, response) : _) -> response
-      ([], _) -> noMatchError a
-      _ ->
-        partialMatchError
-          a
-          (map (\(_, loc, m) -> showWithLoc loc m) (sort partials))
+    let (partials, fulls) = partitionEithers (tryMatch <$> liveSteps expected)
+    let orderedPartials = snd <$> sortBy (compare `on` fst) (catMaybes partials)
+    let orderedFulls = snd <$> sortBy (flip compare `on` fst) fulls
+    case (orderedPartials, orderedFulls) of
+      (_, response : _) -> response
+      ([], []) -> noMatchError a
+      (_, []) -> partialMatchError a orderedPartials
   where
     tryMatch ::
       (Priority, Step, ExpectSet m ()) ->
-      Maybe
-        ( Either
-            (Int, Loc, String)
-            (Priority, StateT (ExpectSet m ()) m a)
-        )
+      Either (Maybe (Int, String)) (Priority, StateT (ExpectSet m ()) m a)
     tryMatch (prio, Step loc _ step, e)
-      | Just (m :-> impl) <-
-          fromDynamic step :: Maybe (Rule cls name m) =
+      | Just (m :-> impl) <- fromDynamic step :: Maybe (Rule cls name m) =
         case matchAction m a of
-          NoMatch n -> Just (Left (n, loc, showMatcher (Just a) m))
-          Match Refl
-            | MockT r <- impl a ->
-              Just (Right (prio, put e >> r))
-    tryMatch _ = Nothing
-
-    dropLowPrio [] = []
-    dropLowPrio ((p, r) : rest) = (p, r) : takeWhile ((== p) . fst) rest
+          NoMatch n -> Left (Just (n, showWithLoc loc (showMatcher (Just a) m)))
+          Match Refl | MockT r <- impl a -> Right (prio, put e >> r)
+    tryMatch _ = Left Nothing
 
 -- An error for an action that matches no expectations at all.
 noMatchError ::
