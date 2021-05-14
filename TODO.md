@@ -1,5 +1,3 @@
-## Test with wider range of GHC/TH versions.
-
 ## Instances for effect systems
 
 An increasing number of people are using libraries like `eff`, `polysemy`,

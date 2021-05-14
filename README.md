@@ -421,6 +421,10 @@ runMockT $ do
 
 And you're done.
 
+### Which GHC versions are supported?
+
+HMock is tested with GHC versions from 8.4 through 9.0.
+
 ## Case Study: Mocking Template Haskell
 
 As a non-trivial case study in the use of HMock, consider the problem of testing
