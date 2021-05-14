@@ -1,6 +1,6 @@
 module Test.HMock.Internal.Util where
 
-import GHC.Stack
+import GHC.Stack (CallStack, getCallStack, prettySrcLoc)
 
 newtype Loc = Loc (Maybe String) deriving (Eq, Ord)
 
