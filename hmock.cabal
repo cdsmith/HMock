@@ -30,15 +30,15 @@ library
                       Test.HMock.Internal.TH.Util,
                       Test.HMock.Internal.Util
     build-depends:    base >=4.14.1.0 && < 4.16,
-                      constraints,
-                      data-default,
-                      exceptions,
-                      extra,
-                      monad-control,
-                      mtl,
-                      syb,
-                      template-haskell,
-                      transformers-base,
+                      constraints >= 0.13 && < 0.14,
+                      template-haskell >= 2.16.0 && < 2.18,
+                      mtl >= 2.2.2 && < 2.3,
+                      data-default >= 0.7.1 && < 0.8,
+                      exceptions >= 0.10.4 && < 0.11,
+                      extra >= 1.7.9 && < 1.8,
+                      monad-control >= 1.0.2 && < 1.1,
+                      transformers-base >= 0.4.5 && < 0.5,
+                      syb >= 0.7.2 && < 0.8,
     hs-source-dirs:   src
     default-language: Haskell2010
     ghc-options:      -Wall -Wincomplete-uni-patterns
@@ -51,7 +51,7 @@ test-suite tests
                       Extras,
                       QuasiMock,
                       THUtil
-    build-depends:    base >=4.14.1.0 && < 4.16,
+    build-depends:    base,
                       data-default,
                       deepseq,
                       directory,
