@@ -38,110 +38,6 @@ import Test.HMock.Internal.Multiplicity
   )
 import Test.HMock.Internal.Util (Loc, getSrcLoc, showWithLoc)
 
-newtype Priority where
-  Priority :: Int -> Priority
-  deriving (Show, Eq, Ord)
-
-lowPriority :: Priority
-lowPriority = Priority 0
-
-normalPriority :: Priority
-normalPriority = Priority 1
-
--- | A single step of an expectation.
-data Step where
-  Step ::
-    (Mockable cls, Typeable m, KnownSymbol name) =>
-    Loc ->
-    Rule cls name m ->
-    Step
-
--- | A set of expected actions and their responses.  An entire test with mocks
--- is expected to run in a single base 'Monad', which is the first type
--- parameter here.  The second parameter is just a trick with `Expectable` (see
--- below) to avoid GHC warnings about unused return values.
-data ExpectSet (m :: * -> *) a where
-  ExpectNothing :: ExpectSet m ()
-  Expect :: Priority -> Multiplicity -> Step -> ExpectSet m ()
-  ExpectMulti :: Bool -> [ExpectSet m ()] -> ExpectSet m ()
-
--- | Converts a set of expectations into a string that summarizes them, with
--- the given prefix (used to indent).
-formatExpectSet :: String -> ExpectSet m () -> String
-formatExpectSet prefix ExpectNothing = prefix ++ "nothing"
-formatExpectSet prefix (Expect prio multiplicity (Step loc (m :-> _))) =
-  prefix ++ showWithLoc loc (showMatcher Nothing m) ++ modifierDesc
-  where
-    modifiers = prioModifier ++ multModifier
-    prioModifier
-      | prio == lowPriority = ["low priority"]
-      | otherwise = []
-    multModifier
-      | multiplicity == once = []
-      | otherwise = [show multiplicity]
-    modifierDesc
-      | null modifiers = ""
-      | otherwise = " (" ++ intercalate ", " modifiers ++ ")"
-formatExpectSet prefix (ExpectMulti order xs) =
-  prefix ++ orderStr ++ unlines (map (formatExpectSet (prefix ++ "  ")) xs)
-  where
-    orderStr = if order then "in sequence:\n" else "in any order:\n"
-
--- | Get a list of steps that can match actions right now, together with the
--- remaining expectations if each one were to match.
-liveSteps :: ExpectSet m () -> [(Priority, Step, ExpectSet m ())]
-liveSteps = map (\(p, s, e) -> (p, s, simplify e)) . go
-  where
-    go :: ExpectSet m () -> [(Priority, Step, ExpectSet m ())]
-    go ExpectNothing = []
-    go (Expect prio multiplicity step) = case decMultiplicity multiplicity of
-      Nothing -> [(prio, step, ExpectNothing)]
-      Just multiplicity' -> [(prio, step, Expect prio multiplicity' step)]
-    go (ExpectMulti order es) =
-      [ (p, a, ExpectMulti order (e' : es'))
-        | (e, es') <- choices es,
-          (p, a, e') <- go e
-      ]
-      where
-        choices [] = []
-        choices (x : xs)
-          | order, ExpectNothing <- excess x = (x, xs) : choices xs
-          | order = [(x, xs)]
-          | otherwise = (x, xs) : (fmap (x :) <$> choices xs)
-
--- | Simplifies a set of expectations.  This removes unnecessary occurrences of
--- 'ExpectNothing' and collapses nested lists with the same ordering
--- constraints.
-simplify :: ExpectSet m () -> ExpectSet m ()
-simplify e = case e of
-  (ExpectMulti order xs) -> simplifyMulti order xs
-  _ -> e
-  where
-    simplifyMulti order =
-      construct order . concatMap (expand order . simplify)
-
-    expand :: Bool -> ExpectSet m () -> [ExpectSet m ()]
-    expand _ ExpectNothing = []
-    expand order (ExpectMulti order' xs) | order == order' = xs
-    expand _ other = [other]
-
-    construct _ [] = ExpectNothing
-    construct _ [x] = x
-    construct order xs = ExpectMulti order xs
-
--- | Reduces a set of expectations to the minimum steps that would be required
--- to satisfy the entire set.  This weeds out unnecessary information before
--- reporting that there were unmet expectations at the end of the test.
-excess :: ExpectSet m () -> ExpectSet m ()
-excess = simplify . go
-  where
-    go :: ExpectSet m () -> ExpectSet m ()
-    go ExpectNothing = ExpectNothing
-    go e@(Expect _ mult _)
-      | exhaustable mult = ExpectNothing
-      | otherwise = e
-    go (ExpectMulti order xs) = ExpectMulti order (map go xs)
-
 -- | The result of matching a @'Matcher' a@ with an @'Action' b@.  Because the
 -- types should already guarantee that the methods match, all that's left is to
 -- match arguments.
@@ -172,43 +68,6 @@ class Typeable cls => Mockable (cls :: (* -> *) -> Constraint) where
   -- | Attempts to match an 'Action' with a 'Matcher'.
   matchAction :: Matcher cls name m a -> Action cls name m b -> MatchResult a b
 
--- | Monad transformer for running mocks.
-newtype MockT m a where
-  MockT :: StateT (ExpectSet m ()) m a -> MockT m a
-  deriving
-    ( Functor,
-      Applicative,
-      Monad,
-      MonadFail,
-      MonadIO,
-      MonadReader r,
-      MonadWriter w,
-      MonadRWS r w s,
-      MonadError e,
-      MonadCont,
-      MonadBase b,
-      MonadCatch,
-      MonadMask,
-      MonadThrow
-    )
-
-instance MonadTrans MockT where
-  lift = MockT . lift
-
-instance MonadState s m => MonadState s (MockT m) where
-  get = lift get
-  put = lift . put
-
--- | Runs a test in the 'MockT' monad, handling all of the mocks.
-runMockT :: Monad m => MockT m a -> m a
-runMockT (MockT test) = do
-  (a, leftover) <- runStateT test ExpectNothing
-  case excess leftover of
-    ExpectNothing -> return a
-    missing ->
-      error $
-        "Unmet expectations:\n" ++ formatExpectSet "  " missing
-
 -- | A pair of a 'Matcher' and a response for when it matches.  The matching
 -- 'Action' is passed to the response, and is guaranteed to be a match, so it's
 -- okay to just pattern match on the correct method.
@@ -227,69 +86,21 @@ data Rule (cls :: (* -> *) -> Constraint) (name :: Symbol) (m :: * -> *) where
 (|->) :: (Mockable cls, Monad m) => Matcher cls name m a -> a -> Rule cls name m
 m |-> r = m :-> const (return r)
 
--- | Implements a method in a 'Mockable' monad by delegating to the mock
--- framework.  This is typically used only in generated code.
-mockMethod ::
-  forall cls name m a.
-  (HasCallStack, Mockable cls, KnownSymbol name, Monad m, Typeable m) =>
-  Action cls name m a ->
-  MockT m a
-mockMethod a = withFrozenCallStack $
-  MockT $ do
-    expected <- get
-    let (partials, fulls) = partitionEithers (tryMatch <$> liveSteps expected)
-    let orderedPartials = snd <$> sortBy (compare `on` fst) (catMaybes partials)
-    let orderedFulls = snd <$> sortBy (flip compare `on` fst) fulls
-    case (orderedPartials, orderedFulls) of
-      (_, response : _) -> response
-      ([], []) -> noMatchError a
-      (_, []) -> partialMatchError a orderedPartials
-  where
-    tryMatch ::
-      (Priority, Step, ExpectSet m ()) ->
-      Either (Maybe (Int, String)) (Priority, StateT (ExpectSet m ()) m a)
-    tryMatch (prio, Step loc step, e)
-      | Just (m :-> impl) <- cast step :: Maybe (Rule cls name m) =
-        case matchAction m a of
-          NoMatch n -> Left (Just (n, showWithLoc loc (showMatcher (Just a) m)))
-          Match Refl | MockT r <- impl a -> Right (prio, put e >> r)
-    tryMatch _ = Left Nothing
+newtype Priority where
+  Priority :: Int -> Priority
+  deriving (Show, Eq, Ord)
 
--- An error for an action that matches no expectations at all.
-noMatchError ::
-  (HasCallStack, Mockable cls) =>
-  -- | The action that was received.
-  Action cls name m a ->
-  StateT (ExpectSet m ()) m a
-noMatchError a =
-  error $
-    "Unexpected action: "
-      ++ showAction a
+lowPriority :: Priority
+lowPriority = Priority 0
 
--- An error for an action that doesn't match the argument predicates for any
--- of the method's expectations.
-partialMatchError ::
-  (HasCallStack, Mockable cls) =>
-  -- | The action that was received.
-  Action cls name m a ->
-  -- | Descriptions of the matchers that most closely matched, closest first.
-  [String] ->
-  StateT (ExpectSet m ()) m a
-partialMatchError a partials =
-  error $
-    "Wrong arguments: "
-      ++ showAction a
-      ++ "\n\nClosest matches:\n - "
-      ++ intercalate "\n - " (take 5 partials)
+normalPriority :: Priority
+normalPriority = Priority 1
 
 -- | Type class for types that can represent expectations for mocks.  The only
 -- instance you need worry about is `MockT`, which expects actions to be
 -- performed during a test.
 class Expectable (t :: (* -> *) -> * -> *) where
   fromExpectSet :: Monad m => ExpectSet m () -> t m ()
-
-instance Expectable MockT where
-  fromExpectSet e = MockT $ modify (\e' -> simplify (ExpectMulti False [e, e']))
 
 instance Expectable ExpectSet where
   fromExpectSet = id
@@ -390,3 +201,192 @@ inSequence = fromExpectSet . ExpectMulti True
 inAnyOrder ::
   (Monad m, Expectable t) => (forall u. Expectable u => [u m ()]) -> t m ()
 inAnyOrder = fromExpectSet . ExpectMulti False
+
+-- | A single step of an expectation.
+data Step where
+  Step ::
+    (Mockable cls, Typeable m, KnownSymbol name) =>
+    Loc ->
+    Rule cls name m ->
+    Step
+
+-- | A set of expected actions and their responses.  An entire test with mocks
+-- is expected to run in a single base 'Monad', which is the first type
+-- parameter here.  The second parameter is just a trick with `Expectable` (see
+-- below) to avoid GHC warnings about unused return values.
+data ExpectSet (m :: * -> *) a where
+  ExpectNothing :: ExpectSet m ()
+  Expect :: Priority -> Multiplicity -> Step -> ExpectSet m ()
+  ExpectMulti :: Bool -> [ExpectSet m ()] -> ExpectSet m ()
+
+-- | Converts a set of expectations into a string that summarizes them, with
+-- the given prefix (used to indent).
+formatExpectSet :: String -> ExpectSet m () -> String
+formatExpectSet prefix ExpectNothing = prefix ++ "nothing"
+formatExpectSet prefix (Expect prio multiplicity (Step loc (m :-> _))) =
+  prefix ++ showWithLoc loc (showMatcher Nothing m) ++ modifierDesc
+  where
+    modifiers = prioModifier ++ multModifier
+    prioModifier
+      | prio == lowPriority = ["low priority"]
+      | otherwise = []
+    multModifier
+      | multiplicity == once = []
+      | otherwise = [show multiplicity]
+    modifierDesc
+      | null modifiers = ""
+      | otherwise = " (" ++ intercalate ", " modifiers ++ ")"
+formatExpectSet prefix (ExpectMulti order xs) =
+  prefix ++ orderStr ++ unlines (map (formatExpectSet (prefix ++ "  ")) xs)
+  where
+    orderStr = if order then "in sequence:\n" else "in any order:\n"
+
+-- | Get a list of steps that can match actions right now, together with the
+-- remaining expectations if each one were to match.
+liveSteps :: ExpectSet m () -> [(Priority, Step, ExpectSet m ())]
+liveSteps = map (\(p, s, e) -> (p, s, simplify e)) . go
+  where
+    go :: ExpectSet m () -> [(Priority, Step, ExpectSet m ())]
+    go ExpectNothing = []
+    go (Expect prio multiplicity step) = case decMultiplicity multiplicity of
+      Nothing -> [(prio, step, ExpectNothing)]
+      Just multiplicity' -> [(prio, step, Expect prio multiplicity' step)]
+    go (ExpectMulti order es) =
+      [ (p, a, ExpectMulti order (e' : es'))
+        | (e, es') <- choices es,
+          (p, a, e') <- go e
+      ]
+      where
+        choices [] = []
+        choices (x : xs)
+          | order, ExpectNothing <- excess x = (x, xs) : choices xs
+          | order = [(x, xs)]
+          | otherwise = (x, xs) : (fmap (x :) <$> choices xs)
+
+-- | Simplifies a set of expectations.  This removes unnecessary occurrences of
+-- 'ExpectNothing' and collapses nested lists with the same ordering
+-- constraints.
+simplify :: ExpectSet m () -> ExpectSet m ()
+simplify e = case e of
+  (ExpectMulti order xs) -> simplifyMulti order xs
+  _ -> e
+  where
+    simplifyMulti order =
+      construct order . concatMap (expand order . simplify)
+
+    expand :: Bool -> ExpectSet m () -> [ExpectSet m ()]
+    expand _ ExpectNothing = []
+    expand order (ExpectMulti order' xs) | order == order' = xs
+    expand _ other = [other]
+
+    construct _ [] = ExpectNothing
+    construct _ [x] = x
+    construct order xs = ExpectMulti order xs
+
+-- | Reduces a set of expectations to the minimum steps that would be required
+-- to satisfy the entire set.  This weeds out unnecessary information before
+-- reporting that there were unmet expectations at the end of the test.
+excess :: ExpectSet m () -> ExpectSet m ()
+excess = simplify . go
+  where
+    go :: ExpectSet m () -> ExpectSet m ()
+    go ExpectNothing = ExpectNothing
+    go e@(Expect _ mult _)
+      | exhaustable mult = ExpectNothing
+      | otherwise = e
+    go (ExpectMulti order xs) = ExpectMulti order (map go xs)
+
+-- | Monad transformer for running mocks.
+newtype MockT m a where
+  MockT :: StateT (ExpectSet m ()) m a -> MockT m a
+  deriving
+    ( Functor,
+      Applicative,
+      Monad,
+      MonadFail,
+      MonadIO,
+      MonadReader r,
+      MonadWriter w,
+      MonadRWS r w s,
+      MonadError e,
+      MonadCont,
+      MonadBase b,
+      MonadCatch,
+      MonadMask,
+      MonadThrow
+    )
+
+instance Expectable MockT where
+  fromExpectSet e = MockT $ modify (\e' -> simplify (ExpectMulti False [e, e']))
+
+instance MonadTrans MockT where
+  lift = MockT . lift
+
+instance MonadState s m => MonadState s (MockT m) where
+  get = lift get
+  put = lift . put
+
+-- | Runs a test in the 'MockT' monad, handling all of the mocks.
+runMockT :: Monad m => MockT m a -> m a
+runMockT (MockT test) = do
+  (a, leftover) <- runStateT test ExpectNothing
+  case excess leftover of
+    ExpectNothing -> return a
+    missing ->
+      error $
+        "Unmet expectations:\n" ++ formatExpectSet "  " missing
+
+-- | Implements a method in a 'Mockable' monad by delegating to the mock
+-- framework.  This is typically used only in generated code.
+mockMethod ::
+  forall cls name m a.
+  (HasCallStack, Mockable cls, KnownSymbol name, Monad m, Typeable m) =>
+  Action cls name m a ->
+  MockT m a
+mockMethod a = withFrozenCallStack $
+  MockT $ do
+    expected <- get
+    let (partials, fulls) = partitionEithers (tryMatch <$> liveSteps expected)
+    let orderedPartials = snd <$> sortBy (compare `on` fst) (catMaybes partials)
+    let orderedFulls = snd <$> sortBy (flip compare `on` fst) fulls
+    case (orderedPartials, orderedFulls) of
+      (_, response : _) -> response
+      ([], []) -> noMatchError a
+      (_, []) -> partialMatchError a orderedPartials
+  where
+    tryMatch ::
+      (Priority, Step, ExpectSet m ()) ->
+      Either (Maybe (Int, String)) (Priority, StateT (ExpectSet m ()) m a)
+    tryMatch (prio, Step loc step, e)
+      | Just (m :-> impl) <- cast step :: Maybe (Rule cls name m) =
+        case matchAction m a of
+          NoMatch n -> Left (Just (n, showWithLoc loc (showMatcher (Just a) m)))
+          Match Refl | MockT r <- impl a -> Right (prio, put e >> r)
+    tryMatch _ = Left Nothing
+
+-- An error for an action that matches no expectations at all.
+noMatchError ::
+  (HasCallStack, Mockable cls) =>
+  -- | The action that was received.
+  Action cls name m a ->
+  StateT (ExpectSet m ()) m a
+noMatchError a =
+  error $
+    "Unexpected action: "
+      ++ showAction a
+
+-- An error for an action that doesn't match the argument predicates for any
+-- of the method's expectations.
+partialMatchError ::
+  (HasCallStack, Mockable cls) =>
+  -- | The action that was received.
+  Action cls name m a ->
+  -- | Descriptions of the matchers that most closely matched, closest first.
+  [String] ->
+  StateT (ExpectSet m ()) m a
+partialMatchError a partials =
+  error $
+    "Wrong arguments: "
+      ++ showAction a
+      ++ "\n\nClosest matches:\n - "
+      ++ intercalate "\n - " (take 5 partials)
