@@ -33,6 +33,7 @@ import Test.HMock.Internal.Multiplicity
   ( Multiplicity (..),
     anyMultiplicity,
     decMultiplicity,
+    exhaustable,
     once,
   )
 import Test.HMock.Internal.Util (Loc, getSrcLoc, showWithLoc)
@@ -133,8 +134,8 @@ excess = simplify . go
   where
     go :: ExpectSet m () -> ExpectSet m ()
     go ExpectNothing = ExpectNothing
-    go e@(Expect _ (Interval lo _) _)
-      | lo == 0 = ExpectNothing
+    go e@(Expect _ mult _)
+      | exhaustable mult = ExpectNothing
       | otherwise = e
     go (ExpectMulti order xs) = ExpectMulti order (map go xs)
 
