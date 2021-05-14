@@ -29,10 +29,10 @@ import Data.Maybe (catMaybes)
 import Data.Type.Equality (type (:~:) (..))
 import GHC.Stack (CallStack, HasCallStack, callStack, withFrozenCallStack)
 import GHC.TypeLits (KnownSymbol, Symbol)
-import Test.HMock.Internal.Cardinality
-  ( Cardinality (..),
-    anyCardinality,
-    decCardinality,
+import Test.HMock.Internal.Multiplicity
+  ( Multiplicity (..),
+    anyMultiplicity,
+    decMultiplicity,
     once,
   )
 import Test.HMock.Internal.Util (Loc, getSrcLoc, showWithLoc)
@@ -58,23 +58,23 @@ data Step where
 -- below) to avoid GHC warnings about unused return values.
 data ExpectSet (m :: * -> *) a where
   ExpectNothing :: ExpectSet m ()
-  Expect :: Priority -> Cardinality -> Step -> ExpectSet m ()
+  Expect :: Priority -> Multiplicity -> Step -> ExpectSet m ()
   ExpectMulti :: Bool -> [ExpectSet m ()] -> ExpectSet m ()
 
 -- | Converts a set of expectations into a string that summarizes them, with
 -- the given prefix (used to indent).
 formatExpectSet :: String -> ExpectSet m () -> String
 formatExpectSet prefix ExpectNothing = prefix ++ "nothing"
-formatExpectSet prefix (Expect prio cardinality (Step loc s _)) =
+formatExpectSet prefix (Expect prio multiplicity (Step loc s _)) =
   prefix ++ showWithLoc loc s ++ modifierDesc
   where
-    modifiers = prioModifier ++ cardModifier
+    modifiers = prioModifier ++ multModifier
     prioModifier
       | prio == lowPriority = ["low priority"]
       | otherwise = []
-    cardModifier
-      | cardinality == once = []
-      | otherwise = [show cardinality]
+    multModifier
+      | multiplicity == once = []
+      | otherwise = [show multiplicity]
     modifierDesc
       | null modifiers = ""
       | otherwise = " (" ++ intercalate ", " modifiers ++ ")"
@@ -90,9 +90,9 @@ liveSteps = map (\(p, s, e) -> (p, s, simplify e)) . go
   where
     go :: ExpectSet m () -> [(Priority, Step, ExpectSet m ())]
     go ExpectNothing = []
-    go (Expect prio card step) = case decCardinality card of
+    go (Expect prio multiplicity step) = case decMultiplicity multiplicity of
       Nothing -> [(prio, step, ExpectNothing)]
-      Just card' -> [(prio, step, Expect prio card' step)]
+      Just multiplicity' -> [(prio, step, Expect prio multiplicity' step)]
     go (ExpectMulti order es) =
       [ (p, a, ExpectMulti order (e' : es'))
         | (e, es') <- choices es,
@@ -294,11 +294,11 @@ makeExpect ::
   (Mockable cls, Typeable m, KnownSymbol name) =>
   CallStack ->
   Priority ->
-  Cardinality ->
+  Multiplicity ->
   Rule cls name m ->
   ExpectSet m ()
-makeExpect cs prio card wr@(m :-> (_ :: Action cls name m a -> MockT m a)) =
-  Expect prio card (Step (getSrcLoc cs) (showMatcher Nothing m) (toDyn wr))
+makeExpect cs prio mult wr@(m :-> (_ :: Action cls name m a -> MockT m a)) =
+  Expect prio mult (Step (getSrcLoc cs) (showMatcher Nothing m) (toDyn wr))
 
 -- | Creates an expectation that an action is performed once.  This is
 -- equivalent to @'expectN' 'once'@, but shorter.
@@ -324,14 +324,14 @@ expectN ::
     Expectable t
   ) =>
   -- | The number of times the action should be performed.
-  Cardinality ->
+  Multiplicity ->
   -- | The action and its response.
   Rule cls name m ->
   t m ()
 expectN = (fromExpectSet .) . makeExpect callStack normalPriority
 
 -- | Creates an expectation that an action is performed any number of times.
--- This is equivalent to @'expectN' 'anyCardinality'@, but shorter.
+-- This is equivalent to @'expectN' 'anyMultiplicity'@, but shorter.
 expectAny ::
   ( HasCallStack,
     Mockable cls,
@@ -342,7 +342,7 @@ expectAny ::
   ) =>
   Rule cls name m ->
   t m ()
-expectAny = fromExpectSet . makeExpect callStack normalPriority anyCardinality
+expectAny = fromExpectSet . makeExpect callStack normalPriority anyMultiplicity
 
 -- | Specifies a default response if a matching action is performed.  This
 -- differs from 'expectAny' because other expectations will always override
@@ -357,7 +357,7 @@ whenever ::
   ) =>
   Rule cls name m ->
   t m ()
-whenever = fromExpectSet . makeExpect callStack lowPriority anyCardinality
+whenever = fromExpectSet . makeExpect callStack lowPriority anyMultiplicity
 
 -- | Creates a sequential expectation.  Other actions can still happen during
 -- the sequence, but these specific expectations must be met in this order.

@@ -76,10 +76,10 @@ module Test.HMock
     match,
     typed,
 
-    -- * Cardinality
-    Cardinality,
+    -- * Multiplicity
+    Multiplicity,
     once,
-    anyCardinality,
+    anyMultiplicity,
     exactly,
     atLeast,
     atMost,
@@ -92,6 +92,6 @@ module Test.HMock
   )
 where
 
-import Test.HMock.Internal.Cardinality
+import Test.HMock.Internal.Multiplicity
 import Test.HMock.Internal.Core
 import Test.HMock.Internal.Predicates

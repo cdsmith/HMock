@@ -1,11 +1,11 @@
 import Classes (classTests)
 import Core (coreTests)
-import Extras (cardinalityTests, predicateTests)
+import Extras (multiplicityTests, predicateTests)
 import Test.Hspec (hspec)
 
 main :: IO ()
 main = hspec $ do
-  cardinalityTests
+  multiplicityTests
   predicateTests
   coreTests
   classTests

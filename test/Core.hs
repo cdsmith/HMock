@@ -156,7 +156,7 @@ coreTests = do
         liftIO $ r2 `shouldBe` "c"
         liftIO $ r3 `shouldBe` "b"
 
-    it "matches flexible cardinality" $
+    it "matches flexible multiplicity" $
       example $ do
         let setExpectations = do
               expectN (atLeast 3) $ readFile_ "foo.txt" |-> "foo"

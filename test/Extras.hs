@@ -8,13 +8,13 @@ import Data.Typeable (Typeable)
 import Test.HMock
 import Test.Hspec
 
-cardinalityTests :: SpecWith ()
-cardinalityTests = do
-  describe "Cardinality" $
+multiplicityTests :: SpecWith ()
+multiplicityTests = do
+  describe "Multiplicity" $
     it "describes itself" $
       example $ do
         show once `shouldBe` "once"
-        show anyCardinality `shouldBe` "any number of times"
+        show anyMultiplicity `shouldBe` "any number of times"
         show (exactly 2) `shouldBe` "twice"
         show (exactly 3) `shouldBe` "3 times"
         show (atLeast 1) `shouldBe` "at least once"
