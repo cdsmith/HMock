@@ -104,6 +104,8 @@ data Step where
     Rule cls name m ->
     Step
 
+data Order = InOrder | AnyOrder deriving (Eq)
+
 -- | A set of expected actions and their responses.  An entire test with mocks
 -- is expected to run in a single base 'Monad', which is the first type
 -- parameter here.  The second parameter is just a trick with `Expectable` (see
@@ -111,7 +113,7 @@ data Step where
 data ExpectSet (m :: * -> *) a where
   ExpectNothing :: ExpectSet m ()
   Expect :: Priority -> Multiplicity -> Step -> ExpectSet m ()
-  ExpectMulti :: Bool -> [ExpectSet m ()] -> ExpectSet m ()
+  ExpectMulti :: Order -> [ExpectSet m ()] -> ExpectSet m ()
 
 -- | Converts a set of expectations into a string that summarizes them, with
 -- the given prefix (used to indent).
@@ -131,9 +133,8 @@ formatExpectSet prefix (Expect prio multiplicity (Step loc (m :-> _))) =
       | null modifiers = ""
       | otherwise = " (" ++ intercalate ", " modifiers ++ ")"
 formatExpectSet prefix (ExpectMulti order xs) =
-  prefix ++ orderStr ++ unlines (map (formatExpectSet (prefix ++ "  ")) xs)
-  where
-    orderStr = if order then "in sequence:\n" else "in any order:\n"
+  let label = if order == InOrder then "in sequence:\n" else "in any order:\n"
+   in prefix ++ label ++ unlines (map (formatExpectSet (prefix ++ "  ")) xs)
 
 -- | Get a list of steps that can match actions right now, together with the
 -- remaining expectations if each one were to match.
@@ -153,8 +154,8 @@ liveSteps = map (\(p, s, e) -> (p, s, simplify e)) . go
       where
         choices [] = []
         choices (x : xs)
-          | order, ExpectNothing <- excess x = (x, xs) : choices xs
-          | order = [(x, xs)]
+          | order == InOrder, ExpectNothing <- excess x = (x, xs) : choices xs
+          | order == InOrder = [(x, xs)]
           | otherwise = (x, xs) : (fmap (x :) <$> choices xs)
 
 -- | Simplifies a set of expectations.  This removes unnecessary occurrences of
@@ -168,7 +169,7 @@ simplify e = case e of
     simplifyMulti order =
       construct order . concatMap (expand order . simplify)
 
-    expand :: Bool -> ExpectSet m () -> [ExpectSet m ()]
+    expand :: Order -> ExpectSet m () -> [ExpectSet m ()]
     expand _ ExpectNothing = []
     expand order (ExpectMulti order' xs) | order == order' = xs
     expand _ other = [other]
@@ -276,7 +277,7 @@ whenever = fromExpectSet . makeExpect callStack lowPriority anyMultiplicity
 -- instead.  This avoids over-asserting, and keeps your tests less brittle.
 inSequence ::
   (Monad m, Expectable t) => (forall u. Expectable u => [u m ()]) -> t m ()
-inSequence = fromExpectSet . ExpectMulti True
+inSequence = fromExpectSet . ExpectMulti InOrder
 
 -- | Combines multiple expectations, which can occur in any order.  Most of the
 -- time, you can achieve the same thing by expecting each separately, but this
@@ -294,7 +295,7 @@ inSequence = fromExpectSet . ExpectMulti True
 -- @
 inAnyOrder ::
   (Monad m, Expectable t) => (forall u. Expectable u => [u m ()]) -> t m ()
-inAnyOrder = fromExpectSet . ExpectMulti False
+inAnyOrder = fromExpectSet . ExpectMulti AnyOrder
 
 -- | Monad transformer for running mocks.
 newtype MockT m a where
@@ -317,7 +318,8 @@ newtype MockT m a where
     )
 
 instance Expectable MockT where
-  fromExpectSet e = MockT $ modify (\e' -> simplify (ExpectMulti False [e, e']))
+  fromExpectSet e =
+    MockT $ modify (\e' -> simplify (ExpectMulti AnyOrder [e, e']))
 
 instance MonadTrans MockT where
   lift = MockT . lift
@@ -358,11 +360,10 @@ mockMethod a = withFrozenCallStack $
       (Priority, Step, ExpectSet m ()) ->
       Either (Maybe (Int, String)) (Priority, StateT (ExpectSet m ()) m a)
     tryMatch (prio, Step loc step, e)
-      | Just (m :-> impl) <- cast step :: Maybe (Rule cls name m) =
-        case matchAction m a of
-          NoMatch n -> Left (Just (n, showWithLoc loc (showMatcher (Just a) m)))
-          Match Refl | MockT r <- impl a -> Right (prio, put e >> r)
-    tryMatch _ = Left Nothing
+      | Just (m :-> impl) <- cast step = case matchAction m a of
+        NoMatch n -> Left (Just (n, showWithLoc loc (showMatcher (Just a) m)))
+        Match Refl | MockT r <- impl a -> Right (prio, put e >> r)
+      | otherwise = Left Nothing
 
 -- An error for an action that matches no expectations at all.
 noMatchError ::
