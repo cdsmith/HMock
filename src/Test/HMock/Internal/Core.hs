@@ -21,16 +21,16 @@ import Control.Monad.State (MonadState (get, put), StateT (..), modify)
 import Control.Monad.Trans (MonadIO, MonadTrans (..))
 import Control.Monad.Writer (MonadWriter)
 import Data.Constraint (Constraint)
-import Data.Dynamic (Dynamic, Typeable, fromDynamic, toDyn)
 import Data.Either (partitionEithers)
 import Data.Function (on)
 import Data.List (intercalate, sortBy)
 import Data.Maybe (catMaybes)
 import Data.Type.Equality (type (:~:) (..))
+import Data.Typeable (Typeable, cast)
 import GHC.Stack (CallStack, HasCallStack, callStack, withFrozenCallStack)
 import GHC.TypeLits (KnownSymbol, Symbol)
 import Test.HMock.Internal.Multiplicity
-  ( Multiplicity (..),
+  ( Multiplicity,
     anyMultiplicity,
     decMultiplicity,
     exhaustable,
@@ -38,7 +38,9 @@ import Test.HMock.Internal.Multiplicity
   )
 import Test.HMock.Internal.Util (Loc, getSrcLoc, showWithLoc)
 
-newtype Priority = Priority Int deriving (Show, Eq, Ord)
+newtype Priority where
+  Priority :: Int -> Priority
+  deriving (Show, Eq, Ord)
 
 lowPriority :: Priority
 lowPriority = Priority 0
@@ -47,11 +49,12 @@ normalPriority :: Priority
 normalPriority = Priority 1
 
 -- | A single step of an expectation.
---
--- The 'Dynamic' is always a @'Rule' cls m@ for some choice of @cls@ and
--- @m@.
 data Step where
-  Step :: Loc -> String -> Dynamic -> Step
+  Step ::
+    (Mockable cls, Typeable m, KnownSymbol name) =>
+    Loc ->
+    Rule cls name m ->
+    Step
 
 -- | A set of expected actions and their responses.  An entire test with mocks
 -- is expected to run in a single base 'Monad', which is the first type
@@ -66,8 +69,8 @@ data ExpectSet (m :: * -> *) a where
 -- the given prefix (used to indent).
 formatExpectSet :: String -> ExpectSet m () -> String
 formatExpectSet prefix ExpectNothing = prefix ++ "nothing"
-formatExpectSet prefix (Expect prio multiplicity (Step loc s _)) =
-  prefix ++ showWithLoc loc s ++ modifierDesc
+formatExpectSet prefix (Expect prio multiplicity (Step loc (m :-> _))) =
+  prefix ++ showWithLoc loc (showMatcher Nothing m) ++ modifierDesc
   where
     modifiers = prioModifier ++ multModifier
     prioModifier
@@ -245,8 +248,8 @@ mockMethod a = withFrozenCallStack $
     tryMatch ::
       (Priority, Step, ExpectSet m ()) ->
       Either (Maybe (Int, String)) (Priority, StateT (ExpectSet m ()) m a)
-    tryMatch (prio, Step loc _ step, e)
-      | Just (m :-> impl) <- fromDynamic step :: Maybe (Rule cls name m) =
+    tryMatch (prio, Step loc step, e)
+      | Just (m :-> impl) <- cast step :: Maybe (Rule cls name m) =
         case matchAction m a of
           NoMatch n -> Left (Just (n, showWithLoc loc (showMatcher (Just a) m)))
           Match Refl | MockT r <- impl a -> Right (prio, put e >> r)
@@ -298,8 +301,7 @@ makeExpect ::
   Multiplicity ->
   Rule cls name m ->
   ExpectSet m ()
-makeExpect cs prio mult wr@(m :-> (_ :: Action cls name m a -> MockT m a)) =
-  Expect prio mult (Step (getSrcLoc cs) (showMatcher Nothing m) (toDyn wr))
+makeExpect cs prio mult wr = Expect prio mult (Step (getSrcLoc cs) wr)
 
 -- | Creates an expectation that an action is performed once.  This is
 -- equivalent to @'expectN' 'once'@, but shorter.
