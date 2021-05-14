@@ -29,6 +29,10 @@ import Test.HMock
 import Test.HMock.TH
 import Test.Hspec
 
+#if !MIN_VERSION_base(4, 13, 0)
+import Control.Monad.Fail (MonadFail)
+#endif
+
 #if MIN_VERSION_template_haskell(2, 16, 0)
 
 -- Pre-define low-level instance to prevent deriveRecursive from trying.
@@ -46,6 +50,8 @@ setupQuasi = do
   whenever $ qReify_ ''String |-> $(reifyStatic ''String)
   whenever $ qReify_ ''Int |-> $(reifyStatic ''Int)
   whenever $ qReify_ ''Bool |-> $(reifyStatic ''Bool)
+  whenever $ qReify_ ''Enum |-> $(reifyStatic ''Enum)
+  whenever $ qReify_ ''Monad |-> $(reifyStatic ''Monad)
   whenever $
     qReifyInstances_ ''Show [ConT ''String]
       |-> $(reifyInstancesStatic ''Show [ConT ''String])

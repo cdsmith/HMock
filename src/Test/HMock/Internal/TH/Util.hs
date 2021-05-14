@@ -89,7 +89,8 @@ unifyTypes = unifyTypesWith []
 unifyTypesWith :: [(Name, Type)] -> Type -> Type -> Q (Maybe [(Name, Type)])
 unifyTypesWith tbl (VarT v) t2
   | Just t1 <- lookup v tbl = unifyTypesWith tbl t1 t2
-  | otherwise = return (Just [(v, t2)])
+  | otherwise = return (Just ((v, t2) : tbl))
+unifyTypesWith tbl (ConT a) (ConT b) | a == b = return (Just tbl)
 unifyTypesWith tbl a b = do
   mbA <- replaceSyn a
   mbB <- replaceSyn b

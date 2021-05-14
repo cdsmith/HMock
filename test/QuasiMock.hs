@@ -19,6 +19,10 @@ import THUtil (deriveRecursive)
 import Test.HMock (MockT, mockMethod)
 import Test.HMock.TH (deriveMockable)
 
+#if !MIN_VERSION_base(4, 13, 0)
+import Control.Monad.Fail (MonadFail)
+#endif
+
 deriveMockable ''Quasi
 
 -- Because not all methods of Quasi are mockable, the instance must be written

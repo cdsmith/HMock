@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE ExplicitNamespaces #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -21,7 +22,7 @@ module Test.HMock.Internal.TH
 where
 
 import Control.Monad (replicateM, unless, when, zipWithM)
-import Control.Monad.Extra (concatMapM)
+import Control.Monad.Extra (concatMapM, mapMaybeM)
 import Data.Bool (bool)
 import Data.Char (toUpper)
 import Data.Default (Default (..))
@@ -229,9 +230,9 @@ makeInstance ::
   [Dec] ->
   Q Instance
 makeInstance options ty cx tbl ps m members = do
+  processedMembers <- mapM (getMethod ty m tbl) members
   (extraMembers, methods) <-
-    partitionEithers
-      <$> zipWithM memberOrMethod members (getMethod m tbl <$> members)
+    partitionEithers <$> zipWithM memberOrMethod members processedMembers
   return $
     Instance
       { instType = ty,
@@ -248,9 +249,47 @@ makeInstance options ty cx tbl ps m members = do
       return (Left dec)
     memberOrMethod _ (Right method) = return (Right method)
 
-getMethod :: Name -> [(Name, Type)] -> Dec -> Either String Method
-getMethod m tbl (SigD name ty)
-  | (tvs, cx, argsAndReturn) <- splitType (substTypeVars tbl ty) = do
+-- | Remove instance context from a method.
+--
+-- Some GHC versions report class members including the instance context (for
+-- example, @show :: Show a => a -> String@, instead of @show :: a -> String@).
+-- This looks for the instance context, and substitutes if needed to eliminate
+-- it.
+localizeMember :: Type -> Name -> Type -> Q Type
+localizeMember instTy m t@(ForallT tvs cx ty) = do
+  let fullConstraint = AppT instTy (VarT m)
+  let unifyLeft (c, cs) = fmap (,cs) <$> unifyTypes c fullConstraint
+  results <- mapMaybeM unifyLeft (choices cx)
+  case results of
+    ((tbl, remainingCx) : _) -> do
+      let cx' = substTypeVars tbl <$> remainingCx
+          ty' = substTypeVars tbl ty
+          (tvs', cx'') =
+            relevantContext
+              ty'
+              ((tvName <$> tvs) \\ (fst <$> tbl), cx')
+          t'
+            | null tvs' && null cx'' = ty'
+            | otherwise = ForallT (bindVar <$> tvs') cx'' ty'
+      return t'
+    _ -> return t
+  where
+    choices [] = []
+    choices (x : xs) = (x, xs) : (fmap (x :) <$> choices xs)
+localizeMember _ _ t = return t
+
+-- #else
+
+-- localizeMember :: Type -> Name -> Type -> Q Type
+-- localizeMember _ _ = return
+
+-- #endif
+
+getMethod :: Type -> Name -> [(Name, Type)] -> Dec -> Q (Either String Method)
+getMethod instTy m tbl (SigD name ty) = do
+  simpleTy <- localizeMember instTy m (substTypeVars tbl ty)
+  return $ do
+    let (tvs, cx, argsAndReturn) = splitType simpleTy
     (m', result) <- case last argsAndReturn of
       AppT (VarT m') result -> return (m', result)
       _ ->
@@ -281,7 +320,7 @@ getMethod m tbl (SigD name ty)
           methodArgs = argTypes,
           methodResult = result
         }
-getMethod _ _ _ = Left "A non-value member cannot be mocked."
+getMethod _ _ _ _ = return (Left "A non-value member cannot be mocked.")
 
 isKnownType :: Method -> Type -> Bool
 isKnownType method ty = null tyVars && null cx
