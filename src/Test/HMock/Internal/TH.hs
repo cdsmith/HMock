@@ -628,7 +628,7 @@ mockMethodImpl options method = do
               mockMethod
                 $( actionExp
                      argVars
-                     (unboundVarE (getActionName options method))
+                     (conE (getActionName options method))
                  )
               |]
         )

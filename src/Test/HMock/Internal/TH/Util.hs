@@ -142,5 +142,5 @@ hasNestedPolyType t = hasPolyType t
 hasPolyType :: Type -> Bool
 hasPolyType = everything (||) (mkQ False isPolyType)
   where
-    isPolyType ForallT {} = True
+    isPolyType (ForallT tvs _ _) = not (null tvs)
     isPolyType _ = False
