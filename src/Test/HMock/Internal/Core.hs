@@ -44,7 +44,7 @@ import Test.HMock.Internal.Util (Loc, getSrcLoc, showWithLoc)
 data MatchResult a b where
   -- | No match.  The int is the number of arguments that don't match.
   NoMatch :: Int -> MatchResult a b
-  -- | Match. 'Refl' witnesses equality of return types.
+  -- | Match. Stores a witness to the equality of return types.
   Match :: a :~: b -> MatchResult a b
 
 -- | A class for 'Monad' subclasses whose methods can be mocked.  You usually
