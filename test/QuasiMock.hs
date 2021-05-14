@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveLift #-}
 {-# LANGUAGE GADTs #-}
@@ -28,7 +29,6 @@ instance (Typeable m, MonadFail m, MonadIO m) => Quasi (MockT m) where
   qLookupName b s = mockMethod (QLookupName b s)
   qReify n = mockMethod (QReify n)
   qReifyFixity n = mockMethod (QReifyFixity n)
-  qReifyType n = mockMethod (QReifyType n)
   qReifyInstances n ts = mockMethod (QReifyInstances n ts)
   qReifyRoles n = mockMethod (QReifyRoles n)
   qReifyModule m = mockMethod (QReifyModule m)
@@ -44,6 +44,10 @@ instance (Typeable m, MonadFail m, MonadIO m) => Quasi (MockT m) where
   qIsExtEnabled e = mockMethod (QIsExtEnabled e)
   qExtsEnabled = mockMethod QExtsEnabled
 
+#if MIN_VERSION_template_haskell(2, 16, 0)
+  qReifyType n = mockMethod (QReifyType n)
+#endif
+
   -- Methods delegated to IO
   qNewName s = liftIO (qNewName s)
 
@@ -52,8 +56,12 @@ instance (Typeable m, MonadFail m, MonadIO m) => Quasi (MockT m) where
   qRecover = error "qRecover"
   qReifyAnnotations = error "qReifyAnnotations"
 
+#if MIN_VERSION_template_haskell(2, 16, 0)
+
 -- Pre-define low-level instance to prevent deriveRecursive from trying.
 instance Lift Bytes where lift = undefined; liftTyped = undefined
+
+#endif
 
 deriveRecursive Nothing ''Lift ''Info
 
