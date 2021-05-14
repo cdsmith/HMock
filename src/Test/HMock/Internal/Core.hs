@@ -59,32 +59,29 @@ data Step where
 data ExpectSet (m :: * -> *) a where
   ExpectNothing :: ExpectSet m ()
   Expect :: Priority -> Cardinality -> Step -> ExpectSet m ()
-  AllOf :: [ExpectSet m ()] -> ExpectSet m ()
-  Sequence :: [ExpectSet m ()] -> ExpectSet m ()
+  ExpectMulti :: Bool -> [ExpectSet m ()] -> ExpectSet m ()
 
 -- | Converts a set of expectations into a string that summarizes them, with
 -- the given prefix (used to indent).
 formatExpectSet :: String -> ExpectSet m () -> String
 formatExpectSet prefix ExpectNothing = prefix ++ "nothing"
-formatExpectSet prefix (Expect prio card (Step loc s _)) =
-  showWithLoc loc (prefix ++ s) ++ modifierDesc
+formatExpectSet prefix (Expect prio cardinality (Step loc s _)) =
+  prefix ++ showWithLoc loc s ++ modifierDesc
   where
     modifiers = prioModifier ++ cardModifier
     prioModifier
       | prio == lowPriority = ["low priority"]
       | otherwise = []
     cardModifier
-      | card == once = []
-      | otherwise = [show card]
+      | cardinality == once = []
+      | otherwise = [show cardinality]
     modifierDesc
       | null modifiers = ""
       | otherwise = " (" ++ intercalate ", " modifiers ++ ")"
-formatExpectSet prefix (AllOf xs) =
-  prefix ++ "all of (in any order):\n"
-    ++ unlines (map (formatExpectSet (prefix ++ "  ")) xs)
-formatExpectSet prefix (Sequence xs) =
-  prefix ++ "in sequence:\n"
-    ++ unlines (map (formatExpectSet (prefix ++ "  ")) xs)
+formatExpectSet prefix (ExpectMulti order xs) =
+  prefix ++ orderStr ++ unlines (map (formatExpectSet (prefix ++ "  ")) xs)
+  where
+    orderStr = if order then "in sequence:\n" else "in any order:\n"
 
 -- | Get a list of steps that can match actions right now, together with the
 -- remaining expectations if each one were to match.
@@ -96,26 +93,24 @@ liveSteps = map (\(p, s, e) -> (p, s, simplify e)) . go
     go (Expect prio card step) = case decCardinality card of
       Nothing -> [(prio, step, ExpectNothing)]
       Just card' -> [(prio, step, Expect prio card' step)]
-    go (AllOf es) =
-      [(p, a, AllOf (e' : es')) | (e, es') <- choices es, (p, a, e') <- go e]
-      where
-        choices [] = []
-        choices (x : xs) = (x, xs) : (fmap (x :) <$> choices xs)
-    go (Sequence es) =
-      [(p, a, Sequence (e' : es')) | (e, es') <- choices es, (p, a, e') <- go e]
+    go (ExpectMulti order es) =
+      [ (p, a, ExpectMulti order (e' : es'))
+        | (e, es') <- choices es,
+          (p, a, e') <- go e
+      ]
       where
         choices [] = []
         choices (x : xs)
-          | ExpectNothing <- excess x = (x, xs) : choices xs
-          | otherwise = [(x, xs)]
+          | order, ExpectNothing <- excess x = (x, xs) : choices xs
+          | order = [(x, xs)]
+          | otherwise = (x, xs) : (fmap (x :) <$> choices xs)
 
 -- | Simplifies a set of expectations.  This removes unnecessary occurrences of
 -- 'ExpectNothing' and collapses nested lists with the same ordering
 -- constraints.
 simplify :: ExpectSet m () -> ExpectSet m ()
 simplify e = case e of
-  (AllOf xs) -> simplifyMulti False xs
-  (Sequence xs) -> simplifyMulti True xs
+  (ExpectMulti order xs) -> simplifyMulti order xs
   _ -> e
   where
     simplifyMulti order =
@@ -123,15 +118,12 @@ simplify e = case e of
 
     expand :: Bool -> ExpectSet m () -> [ExpectSet m ()]
     expand _ ExpectNothing = []
-    expand order (Sequence xs) | order = xs
-    expand order (AllOf xs) | not order = xs
+    expand order (ExpectMulti order' xs) | order == order' = xs
     expand _ other = [other]
 
     construct _ [] = ExpectNothing
     construct _ [x] = x
-    construct order xs
-      | order = Sequence xs
-      | otherwise = AllOf xs
+    construct order xs = ExpectMulti order xs
 
 -- | Reduces a set of expectations to the minimum steps that would be required
 -- to satisfy the entire set.  This weeds out unnecessary information before
@@ -144,8 +136,7 @@ excess = simplify . go
     go e@(Expect _ (Interval lo _) _)
       | lo == 0 = ExpectNothing
       | otherwise = e
-    go (AllOf xs) = AllOf (map go xs)
-    go (Sequence xs) = Sequence (map go xs)
+    go (ExpectMulti order xs) = ExpectMulti order (map go xs)
 
 -- | The result of matching a @'Matcher' a@ with an @'Action' b@.  Because the
 -- types should already guarantee that the methods match, all that's left is to
@@ -294,7 +285,7 @@ class Expectable (t :: (* -> *) -> * -> *) where
   fromExpectSet :: Monad m => ExpectSet m () -> t m ()
 
 instance Expectable MockT where
-  fromExpectSet e = MockT $ modify (\e' -> simplify (AllOf [e, e']))
+  fromExpectSet e = MockT $ modify (\e' -> simplify (ExpectMulti False [e, e']))
 
 instance Expectable ExpectSet where
   fromExpectSet = id
@@ -377,7 +368,7 @@ whenever = fromExpectSet . makeExpect callStack lowPriority anyCardinality
 -- instead.  This avoids over-asserting, and keeps your tests less brittle.
 inSequence ::
   (Monad m, Expectable t) => (forall u. Expectable u => [u m ()]) -> t m ()
-inSequence = fromExpectSet . Sequence
+inSequence = fromExpectSet . ExpectMulti True
 
 -- | Combines multiple expectations, which can occur in any order.  Most of the
 -- time, you can achieve the same thing by expecting each separately, but this
@@ -395,4 +386,4 @@ inSequence = fromExpectSet . Sequence
 -- @
 inAnyOrder ::
   (Monad m, Expectable t) => (forall u. Expectable u => [u m ()]) -> t m ()
-inAnyOrder = fromExpectSet . AllOf
+inAnyOrder = fromExpectSet . ExpectMulti False
