@@ -1,5 +1,5 @@
-{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE TupleSections #-}
 
 module Test.HMock.Internal.TH.Util
   ( unappliedName,
@@ -78,12 +78,10 @@ constrainVars :: [TypeQ] -> [Name] -> CxtQ
 constrainVars cs vs = sequence [appT c (varT v) | c <- cs, v <- vs]
 
 relevantContext :: Type -> ([Name], Cxt) -> ([Name], Cxt)
-relevantContext ty (tvs, cx) =
-  (filter (tvHasVar free) tvs, filter (cxtHasVar free) cx)
+relevantContext ty (tvs, cx) = (filter needsTv tvs, filteredCx)
   where
-    free = freeTypeVars ty
-    tvHasVar vars tv = tv `elem` vars
-    cxtHasVar vars t = any (`elem` vars) (freeTypeVars t)
+    filteredCx = filter (any (`elem` freeTypeVars ty) . freeTypeVars) cx
+    needsTv v = any ((v `elem`) . freeTypeVars) (ty : filteredCx)
 
 unifyTypes :: Type -> Type -> Q (Maybe [(Name, Type)])
 unifyTypes = unifyTypesWith []
