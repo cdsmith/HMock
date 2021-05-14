@@ -1,8 +1,10 @@
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE CPP #-}
 
 module Test.HMock.Internal.TH.Util
   ( unappliedName,
     tvName,
+    bindVar,
     substTypeVar,
     substTypeVars,
     splitType,
@@ -21,14 +23,30 @@ import Data.Maybe (fromMaybe)
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax (NameFlavour (..))
 
-unappliedName :: Type -> Maybe Name
-unappliedName (AppT a _) = unappliedName a
-unappliedName (ConT a) = Just a
-unappliedName _ = Nothing
+#if MIN_VERSION_template_haskell(2,17,0)
+
+tvName :: TyVarBndr flag -> Name
+tvName (PlainTV name _) = name
+tvName (KindedTV name _ _) = name
+
+bindVar :: Name -> TyVarBndr Specificity
+bindVar n = PlainTV n SpecifiedSpec
+
+#else
 
 tvName :: TyVarBndr -> Name
 tvName (PlainTV name) = name
 tvName (KindedTV name _) = name
+
+bindVar :: Name -> TyVarBndr
+bindVar = PlainTV
+
+#endif
+
+unappliedName :: Type -> Maybe Name
+unappliedName (AppT a _) = unappliedName a
+unappliedName (ConT a) = Just a
+unappliedName _ = Nothing
 
 substTypeVar :: Name -> Type -> Type -> Type
 substTypeVar n t = substTypeVars [(n, t)]

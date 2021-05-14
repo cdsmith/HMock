@@ -23,6 +23,7 @@ import Control.Monad.Writer (MonadWriter)
 import Data.Constraint (Constraint)
 import Data.Either (partitionEithers)
 import Data.Function (on)
+import Data.Kind (Type)
 import Data.List (intercalate, sortBy)
 import Data.Maybe (catMaybes)
 import Data.Type.Equality (type (:~:) (..))
@@ -50,14 +51,14 @@ data MatchResult a b where
 -- | A class for 'Monad' subclasses whose methods can be mocked.  You usually
 -- want to generate this instance using 'Test.HMock.TH.makeMockable' or
 -- 'Test.HMock.TH.deriveMockable', because it's just a lot of boilerplate.
-class Typeable cls => Mockable (cls :: (* -> *) -> Constraint) where
+class Typeable cls => Mockable (cls :: (Type -> Type) -> Constraint) where
   -- | An action that is performed.  This data type will have one constructor
   -- for each method.
-  data Action cls :: Symbol -> (* -> *) -> * -> *
+  data Action cls :: Symbol -> (Type -> Type) -> Type -> Type
 
   -- | A specification for matching actions.  The actual arguments should be
   -- replaced with predicates.
-  data Matcher cls :: Symbol -> (* -> *) -> * -> *
+  data Matcher cls :: Symbol -> (Type -> Type) -> Type -> Type
 
   -- | Gets a text description of an 'Action', for use in error messages.
   showAction :: Action cls name m a -> String
@@ -71,7 +72,7 @@ class Typeable cls => Mockable (cls :: (* -> *) -> Constraint) where
 -- | A pair of a 'Matcher' and a response for when it matches.  The matching
 -- 'Action' is passed to the response, and is guaranteed to be a match, so it's
 -- okay to just pattern match on the correct method.
-data Rule (cls :: (* -> *) -> Constraint) (name :: Symbol) (m :: * -> *) where
+data Rule (cls :: (Type -> Type) -> Constraint) (name :: Symbol) (m :: Type -> Type) where
   -- | Matches an 'Action' and performs a response in the 'MockT' monad.  This
   -- is a vary flexible response, which can look at arguments, do things in the
   -- base monad, set up more expectations, etc.
@@ -110,7 +111,7 @@ data Order = InOrder | AnyOrder deriving (Eq)
 -- is expected to run in a single base 'Monad', which is the first type
 -- parameter here.  The second parameter is just a trick with `Expectable` (see
 -- below) to avoid GHC warnings about unused return values.
-data ExpectSet (m :: * -> *) a where
+data ExpectSet (m :: Type -> Type) a where
   ExpectNothing :: ExpectSet m ()
   Expect :: Priority -> Multiplicity -> Step -> ExpectSet m ()
   ExpectMulti :: Order -> [ExpectSet m ()] -> ExpectSet m ()
@@ -194,7 +195,7 @@ excess = simplify . go
 -- | Type class for types that can represent expectations for mocks.  The only
 -- instance you need worry about is `MockT`, which expects actions to be
 -- performed during a test.
-class Expectable (t :: (* -> *) -> * -> *) where
+class Expectable (t :: (Type -> Type) -> Type -> Type) where
   fromExpectSet :: Monad m => ExpectSet m () -> t m ()
 
 instance Expectable ExpectSet where
@@ -317,7 +318,7 @@ whenever = fromExpectSet . makeExpect callStack lowPriority anyMultiplicity
 -- instead.  This avoids over-asserting, and keeps your tests less brittle.
 inSequence ::
   (Monad m, Expectable t) => (forall u. Expectable u => [u m ()]) -> t m ()
-inSequence = fromExpectSet . ExpectMulti InOrder
+inSequence es = fromExpectSet (ExpectMulti InOrder es)
 
 -- | Combines multiple expectations, which can occur in any order.  Most of the
 -- time, you can achieve the same thing by expecting each separately, but this
@@ -335,7 +336,7 @@ inSequence = fromExpectSet . ExpectMulti InOrder
 -- @
 inAnyOrder ::
   (Monad m, Expectable t) => (forall u. Expectable u => [u m ()]) -> t m ()
-inAnyOrder = fromExpectSet . ExpectMulti AnyOrder
+inAnyOrder es = fromExpectSet (ExpectMulti AnyOrder es)
 
 -- | Monad transformer for running mocks.
 newtype MockT m a where

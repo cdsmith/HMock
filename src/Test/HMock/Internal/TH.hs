@@ -379,11 +379,11 @@ matcherConstructor options inst method = do
       | hasPolyType argTy = do
         checkExts [RankNTypes]
         v <- newName "t"
-        forallT [PlainTV v] (pure []) [t|Predicate $(varT v)|]
+        forallT [bindVar v] (pure []) [t|Predicate $(varT v)|]
       | null tyVars && null cx = [t|Predicate $(pure argTy)|]
       | otherwise = do
         checkExts [RankNTypes]
-        forallT (PlainTV <$> tyVars) (pure cx) [t|Predicate $(pure argTy)|]
+        forallT (bindVar <$> tyVars) (pure cx) [t|Predicate $(pure argTy)|]
       where
         (tyVars, cx) =
           relevantContext argTy (methodTyVars method, methodCxt method)

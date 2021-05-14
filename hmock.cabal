@@ -29,7 +29,7 @@ library
                       Test.HMock.Internal.TH,
                       Test.HMock.Internal.TH.Util,
                       Test.HMock.Internal.Util
-    build-depends:    base ^>=4.14.1.0,
+    build-depends:    base >=4.14.1.0 && < 4.16,
                       constraints,
                       data-default,
                       exceptions,
@@ -51,7 +51,7 @@ test-suite tests
                       Extras,
                       QuasiMock,
                       THUtil
-    build-depends:    base ^>=4.14.1.0,
+    build-depends:    base >=4.14.1.0 && < 4.16,
                       data-default,
                       deepseq,
                       directory,
