@@ -28,6 +28,7 @@ deriveRecursive strat cls ty = evalStateT (concatMapM defineIfNeeded [ty]) []
     defineTypeAndCons t nvars cons = do
       vs <- replicateM nvars (lift (newName "v"))
       let fullType = foldl' (\t' v -> AppT t' (VarT v)) (ConT t) vs
+      let cx = AppT (ConT cls) . VarT <$> vs
       hasInstance <- lift (isInstance cls [fullType])
       if hasInstance
         then return []
@@ -36,7 +37,7 @@ deriveRecursive strat cls ty = evalStateT (concatMapM defineIfNeeded [ty]) []
             concatMapM defineIfNeeded $
               concatMap typeToCons $ concatMap conFieldTypes cons
           return
-            ( StandaloneDerivD strat [] (AppT (ConT cls) fullType) :
+            ( StandaloneDerivD strat cx (AppT (ConT cls) fullType) :
               fieldDecls
             )
 
