@@ -8,12 +8,12 @@ module Test.HMock.Internal.Predicates where
 
 import Data.Foldable (toList)
 import Data.List (intercalate, isInfixOf, isPrefixOf, isSuffixOf)
-import Data.Typeable
+import Data.Typeable (Proxy (..), Typeable, cast, typeRep)
 import GHC.Stack (HasCallStack, callStack)
 import Language.Haskell.TH (ExpQ, PatQ, pprint)
 import Language.Haskell.TH.Syntax (lift)
-import Test.HMock.Internal.TH.Util
-import Test.HMock.Internal.Util
+import Test.HMock.Internal.TH.Util (removeModNames)
+import Test.HMock.Internal.Util (getSrcLoc, showWithLoc)
 
 -- | A predicate, which tests values and either accepts or rejects them.  This
 -- is similar to @a -> 'Bool'@, but also has a 'Show' instance to describe what
@@ -146,8 +146,8 @@ size p =
       accept = accept p . length
     }
 
--- | A 'Predicate' that accepts lists of a fixed length, whose contents match
--- the corresponding 'Predicate' in the given list.
+-- | A 'Predicate' that accepts lists or other 'Foldable' structures of a fixed
+-- size, whose contents match the corresponding 'Predicate' in the given list.
 elems :: Foldable t => [Predicate a] -> Predicate (t a)
 elems ps =
   Predicate
@@ -191,11 +191,10 @@ suchThat f =
 -- You would use this in a splice with a TH-quoted pattern argument, as in
 -- @$('match' [p| Just (Left _) |])@.
 match :: PatQ -> ExpQ
-match qpat = do
-  pat <- qpat
+match qpat =
   [|
     Predicate
-      { showPredicate = $(lift (pprint (removeModNames pat))),
+      { showPredicate = $(lift . pprint . removeModNames =<< qpat),
         accept = \case
           $(qpat) -> True
           _ -> False
