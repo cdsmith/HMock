@@ -211,6 +211,12 @@ makeExpect cs prio mult wr = Expect prio mult (Step (getSrcLoc cs) wr)
 
 -- | Creates an expectation that an action is performed once.  This is
 -- equivalent to @'expectN' 'once'@, but shorter.
+--
+-- @
+--   'runMockT' '$' do
+--     'expect' '$' readFile_ "foo.txt" '|->' "lorem ipsum"
+--     callCodeUnderTest
+-- @
 expect ::
   ( HasCallStack,
     Mockable cls,
@@ -224,6 +230,14 @@ expect ::
 expect = fromExpectSet . makeExpect callStack normalPriority once
 
 -- | Creates an expectation that an action is performed some number of times.
+--
+-- @
+--   'runMockT' '$' do
+--     'expect' '$' makeList_ '|->' ()
+--     'expectN' ('Test.HMock.atLeast' 2) '$' checkList_ "Cindy Lou Who" '|->' "nice"
+--
+--     callCodeUnderTest
+-- @
 expectN ::
   ( HasCallStack,
     Mockable cls,
@@ -241,6 +255,13 @@ expectN = (fromExpectSet .) . makeExpect callStack normalPriority
 
 -- | Creates an expectation that an action is performed any number of times.
 -- This is equivalent to @'expectN' 'anyMultiplicity'@, but shorter.
+--
+-- @
+--   'runMockT' '$' do
+--     'expectAny' '$' FetchFullName_ anything '|->' "John Doe"
+--
+--     callCodeUnderTest
+-- @
 expectAny ::
   ( HasCallStack,
     Mockable cls,
@@ -256,6 +277,17 @@ expectAny = fromExpectSet . makeExpect callStack normalPriority anyMultiplicity
 -- | Specifies a default response if a matching action is performed.  This
 -- differs from 'expectAny' because other expectations will always override
 -- this default.
+--
+-- In this example, 'whenever' installs a default behavior for @readFile@, but
+-- does not override the behavior for @"config.txt"@:
+--
+-- @
+--   'runMockT' '$' do
+--     'expectAny' '$' readFile_ "config.txt" '|->' "lang: klingon"
+--     'whenever' '$' ReadFile_ anything '|->' "tlhIngan maH!"
+--
+--     callCodeUnderTest
+-- @
 whenever ::
   ( HasCallStack,
     Mockable cls,
@@ -271,6 +303,14 @@ whenever = fromExpectSet . makeExpect callStack lowPriority anyMultiplicity
 -- | Creates a sequential expectation.  Other actions can still happen during
 -- the sequence, but these specific expectations must be met in this order.
 --
+-- @
+--   'inSequence'
+--     [ 'expect' '$' moveForward_ '|->' (),
+--       'expect' '$' turnRight_ '|->' (),
+--       'expect' '$' moveForward_ '|->' ()
+--     ]
+-- @
+--
 -- Beware of using 'inSequence' too often.  It is appropriate when the property
 -- you are testing is that the order of effects is correct.  If that's not the
 -- purpose of the test, consider adding several independent expectations,
@@ -285,12 +325,12 @@ inSequence = fromExpectSet . ExpectMulti InOrder
 -- constraints, such as:
 --
 -- @
---   inSequence
---     [ inAnyOrder
---         [ expect $ adjustMirrors :-> (),
---           expect $ fastenSeatBelt :-> ()
+--   'inSequence'
+--     [ 'inAnyOrder'
+--         [ 'expect' '$' adjustMirrors '|->' (),
+--           'expect' '$' fastenSeatBelt '|->' ()
 --         ],
---       expect $ startCar :-> ()
+--       'expect' '$' 'startCar' '|->' ()
 --     ]
 -- @
 inAnyOrder ::
