@@ -3,6 +3,7 @@ module THUtil where
 import Control.Monad.Extra (concatMapM)
 import Control.Monad.State
 import Language.Haskell.TH
+import Data.List (foldl')
 
 deriveRecursive :: Maybe DerivStrategy -> Name -> Name -> Q [Dec]
 deriveRecursive strat cls ty = evalStateT (concatMapM defineIfNeeded [ty]) []
@@ -16,14 +17,18 @@ deriveRecursive strat cls ty = evalStateT (concatMapM defineIfNeeded [ty]) []
     defineInstance t = do
       info <- lift (reify t)
       case info of
-        TyConI (DataD _ n [] _ cons _) | n == t -> defineTypeAndCons t cons
-        TyConI (NewtypeD _ n [] _ con _) | n == t -> defineTypeAndCons t [con]
+        TyConI (DataD _ n vs _ cons _)
+          | n == t -> defineTypeAndCons t (length vs) cons
+        TyConI (NewtypeD _ n vs _ con _)
+          | n == t -> defineTypeAndCons t (length vs) [con]
         TyConI (TySynD _ _ t') -> concatMapM defineIfNeeded (typeToCons t')
         _ -> return []
 
-    defineTypeAndCons :: Name -> [Con] -> StateT [Name] Q [Dec]
-    defineTypeAndCons t cons = do
-      hasInstance <- lift (isInstance cls [ConT t])
+    defineTypeAndCons :: Name -> Int -> [Con] -> StateT [Name] Q [Dec]
+    defineTypeAndCons t nvars cons = do
+      vs <- replicateM nvars (lift (newName "v"))
+      let fullType = foldl' (\t' v -> AppT t' (VarT v)) (ConT t) vs
+      hasInstance <- lift (isInstance cls [fullType])
       if hasInstance
         then return []
         else do
@@ -31,7 +36,7 @@ deriveRecursive strat cls ty = evalStateT (concatMapM defineIfNeeded [ty]) []
             concatMapM defineIfNeeded $
               concatMap typeToCons $ concatMap conFieldTypes cons
           return
-            ( StandaloneDerivD strat [] (AppT (ConT cls) (ConT t)) :
+            ( StandaloneDerivD strat [] (AppT (ConT cls) fullType) :
               fieldDecls
             )
 
