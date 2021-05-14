@@ -39,14 +39,19 @@ instance (Typeable m, MonadFail m, MonadIO m) => Quasi (MockT m) where
   qReifyConStrictness n = mockMethod (QReifyConStrictness n)
   qLocation = mockMethod QLocation
   qAddDependentFile f = mockMethod (QAddDependentFile f)
-  qAddTempFile s = mockMethod (QAddTempFile s)
   qAddTopDecls ds = mockMethod (QAddTopDecls ds)
-  qAddForeignFilePath l s = mockMethod (QAddForeignFilePath l s)
   qAddModFinalizer f = mockMethod (QAddModFinalizer f)
   qAddCorePlugin s = mockMethod (QAddCorePlugin s)
   qPutQ a = mockMethod (QPutQ a)
   qIsExtEnabled e = mockMethod (QIsExtEnabled e)
   qExtsEnabled = mockMethod QExtsEnabled
+
+#if MIN_VERSION_template_haskell(2, 14, 0)
+  qAddTempFile s = mockMethod (QAddTempFile s)
+  qAddForeignFilePath l s = mockMethod (QAddForeignFilePath l s)
+#else
+  qAddForeignFile l s = mockMethod (QAddForeignFile l s)
+#endif
 
 #if MIN_VERSION_template_haskell(2, 16, 0)
   qReifyType n = mockMethod (QReifyType n)
