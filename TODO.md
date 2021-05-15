@@ -10,7 +10,31 @@ of these effect systems.
 * `polysemy`
 * `eff`
 
-## Mockable with polymorphic return values.
+## Mockable with Typeable polymorphic return values.
+
+``` haskell
+class MonadFoo m where
+    foo :: forall a. Typeable a => a -> m a
+
+makeMockable ''MonadFoo
+```
+
+Currently, `foo` is considered unmockable, because matching methods is no longer
+enough to prove equality of the return types, so we cannot be sure that the
+response has the right type for the actual call.  But there is a `Typeable`
+constraint, so we should be able to check this at runtime instead!  That is, one
+should be able to write something like:
+
+``` haskell
+whenever $ Foo_ (typed @Bool anything) |-> True
+```
+
+Unifying the return types requires a `cast` in `matchAction`, but we should have
+the constraints that we would need to implement this.
+
+## Mockable with unconstrained polymorphic return values.
+
+Now consider polymorphic return types without the `Typeable` constraint.
 
 ``` haskell
 class MonadFoo m where
@@ -19,43 +43,22 @@ class MonadFoo m where
 makeMockable ''MonadFoo
 ```
 
-The derived instance fails to compile, because matching methods is no longer
-enough to prove equality of the return types, so we cannot be sure that the
-response has the right type for the actual call.
-
-There are two things you might want in this case.  First, you may want to write
-type-specific expectations like this:
-
-``` haskell
--- Matches foo applied only to Bool.
-whenever $ Foo_ __ :=> const (return True)
-```
-
-This is a perfectly good matcher and response, since the polymorphic return
-type on the `Matcher` can unify with the `Bool` in the response.  However, it's
-not implementable because there's no way (without a `Typeable a` constraint on
-the method) to tell whether the actual call to the method is instantiating `a`
-with `Bool`.  I don't know any way to cleverly dodge that requirement.
-Reluctantly, I accept that in order to write this expectation, the user must
-modify `MonadFoo` to add that `Typeable` constraint.
-
-Second, you could try to write a polymorphic expectation, like this:
+Again, this is considered unmockable now.  You could try to write a polymorphic
+expectation, like this:
 
 ``` haskell
 -- Matches foo applied to any type of argument.
-whenever $ Foo_ anything :=> \(Foo x) -> return x
+whenever $ Foo_ anything :-> \(Foo x) -> return x
 ```
 
-However, `(:=>)` has an ambiguous type here.  My instinct is to try to promote
+However, `(:->)` has an ambiguous type here.  My instinct is to try to promote
 the ambiguous type to a rank 2 type, thereby limiting what the programmer may
 write to those things which can unify with *any* type acceptable to `foo`.  In
 order to represent the relationship between types of the arguments and return
 value, the type of `Matcher` would probably need to mention its argument types,
 as well.  This could be done in a type-level list.
 
-If we do this right and get lucky, it could provide the type-specific case,
-since adding the (regrettably necessary) `Typeable` constraint to the method
-would allow you to write `Foo_ (typed @Int anything)` as a matcher.  Ideally,
-this should also replace the existing behavior for polymorphic arguments, which
-are already universally quantified with rank-n types in the Matcher.  But my
-attempts to make this work have so far failed.
+If we do this right and get lucky, it could generalize both the type-specific
+`Rule` with `Typeable` constraints and the existing behavior for polymorphic
+arguments, which are already universally quantified with rank-n types in the
+`Matcher`.  But my attempts to make this work have so far failed.
