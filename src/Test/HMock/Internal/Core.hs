@@ -77,7 +77,12 @@ class Typeable cls => Mockable (cls :: (Type -> Type) -> Constraint) where
 -- | A pair of a 'Matcher' and a response for when it matches.  The matching
 -- 'Action' is passed to the response, and is guaranteed to be a match, so it's
 -- okay to just pattern match on the correct method.
-data Rule (cls :: (Type -> Type) -> Constraint) (name :: Symbol) (m :: Type -> Type) where
+data
+  Rule
+    (cls :: (Type -> Type) -> Constraint)
+    (name :: Symbol)
+    (m :: Type -> Type)
+  where
   -- | Matches an 'Action' and performs a response in the 'MockT' monad.  This
   -- is a vary flexible response, which can look at arguments, do things in the
   -- base monad, set up more expectations, etc.
@@ -240,7 +245,8 @@ expect = fromExpectSet . makeExpect callStack normalPriority once
 -- @
 --   'runMockT' '$' do
 --     'expect' '$' makeList_ '|->' ()
---     'expectN' ('Test.HMock.atLeast' 2) '$' checkList_ "Cindy Lou Who" '|->' "nice"
+--     'expectN' ('Test.HMock.atLeast' 2) '$'
+--       checkList_ "Cindy Lou Who" '|->' "nice"
 --
 --     callCodeUnderTest
 -- @
