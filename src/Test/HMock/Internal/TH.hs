@@ -278,13 +278,6 @@ localizeMember instTy m t@(ForallT tvs cx ty) = do
     choices (x : xs) = (x, xs) : (fmap (x :) <$> choices xs)
 localizeMember _ _ t = return t
 
--- #else
-
--- localizeMember :: Type -> Name -> Type -> Q Type
--- localizeMember _ _ = return
-
--- #endif
-
 getMethod :: Type -> Name -> [(Name, Type)] -> Dec -> Q (Either String Method)
 getMethod instTy m tbl (SigD name ty) = do
   simpleTy <- localizeMember instTy m (substTypeVars tbl ty)
