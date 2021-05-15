@@ -13,7 +13,7 @@ import GHC.Stack (HasCallStack, callStack)
 import Language.Haskell.TH (ExpQ, PatQ, pprint)
 import Language.Haskell.TH.Syntax (lift)
 import Test.HMock.Internal.TH.Util (removeModNames)
-import Test.HMock.Internal.Util (getSrcLoc, showWithLoc)
+import Test.HMock.Internal.Util (getSrcLoc, showWithLoc, choices)
 
 -- | A predicate, which tests values and either accepts or rejects them.  This
 -- is similar to @a -> 'Bool'@, but also has a 'Show' instance to describe what
@@ -139,8 +139,8 @@ hasSubstr s =
 
 -- | A 'Predicate' that accepts lists or other 'Foldable' structures whose
 -- number of elements match the child 'Predicate'.
-size :: Foldable t => Predicate Int -> Predicate (t a)
-size p =
+sizeIs :: Foldable t => Predicate Int -> Predicate (t a)
+sizeIs p =
   Predicate
     { showPredicate = "size " ++ showPredicate p,
       accept = accept p . length
@@ -148,19 +148,34 @@ size p =
 
 -- | A 'Predicate' that accepts lists or other 'Foldable' structures of a fixed
 -- size, whose contents match the corresponding 'Predicate' in the given list.
-elems :: Foldable t => [Predicate a] -> Predicate (t a)
-elems ps =
+elemsAre :: Foldable t => [Predicate a] -> Predicate (t a)
+elemsAre ps =
   Predicate
     { showPredicate = "[" ++ intercalate ", " (map showPredicate ps) ++ "]",
-      accept = \xs -> length xs == n && and (zipWith accept ps (toList xs))
+      accept = \xs -> length xs == length ps
+        && and (zipWith accept ps (toList xs))
+    }
+
+-- | A 'Predicate' that accepts lists or other 'Foldable' structures of a fixed
+-- size, whose contents match the corresponding 'Predicate' in the given list
+-- in any order.
+unorderedElemsAre :: Foldable t => [Predicate a] -> Predicate (t a)
+unorderedElemsAre ps =
+  Predicate
+    { showPredicate =
+        "(any order) ["
+          ++ intercalate ", " (map showPredicate ps)
+          ++ "]",
+      accept = \xs -> length xs == length ps && matches ps (toList xs)
     }
   where
-    n = length ps
+    matches (q:qs) xs = or [ matches qs ys | (y, ys) <- choices xs, accept q y ]
+    matches [] _ = True
 
 -- | A 'Predicate' that accepts lists or other 'Foldable' structures whose
 -- elements all match the child 'Predicate'.
-allElems :: Foldable t => Predicate a -> Predicate (t a)
-allElems p =
+allElemsAre :: Foldable t => Predicate a -> Predicate (t a)
+allElemsAre p =
   Predicate
     { showPredicate = "all " ++ showPredicate p,
       accept = all (accept p)
@@ -168,8 +183,8 @@ allElems p =
 
 -- | A 'Predicate' that accepts lists or other 'Foldable' structures which
 -- contain at least one element matching the child 'Predicate'.
-anyElem :: Foldable t => Predicate a -> Predicate (t a)
-anyElem p =
+anyElemIs :: Foldable t => Predicate a -> Predicate (t a)
+anyElemIs p =
   Predicate
     { showPredicate = "any " ++ showPredicate p,
       accept = any (accept p)

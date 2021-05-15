@@ -1,5 +1,5 @@
-{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Extras where
 
@@ -75,17 +75,23 @@ predicateTests = do
         accept (endsWith "ing") "yearning" `shouldBe` True
         accept (endsWith "ed") "burnt" `shouldBe` False
 
-        accept (size (gt 2)) ["a", "b", "c"] `shouldBe` True
-        accept (size (gt 2)) ["a", "b"] `shouldBe` False
+        accept (sizeIs (gt 2)) ["a", "b", "c"] `shouldBe` True
+        accept (sizeIs (gt 2)) ["a", "b"] `shouldBe` False
 
-        accept (elems [gt "a", lt "b"]) ["c", "a"] `shouldBe` True
-        accept (elems [gt "a", lt "b"]) ["c", "c"] `shouldBe` False
+        accept (elemsAre [gt "a", lt "b"]) ["c", "a"] `shouldBe` True
+        accept (elemsAre [gt "a", lt "b"]) ["c", "c"] `shouldBe` False
+        accept (elemsAre [gt "a", lt "b"]) ["c"] `shouldBe` False
 
-        accept (allElems (gt "a")) ["c", "b"] `shouldBe` True
-        accept (allElems (gt "a")) ["a", "b"] `shouldBe` False
+        accept (unorderedElemsAre [gt "n", lt "d"]) ["a", "z"] `shouldBe` True
+        accept (unorderedElemsAre [gt "n", lt "d"]) ["z", "a"] `shouldBe` True
+        accept (unorderedElemsAre [gt "n", lt "d"]) ["a", "a"] `shouldBe` False
+        accept (unorderedElemsAre [lt "d"]) ["a", "a"] `shouldBe` False
 
-        accept (anyElem (gt "a")) ["a", "b"] `shouldBe` True
-        accept (anyElem (gt "a")) ["a", "a"] `shouldBe` False
+        accept (allElemsAre (gt "a")) ["c", "b"] `shouldBe` True
+        accept (allElemsAre (gt "a")) ["a", "b"] `shouldBe` False
+
+        accept (anyElemIs (gt "a")) ["a", "b"] `shouldBe` True
+        accept (anyElemIs (gt "a")) ["a", "a"] `shouldBe` False
 
         accept (suchThat ((> 5) . length)) "lengthy" `shouldBe` True
         accept (suchThat ((> 5) . length)) "short" `shouldBe` False
@@ -107,20 +113,23 @@ predicateTests = do
         show (hasSubstr "i") `shouldBe` "has substring \"i\""
         show (startsWith "fun") `shouldBe` "starts with \"fun\""
         show (endsWith "ing") `shouldBe` "ends with \"ing\""
-        show (size (gt 5) :: Predicate [()]) `shouldBe` "size > 5"
-        show (elems [gt 5, eq 5] :: Predicate [Int]) `shouldBe` "[> 5, 5]"
-        show (allElems (gt 5) :: Predicate [Int]) `shouldBe` "all > 5"
-        show (anyElem (gt 5) :: Predicate [Int]) `shouldBe` "any > 5"
+        show (sizeIs (gt 5) :: Predicate [()]) `shouldBe` "size > 5"
+        show (elemsAre [gt 5, eq 5] :: Predicate [Int]) `shouldBe` "[> 5, 5]"
+        show (unorderedElemsAre [gt 5, eq 5] :: Predicate [Int])
+          `shouldBe` "(any order) [> 5, 5]"
+        show (allElemsAre (gt 5) :: Predicate [Int]) `shouldBe` "all > 5"
+        show (anyElemIs (gt 5) :: Predicate [Int]) `shouldBe` "any > 5"
         show (suchThat ((> 5) . length) :: Predicate String)
           `shouldSatisfy` ("custom predicate at " `isPrefixOf`)
 
-    it "matches patterns" $ example $ do
-      let p = $(match [p| Just (Left _) |])
-      show p `shouldBe` "Just (Left _)"
+    it "matches patterns" $
+      example $ do
+        let p = $(match [p|Just (Left _)|])
+        show p `shouldBe` "Just (Left _)"
 
-      accept p (Just (Left "foo")) `shouldBe` True
-      accept p (Just (Right "foo")) `shouldBe` False
-      accept p Nothing `shouldBe` False
+        accept p (Just (Left "foo")) `shouldBe` True
+        accept p (Just (Right "foo")) `shouldBe` False
+        accept p Nothing `shouldBe` False
 
     it "checks types" $
       example $ do

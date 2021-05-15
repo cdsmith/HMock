@@ -76,10 +76,10 @@ setupQuasi = do
     QReifyInstances_ (eq ''Eq) (suchThat isFunctionType) |-> []
 
   whenever $
-    QReifyInstances_ (eq ''Show) (elems [$(match [p|AppT ListT (VarT _)|])])
+    QReifyInstances_ (eq ''Show) (elemsAre [$(match [p|AppT ListT (VarT _)|])])
       |-> $(reifyInstancesStatic ''Show [AppT ListT (VarT (mkName "a_0"))])
   whenever $
-    QReifyInstances_ (eq ''Eq) (elems [$(match [p|AppT ListT (VarT _)|])])
+    QReifyInstances_ (eq ''Eq) (elemsAre [$(match [p|AppT ListT (VarT _)|])])
       |-> $(reifyInstancesStatic ''Eq [AppT ListT (VarT (mkName "a_0"))])
 
 class MonadSimple m where

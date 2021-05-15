@@ -36,6 +36,7 @@ import GHC.TypeLits (Symbol)
 import Language.Haskell.TH hiding (Match, match)
 import Language.Haskell.TH.Syntax (Lift (lift))
 import Test.HMock.Internal.Core
+import Test.HMock.Internal.Util
 import Test.HMock.Internal.Predicates (Predicate (accept), eq)
 import Test.HMock.Internal.TH.Util
 
@@ -273,9 +274,6 @@ localizeMember instTy m t@(ForallT tvs cx ty) = do
             | otherwise = ForallT (bindVar <$> tvs') cx'' ty'
       return t'
     _ -> return t
-  where
-    choices [] = []
-    choices (x : xs) = (x, xs) : (fmap (x :) <$> choices xs)
 localizeMember _ _ t = return t
 
 getMethod :: Type -> Name -> [(Name, Type)] -> Dec -> Q (Either String Method)

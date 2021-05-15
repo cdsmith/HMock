@@ -159,15 +159,15 @@ liveSteps = map (\(p, s, e) -> (p, s, simplify e)) . go
       Just multiplicity' -> [(prio, step, Expect prio multiplicity' step)]
     go (ExpectMulti order es) =
       [ (p, a, ExpectMulti order (e' : es'))
-        | (e, es') <- choices es,
+        | (e, es') <- nextSteps es,
           (p, a, e') <- go e
       ]
       where
-        choices [] = []
-        choices (x : xs)
-          | order == InOrder, ExpectNothing <- excess x = (x, xs) : choices xs
+        nextSteps [] = []
+        nextSteps (x : xs)
+          | order == InOrder, ExpectNothing <- excess x = (x, xs) : nextSteps xs
           | order == InOrder = [(x, xs)]
-          | otherwise = (x, xs) : (fmap (x :) <$> choices xs)
+          | otherwise = (x, xs) : (fmap (x :) <$> nextSteps xs)
 
 -- | Simplifies a set of expectations.  This removes unnecessary occurrences of
 -- 'ExpectNothing' and collapses nested lists with the same ordering
