@@ -9,6 +9,7 @@ of these effect systems.
 * `fused-effects`
 * `polysemy`
 * `eff`
+* Maybe a `haxl` data source?
 
 ## Mockable with Typeable polymorphic return values.
 
