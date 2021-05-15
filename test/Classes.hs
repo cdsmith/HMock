@@ -162,15 +162,6 @@ simpleTests = describe "MonadSimple" $ do
 
       tooManyParams `shouldThrow` anyIOException
 
-  it "generates mock impl with a suffix" $
-    example $ do
-      decs <- runMockT $ do
-        setupQuasi
-        whenever $ qReify_ ''MonadSimple |-> $(reifyStatic ''MonadSimple)
-
-        runQ (makeMockableWithOptions def {mockSuffix = "Blah"} ''MonadSimple)
-      evaluate (rnf decs)
-
   it "is mockable" $
     example $ do
       let success = runMockT $ do
@@ -180,6 +171,35 @@ simpleTests = describe "MonadSimple" $ do
           failure = runMockT $ do
             expect $ simple_ "foo" |-> ()
             simple "bar"
+
+      success
+      failure `shouldThrow` anyException
+
+class MonadSuffix m where
+  suffix :: String -> m ()
+
+makeMockableWithOptions def {mockSuffix = "Blah"} ''MonadSuffix
+
+suffixTests :: SpecWith ()
+suffixTests = describe "MonadSuffix" $ do
+  it "generates mock impl" $
+    example $ do
+      decs <- runMockT $ do
+        setupQuasi
+        whenever $ qReify_ ''MonadSuffix |-> $(reifyStatic ''MonadSuffix)
+
+        runQ (makeMockableWithOptions def {mockSuffix = "Blah"} ''MonadSuffix)
+      evaluate (rnf decs)
+
+  it "is mockable" $
+    example $ do
+      let success = runMockT $ do
+            expect $ suffixBlah_ "foo" |-> ()
+            suffix "foo"
+
+          failure = runMockT $ do
+            expect $ suffixBlah_ "foo" |-> ()
+            suffix "bar"
 
       success
       failure `shouldThrow` anyException
@@ -690,6 +710,7 @@ errorTests = describe "errors" $ do
 classTests :: SpecWith ()
 classTests = describe "makeMockable" $ do
   simpleTests
+  suffixTests
   superTests
   mptcTests
   fdSpecializedTests
