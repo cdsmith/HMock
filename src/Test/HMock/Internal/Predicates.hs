@@ -1,13 +1,16 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module Test.HMock.Internal.Predicates where
 
-import Data.Foldable (toList)
-import Data.List (intercalate, isInfixOf, isPrefixOf, isSuffixOf)
+import Data.Char (toUpper)
+import Data.MonoTraversable
+import qualified Data.Sequences as Seq
 import Data.Typeable (Proxy (..), Typeable, cast, typeRep)
 import GHC.Stack (HasCallStack, callStack)
 import Language.Haskell.TH (ExpQ, PatQ, pprint)
@@ -141,7 +144,39 @@ just :: Predicate a -> Predicate (Maybe a)
 just p =
   Predicate
     { showPredicate = "Just (" ++ showPredicate p ++ ")",
-      accept = \case Nothing -> False; Just x -> accept p x
+      accept = \case Just x -> accept p x; _ -> False
+    }
+
+-- | A 'Predicate' that accepts an 'Either' value of @'Left' x@, where @x@
+-- matches the given child 'Predicate'.
+--
+-- >>> accept (left (lt 5)) (Left 4)
+-- >>> accept (left (lt 5)) (Left 5)
+-- >>> accept (left (lt 5)) (Right 4)
+-- True
+-- False
+-- False
+left :: Predicate a -> Predicate (Either a b)
+left p =
+  Predicate
+    { showPredicate = "Left (" ++ showPredicate p ++ ")",
+      accept = \case Left x -> accept p x; _ -> False
+    }
+
+-- | A 'Predicate' that accepts an 'Either' value of @'Right' x@, where @x@
+-- matches the given child 'Predicate'.
+--
+-- >>> accept (right (lt 5)) (Left 4)
+-- >>> accept (right (lt 5)) (Right 4)
+-- >>> accept (right (lt 5)) (Right 5)
+-- False
+-- True
+-- False
+right :: Predicate b -> Predicate (Either a b)
+right p =
+  Predicate
+    { showPredicate = "Right (" ++ showPredicate p ++ ")",
+      accept = \case Right x -> accept p x; _ -> False
     }
 
 -- | A 'Predicate' that accepts anything accepted by both of its children.
@@ -188,46 +223,115 @@ notP p =
       accept = not . accept p
     }
 
--- | A 'Predicate' that accepts lists or 'String's that start with the given
--- prefix.
+-- | A 'Predicate' that accepts sequences that start with the given prefix.
 --
 -- >>> accept (startsWith "foo") "football"
 -- >>> accept (startsWith "foo") "soccer"
 -- True
 -- False
-startsWith :: (Eq a, Show a) => [a] -> Predicate [a]
-startsWith s =
+startsWith :: (Show t, Seq.IsSequence t, Eq (Element t)) => t -> Predicate t
+startsWith pfx =
   Predicate
-    { showPredicate = "starts with " ++ show s,
-      accept = (s `isPrefixOf`)
+    { showPredicate = "starts with " ++ show pfx,
+      accept = (pfx `Seq.isPrefixOf`)
     }
 
--- | A 'Predicate' that accepts lists or 'String's that and with the given
--- suffix.
+-- | A 'Predicate' that accepts sequences that end with the given suffix.
 --
 -- >>> accept (endsWith "ow") "crossbow"
 -- >>> accept (endsWith "ow") "trebuchet"
 -- True
 -- False
-endsWith :: (Eq a, Show a) => [a] -> Predicate [a]
-endsWith s =
+endsWith :: (Show t, Seq.IsSequence t, Eq (Element t)) => t -> Predicate t
+endsWith sfx =
   Predicate
-    { showPredicate = "ends with " ++ show s,
-      accept = (s `isSuffixOf`)
+    { showPredicate = "ends with " ++ show sfx,
+      accept = (sfx `Seq.isSuffixOf`)
     }
 
--- | A 'Predicate' that accepts lists or 'String's that contain the given
--- subsequence or substring.
+-- | A 'Predicate' that accepts sequences that contain the given (consecutive)
+-- substring.
 --
 -- >>> accept (hasSubstr "i") "team"
 -- >>> accept (hasSubstr "i") "partnership"
 -- False
 -- True
-hasSubstr :: (Eq a, Show a) => [a] -> Predicate [a]
+hasSubstr :: (Show t, Seq.IsSequence t, Eq (Element t)) => t -> Predicate t
 hasSubstr s =
   Predicate
     { showPredicate = "has substring " ++ show s,
-      accept = (s `isInfixOf`)
+      accept = (s `Seq.isInfixOf`)
+    }
+
+-- | A 'Predicate' that accepts sequences that contain the given (not
+-- necessarily consecutive) subsequence.
+--
+-- >>> accept (hasSubsequence [1..5]) [1, 2, 3, 4, 5]
+-- >>> accept (hasSubsequence [1..5]) [0, 1, 0, 2, 0, 3, 0, 4, 0, 5, 0]
+-- >>> accept (hasSubsequence [1..5]) [5, 4, 3, 2, 1]
+-- True
+-- True
+-- False
+hasSubsequence :: (Show t, Seq.IsSequence t, Eq (Element t)) => t -> Predicate t
+hasSubsequence s =
+  Predicate
+    { showPredicate = "has subsequence " ++ show s,
+      accept = (s `isSubsequenceOf`)
+    }
+  where
+    isSubsequenceOf :: (Seq.IsSequence t, Eq (Element t)) => t -> t -> Bool
+    xs `isSubsequenceOf` ys = case Seq.uncons xs of
+      Nothing -> True
+      Just (x, xs') -> case Seq.uncons (snd (Seq.break (== x) ys)) of
+        Nothing -> False
+        Just (_, ys') -> xs' `isSubsequenceOf` ys'
+
+-- Transforms a 'Predicate' on 'String's or string-like types to match without
+-- regard to case.
+--
+-- >>> accept (caseInsensitive startsWith "foo") "foot"
+-- >>> accept (caseInsensitive startsWith "foo") "FOOT"
+-- >>> accept (caseInsensitive startsWith "foo") "bar"
+-- True
+-- True
+-- False
+caseInsensitive ::
+  (MonoTraversable t, Element t ~ Char) =>
+  (t -> Predicate t) ->
+  t ->
+  Predicate t
+caseInsensitive p s =
+  Predicate
+    { showPredicate = "(case insensitive) " ++ show (p s),
+      accept = accept capP . omap toUpper
+    }
+  where
+    capP = p (omap toUpper s)
+
+-- | A 'Predicate' that accepts empty lists or other foldable structures.
+--
+-- >>> accept isEmpty []
+-- >>> accept isEmpty [1, 2, 3]
+-- True
+-- False
+isEmpty :: MonoFoldable t => Predicate t
+isEmpty =
+  Predicate
+    { showPredicate = "empty",
+      accept = onull
+    }
+
+-- | A 'Predicate' that accepts non-empty lists or other foldable structures.
+--
+-- >>> accept nonEmpty []
+-- >>> accept nonEmpty [1, 2, 3]
+-- False
+-- True
+nonEmpty :: MonoFoldable t => Predicate t
+nonEmpty =
+  Predicate
+    { showPredicate = "nonempty",
+      accept = not . onull
     }
 
 -- | A 'Predicate' that accepts lists or other 'Foldable' structures whose
@@ -237,29 +341,29 @@ hasSubstr s =
 -- >>> accept (sizeIs (lt 3)) ['a' .. 'b']
 -- False
 -- True
-sizeIs :: Foldable t => Predicate Int -> Predicate (t a)
+sizeIs :: MonoFoldable t => Predicate Int -> Predicate t
 sizeIs p =
   Predicate
     { showPredicate = "size " ++ showPredicate p,
-      accept = accept p . length
+      accept = accept p . olength
     }
 
 -- | A 'Predicate' that accepts lists or other 'Foldable' structures of a fixed
 -- size, whose contents match the corresponding 'Predicate' in the given list.
 --
 -- >>> accept (elemsAre [lt 3, gt 4, lt 5]) []
--- >>> accept (elemsAre [lt 3, gt 4, lt 5]) [2, 3, 4]
--- >>> accept (elemsAre [lt 3, gt 4, lt 5]) [2, 10, 1]
--- False
+-- >>> accept (elemsAre [lt 3, lt 4, lt 5]) [2, 3, 4]
+-- >>> accept (elemsAre [lt 3, lt 4, lt 5]) [2, 10, 4]
 -- False
 -- True
-elemsAre :: Foldable t => [Predicate a] -> Predicate (t a)
+-- False
+elemsAre :: MonoFoldable t => [Predicate (Element t)] -> Predicate t
 elemsAre ps =
   Predicate
-    { showPredicate = "[" ++ intercalate ", " (map showPredicate ps) ++ "]",
+    { showPredicate = show ps,
       accept = \xs ->
-        length xs == length ps
-          && and (zipWith accept ps (toList xs))
+        olength xs == olength ps
+          && and (zipWith accept ps (otoList xs))
     }
 
 -- | A 'Predicate' that accepts lists or other 'Foldable' structures of a fixed
@@ -274,18 +378,16 @@ elemsAre ps =
 -- True
 -- False
 -- False
-unorderedElemsAre :: Foldable t => [Predicate a] -> Predicate (t a)
+unorderedElemsAre :: MonoFoldable t => [Predicate (Element t)] -> Predicate t
 unorderedElemsAre ps =
   Predicate
     { showPredicate =
-        "(any order) ["
-          ++ intercalate ", " (map showPredicate ps)
-          ++ "]",
-      accept = \xs -> length xs == length ps && matches ps (toList xs)
+        "(any order) " ++ show ps,
+      accept = matches ps . otoList
     }
   where
     matches (q : qs) xs = or [matches qs ys | (y, ys) <- choices xs, accept q y]
-    matches [] _ = True
+    matches [] xs = null xs
 
 -- | A 'Predicate' that accepts lists or other 'Foldable' structures whose
 -- elements all match the child 'Predicate'.
@@ -296,15 +398,15 @@ unorderedElemsAre ps =
 -- False
 -- True
 -- True
-each :: Foldable t => Predicate a -> Predicate (t a)
+each :: MonoFoldable t => Predicate (Element t) -> Predicate t
 each p =
   Predicate
     { showPredicate = "each (" ++ showPredicate p ++ ")",
-      accept = all (accept p)
+      accept = oall (accept p)
     }
 
--- | A 'Predicate' that accepts lists or other 'Foldable' structures which
--- contain at least one element matching the child 'Predicate'.
+-- | A 'Predicate' that accepts data structures which contain at least one
+-- element matching the child 'Predicate'.
 --
 -- >>> accept (contains (gt 5)) [3, 4, 5]
 -- >>> accept (contains (gt 5)) [4, 5, 6]
@@ -312,11 +414,106 @@ each p =
 -- False
 -- True
 -- False
-contains :: Foldable t => Predicate a -> Predicate (t a)
+contains :: MonoFoldable t => Predicate (Element t) -> Predicate t
 contains p =
   Predicate
     { showPredicate = "contains (" ++ showPredicate p ++ ")",
-      accept = any (accept p)
+      accept = oany (accept p)
+    }
+
+-- | A 'Predicate' that accepts date structures which contain an element
+-- satisfying each of the child predicates.  @'containsAll' [p1, p2, ..., pn]@
+-- is equivalent to @'contains' p1 `'andP'` 'contains' p2 `'andP'` ... `'andP'`
+-- 'contains' pn@.
+--
+-- >>> accept (containsAll [eq "foo", caseInsensitive eq "bar"]) ["foo", "BAR"]
+-- >>> accept (containsAll [eq "foo", caseInsensitive eq "bar"]) ["foo"]
+-- True
+-- False
+containsAll :: MonoFoldable t => [Predicate (Element t)] -> Predicate t
+containsAll ps =
+  Predicate
+    { showPredicate = "contains all of " ++ show ps,
+      accept = \xs -> all (flip oany xs . accept) ps
+    }
+
+-- | A 'Predicate' that accepts date structures whose elements all satisfy at
+-- least one of the child predicates.  @'containsOnly' [p1, p2, ..., pn]@ is
+-- equivalent to @'each' (p1 `'orP'` p2 `'orP'` ... `'orP'` pn)@.
+--
+-- >>> accept (containsOnly [eq "foo", lt "bar"]) ["foo", "alpha"]
+-- >>> accept (containsOnly [eq "foo", lt "bar"]) ["foo", "alpha", "qux"]
+-- True
+-- False
+containsOnly :: MonoFoldable t => [Predicate (Element t)] -> Predicate t
+containsOnly ps =
+  Predicate
+    { showPredicate = "contains only " ++ show ps,
+      accept = oall (\x -> any (`accept` x) ps)
+    }
+
+-- | A 'Predicate' that accepts values of 'RealFloat' types that are close to
+-- the given number.  The expected precision is scaled based on the target
+-- value, so that reasonable rounding error is accepted but grossly inaccurate
+-- results are not.
+--
+-- >>> accept (approxEq pi) (pi * 1000000 / 1000000)
+-- >>> accept (approxEq pi) 3.14
+-- True
+-- False
+approxEq :: (Show a, RealFloat a) => a -> Predicate a
+approxEq x =
+  Predicate
+    { showPredicate = "≈ " ++ show x,
+      accept = \y -> abs (x - y) < diff
+    }
+  where
+    (_, ex) = decodeFloat x
+    diff = encodeFloat 1 (ex - floatDigits x + 10)
+
+-- | A 'Predicate' that accepts finite numbers of any 'RealFloat' type.
+--
+-- >>> accept finite 1.0
+-- >>> accept finite (0 / 0)
+-- >>> accept finite (1 / 0)
+-- True
+-- False
+-- False
+finite :: RealFloat a => Predicate a
+finite =
+  Predicate
+    { showPredicate = "finite",
+      accept = \x -> not (isInfinite x) && not (isNaN x)
+    }
+
+-- | A 'Predicate' that accepts infinite numbers of any 'RealFrac' type.
+--
+-- >>> accept infinite 1.0
+-- >>> accept infinite (0 / 0)
+-- >>> accept infinite (1 / 0)
+-- False
+-- False
+-- True
+infinite :: RealFloat a => Predicate a
+infinite =
+  Predicate
+    { showPredicate = "infinite",
+      accept = isInfinite
+    }
+
+-- | A 'Predicate' that accepts NaN values of any 'RealFrac' type.
+--
+-- >>> accept nAn 1.0
+-- >>> accept nAn (0 / 0)
+-- >>> accept nAn (1 / 0)
+-- False
+-- True
+-- False
+nAn :: RealFloat a => Predicate a
+nAn =
+  Predicate
+    { showPredicate = "NaN",
+      accept = isNaN
     }
 
 -- | A conversion from @a -> 'Bool'@ to 'Predicate'.  This is a fallback that

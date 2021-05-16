@@ -39,21 +39,33 @@ predicateTests = do
         accept (neq "foo") "foo" `shouldBe` False
         accept (neq "foo") "bar" `shouldBe` True
 
-        accept (lt "foo") "bar" `shouldBe` True
-        accept (lt "foo") "foo" `shouldBe` False
-        accept (lt "foo") "quz" `shouldBe` False
-
         accept (gt "foo") "bar" `shouldBe` False
         accept (gt "foo") "foo" `shouldBe` False
         accept (gt "foo") "quz" `shouldBe` True
+
+        accept (geq "foo") "bar" `shouldBe` False
+        accept (geq "foo") "foo" `shouldBe` True
+        accept (geq "foo") "quz" `shouldBe` True
+
+        accept (lt "foo") "bar" `shouldBe` True
+        accept (lt "foo") "foo" `shouldBe` False
+        accept (lt "foo") "quz" `shouldBe` False
 
         accept (leq "foo") "bar" `shouldBe` True
         accept (leq "foo") "foo" `shouldBe` True
         accept (leq "foo") "quz" `shouldBe` False
 
-        accept (geq "foo") "bar" `shouldBe` False
-        accept (geq "foo") "foo" `shouldBe` True
-        accept (geq "foo") "quz" `shouldBe` True
+        accept (just (gt "foo")) Nothing `shouldBe` False
+        accept (just (gt "foo")) (Just "bar") `shouldBe` False
+        accept (just (gt "foo")) (Just "qux") `shouldBe` True
+
+        accept (left (gt "foo")) (Left "qux") `shouldBe` True
+        accept (left (gt "foo")) (Left "bar") `shouldBe` False
+        accept (left (gt "foo")) (Right "qux") `shouldBe` False
+
+        accept (right (gt "foo")) (Left "qux") `shouldBe` False
+        accept (right (gt "foo")) (Right "bar") `shouldBe` False
+        accept (right (gt "foo")) (Right "qux") `shouldBe` True
 
         accept (lt "foo" `andP` gt "bar") "eta" `shouldBe` True
         accept (lt "foo" `andP` gt "bar") "quz" `shouldBe` False
@@ -63,21 +75,33 @@ predicateTests = do
         accept (lt "bar" `orP` gt "foo") "quz" `shouldBe` True
         accept (lt "bar" `orP` gt "foo") "alpha" `shouldBe` True
 
-        accept (just (gt "foo")) Nothing `shouldBe` False
-        accept (just (gt "foo")) (Just "bar") `shouldBe` False
-        accept (just (gt "foo")) (Just "qux") `shouldBe` True
-
         accept (notP (gt "foo")) "bar" `shouldBe` True
         accept (notP (gt "foo")) "quz" `shouldBe` False
-
-        accept (hasSubstr "i") "team" `shouldBe` False
-        accept (hasSubstr "ea") "team" `shouldBe` True
 
         accept (startsWith "fun") "fungible" `shouldBe` True
         accept (startsWith "gib") "fungible" `shouldBe` False
 
         accept (endsWith "ing") "yearning" `shouldBe` True
         accept (endsWith "ed") "burnt" `shouldBe` False
+
+        accept (hasSubstr "i") "team" `shouldBe` False
+        accept (hasSubstr "ea") "team" `shouldBe` True
+
+        accept (hasSubsequence "abc") "abc" `shouldBe` True
+        accept (hasSubsequence "abc") "zazbzcz" `shouldBe` True
+        accept (hasSubsequence "abc") "cba" `shouldBe` False
+
+        accept (caseInsensitive eq "foo") "foo" `shouldBe` True
+        accept (caseInsensitive eq "foo") "FOO" `shouldBe` True
+        accept (caseInsensitive eq "foo") "bar" `shouldBe` False
+        accept (caseInsensitive startsWith "foo") "FOOTBALL" `shouldBe` True
+        accept (caseInsensitive startsWith "foo") "SOCCER" `shouldBe` False
+
+        accept isEmpty "" `shouldBe` True
+        accept isEmpty "foo" `shouldBe` False
+
+        accept nonEmpty "" `shouldBe` False
+        accept nonEmpty "foo" `shouldBe` True
 
         accept (sizeIs (gt 2)) ["a", "b", "c"] `shouldBe` True
         accept (sizeIs (gt 2)) ["a", "b"] `shouldBe` False
@@ -97,6 +121,39 @@ predicateTests = do
         accept (contains (gt "a")) ["a", "b"] `shouldBe` True
         accept (contains (gt "a")) ["a", "a"] `shouldBe` False
 
+        accept
+          (containsAll [eq "foo", caseInsensitive eq "bar"])
+          ["qux", "BAR", "foo"]
+          `shouldBe` True
+        accept
+          (containsAll [eq "foo", caseInsensitive eq "bar"])
+          ["qux", "bar", "FOO"]
+          `shouldBe` False
+
+        accept
+          (containsOnly [eq "foo", caseInsensitive eq "bar"])
+          ["foo", "bar", "BAR"]
+          `shouldBe` True
+        accept
+          (containsOnly [eq "foo", caseInsensitive eq "bar"])
+          ["foo", "bar", "FOO"]
+          `shouldBe` False
+
+        accept (approxEq pi) (3.14 :: Double) `shouldBe` False
+        accept (approxEq pi) (pi * 1000 / 1000 :: Double) `shouldBe` True
+
+        accept finite (1.0 :: Double) `shouldBe` True
+        accept finite (1.0 / 0.0 :: Double) `shouldBe` False
+        accept finite (0.0 / 0.0 :: Double) `shouldBe` False
+
+        accept infinite (1.0 :: Double) `shouldBe` False
+        accept infinite (1.0 / 0.0 :: Double) `shouldBe` True
+        accept infinite (0.0 / 0.0 :: Double) `shouldBe` False
+
+        accept nAn (1.0 :: Double) `shouldBe` False
+        accept nAn (1.0 / 0.0 :: Double) `shouldBe` False
+        accept nAn (0.0 / 0.0 :: Double) `shouldBe` True
+
         accept (suchThat ((> 5) . length)) "lengthy" `shouldBe` True
         accept (suchThat ((> 5) . length)) "short" `shouldBe` False
 
@@ -105,25 +162,43 @@ predicateTests = do
         show anything `shouldBe` "anything"
         show (eq "foo") `shouldBe` "\"foo\""
         show (neq "foo") `shouldBe` "≠ \"foo\""
-        show (lt "foo") `shouldBe` "< \"foo\""
         show (gt "foo") `shouldBe` "> \"foo\""
-        show (leq "foo") `shouldBe` "≤ \"foo\""
         show (geq "foo") `shouldBe` "≥ \"foo\""
+        show (lt "foo") `shouldBe` "< \"foo\""
+        show (leq "foo") `shouldBe` "≤ \"foo\""
         show (just (gt "foo")) `shouldBe` "Just (> \"foo\")"
+        show (left (gt "foo")) `shouldBe` "Left (> \"foo\")"
+        show (right (gt "foo")) `shouldBe` "Right (> \"foo\")"
         show (lt "foo" `andP` gt "bar")
           `shouldBe` "< \"foo\" and > \"bar\""
         show (lt "bar" `orP` gt "foo")
           `shouldBe` "< \"bar\" or > \"foo\""
         show (notP (gt "foo")) `shouldBe` "not > \"foo\""
-        show (hasSubstr "i") `shouldBe` "has substring \"i\""
         show (startsWith "fun") `shouldBe` "starts with \"fun\""
         show (endsWith "ing") `shouldBe` "ends with \"ing\""
+        show (hasSubstr "i") `shouldBe` "has substring \"i\""
+        show (hasSubsequence "abc") `shouldBe` "has subsequence \"abc\""
+        show (caseInsensitive eq "foo") `shouldBe` "(case insensitive) \"foo\""
+        show (caseInsensitive startsWith "foo")
+          `shouldBe` "(case insensitive) starts with \"foo\""
+        show (caseInsensitive endsWith "foo")
+          `shouldBe` "(case insensitive) ends with \"foo\""
+        show (isEmpty :: Predicate [()]) `shouldBe` "empty"
+        show (nonEmpty :: Predicate [()]) `shouldBe` "nonempty"
         show (sizeIs (gt 5) :: Predicate [()]) `shouldBe` "size > 5"
-        show (elemsAre [gt 5, eq 5] :: Predicate [Int]) `shouldBe` "[> 5, 5]"
+        show (elemsAre [gt 5, eq 5] :: Predicate [Int]) `shouldBe` "[> 5,5]"
         show (unorderedElemsAre [gt 5, eq 5] :: Predicate [Int])
-          `shouldBe` "(any order) [> 5, 5]"
+          `shouldBe` "(any order) [> 5,5]"
         show (each (gt 5) :: Predicate [Int]) `shouldBe` "each (> 5)"
         show (contains (gt 5) :: Predicate [Int]) `shouldBe` "contains (> 5)"
+        show (containsAll [gt 5] :: Predicate [Int])
+          `shouldBe` "contains all of [> 5]"
+        show (containsOnly [gt 5] :: Predicate [Int])
+          `shouldBe` "contains only [> 5]"
+        show (approxEq 1.0 :: Predicate Double) `shouldBe` "≈ 1.0"
+        show (finite :: Predicate Double) `shouldBe` "finite"
+        show (infinite :: Predicate Double) `shouldBe` "infinite"
+        show (nAn :: Predicate Double) `shouldBe` "NaN"
         show (suchThat ((> 5) . length) :: Predicate String)
           `shouldSatisfy` ("custom predicate at " `isPrefixOf`)
 
