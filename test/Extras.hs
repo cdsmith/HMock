@@ -91,11 +91,11 @@ predicateTests = do
         accept (unorderedElemsAre [gt "n", lt "d"]) ["a", "a"] `shouldBe` False
         accept (unorderedElemsAre [lt "d"]) ["a", "a"] `shouldBe` False
 
-        accept (allElemsAre (gt "a")) ["c", "b"] `shouldBe` True
-        accept (allElemsAre (gt "a")) ["a", "b"] `shouldBe` False
+        accept (each (gt "a")) ["c", "b"] `shouldBe` True
+        accept (each (gt "a")) ["a", "b"] `shouldBe` False
 
-        accept (anyElemIs (gt "a")) ["a", "b"] `shouldBe` True
-        accept (anyElemIs (gt "a")) ["a", "a"] `shouldBe` False
+        accept (contains (gt "a")) ["a", "b"] `shouldBe` True
+        accept (contains (gt "a")) ["a", "a"] `shouldBe` False
 
         accept (suchThat ((> 5) . length)) "lengthy" `shouldBe` True
         accept (suchThat ((> 5) . length)) "short" `shouldBe` False
@@ -109,7 +109,7 @@ predicateTests = do
         show (gt "foo") `shouldBe` "> \"foo\""
         show (leq "foo") `shouldBe` "≤ \"foo\""
         show (geq "foo") `shouldBe` "≥ \"foo\""
-        show (just (gt "foo")) `shouldBe` "Just > \"foo\""
+        show (just (gt "foo")) `shouldBe` "Just (> \"foo\")"
         show (lt "foo" `andP` gt "bar")
           `shouldBe` "< \"foo\" and > \"bar\""
         show (lt "bar" `orP` gt "foo")
@@ -122,8 +122,8 @@ predicateTests = do
         show (elemsAre [gt 5, eq 5] :: Predicate [Int]) `shouldBe` "[> 5, 5]"
         show (unorderedElemsAre [gt 5, eq 5] :: Predicate [Int])
           `shouldBe` "(any order) [> 5, 5]"
-        show (allElemsAre (gt 5) :: Predicate [Int]) `shouldBe` "all > 5"
-        show (anyElemIs (gt 5) :: Predicate [Int]) `shouldBe` "any > 5"
+        show (each (gt 5) :: Predicate [Int]) `shouldBe` "each (> 5)"
+        show (contains (gt 5) :: Predicate [Int]) `shouldBe` "contains (> 5)"
         show (suchThat ((> 5) . length) :: Predicate String)
           `shouldSatisfy` ("custom predicate at " `isPrefixOf`)
 

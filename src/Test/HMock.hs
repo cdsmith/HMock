@@ -55,6 +55,7 @@ module Test.HMock
 
     -- * Predicates
     Predicate (..),
+    anything,
     eq,
     neq,
     gt,
@@ -62,7 +63,6 @@ module Test.HMock
     lt,
     leq,
     just,
-    anything,
     andP,
     orP,
     notP,
@@ -72,8 +72,8 @@ module Test.HMock
     sizeIs,
     elemsAre,
     unorderedElemsAre,
-    allElemsAre,
-    anyElemIs,
+    each,
+    contains,
     suchThat,
     match,
     typed,

@@ -140,7 +140,7 @@ leq x =
 just :: Predicate a -> Predicate (Maybe a)
 just p =
   Predicate
-    { showPredicate = "Just " ++ showPredicate p,
+    { showPredicate = "Just (" ++ showPredicate p ++ ")",
       accept = \case Nothing -> False; Just x -> accept p x
     }
 
@@ -290,32 +290,32 @@ unorderedElemsAre ps =
 -- | A 'Predicate' that accepts lists or other 'Foldable' structures whose
 -- elements all match the child 'Predicate'.
 --
--- >>> accept (allElemsAre (gt 5)) [4, 5, 6]
--- >>> accept (allElemsAre (gt 5)) [6, 7, 8]
--- >>> accept (allElemsAre (gt 5)) []
+-- >>> accept (each (gt 5)) [4, 5, 6]
+-- >>> accept (each (gt 5)) [6, 7, 8]
+-- >>> accept (each (gt 5)) []
 -- False
 -- True
 -- True
-allElemsAre :: Foldable t => Predicate a -> Predicate (t a)
-allElemsAre p =
+each :: Foldable t => Predicate a -> Predicate (t a)
+each p =
   Predicate
-    { showPredicate = "all " ++ showPredicate p,
+    { showPredicate = "each (" ++ showPredicate p ++ ")",
       accept = all (accept p)
     }
 
 -- | A 'Predicate' that accepts lists or other 'Foldable' structures which
 -- contain at least one element matching the child 'Predicate'.
 --
--- >>> accept (anyElemIs (gt 5)) [3, 4, 5]
--- >>> accept (anyElemIs (gt 5)) [4, 5, 6]
--- >>> accept (anyElemIs (gt 5)) []
+-- >>> accept (contains (gt 5)) [3, 4, 5]
+-- >>> accept (contains (gt 5)) [4, 5, 6]
+-- >>> accept (contains (gt 5)) []
 -- False
 -- True
 -- False
-anyElemIs :: Foldable t => Predicate a -> Predicate (t a)
-anyElemIs p =
+contains :: Foldable t => Predicate a -> Predicate (t a)
+contains p =
   Predicate
-    { showPredicate = "any " ++ showPredicate p,
+    { showPredicate = "contains (" ++ showPredicate p ++ ")",
       accept = any (accept p)
     }
 
