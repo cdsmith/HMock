@@ -2,3 +2,4 @@ ignore-project: False
 coverage: True
 library-coverage: True
 tests: True
+write-ghc-environment-files: always

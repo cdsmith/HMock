@@ -18,6 +18,10 @@ import Language.Haskell.TH.Syntax (lift)
 import Test.HMock.Internal.TH.Util (removeModNames)
 import Test.HMock.Internal.Util (choices, getSrcLoc, showWithLoc)
 
+-- $setup
+-- >>> :set -XTemplateHaskell
+-- >>> :set -XTypeApplications
+
 -- | A predicate, which tests values and either accepts or rejects them.  This
 -- is similar to @a -> 'Bool'@, but also has a 'Show' instance to describe what
 -- it is checking.
@@ -34,8 +38,8 @@ instance Show (Predicate a) where show = showPredicate
 -- | A 'Predicate' that accepts anything at all.
 --
 -- >>> accept anything "foo"
--- >>> accept anything undefined
 -- True
+-- >>> accept anything undefined
 -- True
 anything :: Predicate a
 anything =
@@ -47,8 +51,8 @@ anything =
 -- | A 'Predicate' that accepts only the given value.
 --
 -- >>> accept (eq "foo") "foo"
--- >>> accept (eq "foo") "bar"
 -- True
+-- >>> accept (eq "foo") "bar"
 -- False
 eq :: (Show a, Eq a) => a -> Predicate a
 eq x =
@@ -60,8 +64,8 @@ eq x =
 -- | A 'Predicate' that accepts anything but the given value.
 --
 -- >>> accept (neq "foo") "foo"
--- >>> accept (neq "foo") "bar"
 -- False
+-- >>> accept (neq "foo") "bar"
 -- True
 neq :: (Show a, Eq a) => a -> Predicate a
 neq x =
@@ -73,10 +77,10 @@ neq x =
 -- | A 'Predicate' that accepts anything greater than the given value.
 --
 -- >>> accept (gt 5) 4
+-- False
 -- >>> accept (gt 5) 5
+-- False
 -- >>> accept (gt 5) 6
--- False
--- False
 -- True
 gt :: (Show a, Ord a) => a -> Predicate a
 gt x =
@@ -89,10 +93,10 @@ gt x =
 -- value.
 --
 -- >>> accept (geq 5) 4
--- >>> accept (geq 5) 5
--- >>> accept (geq 5) 6
 -- False
+-- >>> accept (geq 5) 5
 -- True
+-- >>> accept (geq 5) 6
 -- True
 geq :: (Show a, Ord a) => a -> Predicate a
 geq x =
@@ -104,10 +108,10 @@ geq x =
 -- | A 'Predicate' that accepts anything less than the given value.
 --
 -- >>> accept (lt 5) 4
--- >>> accept (lt 5) 5
--- >>> accept (lt 5) 6
 -- True
+-- >>> accept (lt 5) 5
 -- False
+-- >>> accept (lt 5) 6
 -- False
 lt :: (Show a, Ord a) => a -> Predicate a
 lt x =
@@ -119,10 +123,10 @@ lt x =
 -- | A 'Predicate' that accepts anything less than or equal to the given value.
 --
 -- >>> accept (leq 5) 4
+-- True
 -- >>> accept (leq 5) 5
+-- True
 -- >>> accept (leq 5) 6
--- True
--- True
 -- False
 leq :: (Show a, Ord a) => a -> Predicate a
 leq x =
@@ -135,10 +139,10 @@ leq x =
 -- the given child 'Predicate'.
 --
 -- >>> accept (just (lt 5)) Nothing
+-- False
 -- >>> accept (just (lt 5)) (Just 10)
+-- False
 -- >>> accept (just (lt 5)) (Just 4)
--- False
--- False
 -- True
 just :: Predicate a -> Predicate (Maybe a)
 just p =
@@ -151,10 +155,10 @@ just p =
 -- matches the given child 'Predicate'.
 --
 -- >>> accept (left (lt 5)) (Left 4)
--- >>> accept (left (lt 5)) (Left 5)
--- >>> accept (left (lt 5)) (Right 4)
 -- True
+-- >>> accept (left (lt 5)) (Left 5)
 -- False
+-- >>> accept (left (lt 5)) (Right 4)
 -- False
 left :: Predicate a -> Predicate (Either a b)
 left p =
@@ -167,10 +171,10 @@ left p =
 -- matches the given child 'Predicate'.
 --
 -- >>> accept (right (lt 5)) (Left 4)
--- >>> accept (right (lt 5)) (Right 4)
--- >>> accept (right (lt 5)) (Right 5)
 -- False
+-- >>> accept (right (lt 5)) (Right 4)
 -- True
+-- >>> accept (right (lt 5)) (Right 5)
 -- False
 right :: Predicate b -> Predicate (Either a b)
 right p =
@@ -182,10 +186,10 @@ right p =
 -- | A 'Predicate' that accepts anything accepted by both of its children.
 --
 -- >>> accept (lt 5 `andP` gt 3) 3
--- >>> accept (lt 5 `andP` gt 3) 4
--- >>> accept (lt 5 `andP` gt 3) 5
 -- False
+-- >>> accept (lt 5 `andP` gt 3) 4
 -- True
+-- >>> accept (lt 5 `andP` gt 3) 5
 -- False
 andP :: Predicate a -> Predicate a -> Predicate a
 p `andP` q =
@@ -197,10 +201,10 @@ p `andP` q =
 -- | A 'Predicate' that accepts anything accepted by either of its children.
 --
 -- >>> accept (lt 4 `orP` gt 5) 3
--- >>> accept (lt 4 `orP` gt 5) 4
--- >>> accept (lt 4 `orP` gt 5) 6
 -- True
+-- >>> accept (lt 4 `orP` gt 5) 4
 -- False
+-- >>> accept (lt 4 `orP` gt 5) 6
 -- True
 orP :: Predicate a -> Predicate a -> Predicate a
 p `orP` q =
@@ -213,8 +217,8 @@ p `orP` q =
 -- child rejects, and rejecting whatever its child accepts.
 --
 -- >>> accept (notP (eq 5)) 4
--- >>> accept (notP (eq 5)) 5
 -- True
+-- >>> accept (notP (eq 5)) 5
 -- False
 notP :: Predicate a -> Predicate a
 notP p =
@@ -226,8 +230,8 @@ notP p =
 -- | A 'Predicate' that accepts sequences that start with the given prefix.
 --
 -- >>> accept (startsWith "foo") "football"
--- >>> accept (startsWith "foo") "soccer"
 -- True
+-- >>> accept (startsWith "foo") "soccer"
 -- False
 startsWith :: (Show t, Seq.IsSequence t, Eq (Element t)) => t -> Predicate t
 startsWith pfx =
@@ -239,8 +243,8 @@ startsWith pfx =
 -- | A 'Predicate' that accepts sequences that end with the given suffix.
 --
 -- >>> accept (endsWith "ow") "crossbow"
--- >>> accept (endsWith "ow") "trebuchet"
 -- True
+-- >>> accept (endsWith "ow") "trebuchet"
 -- False
 endsWith :: (Show t, Seq.IsSequence t, Eq (Element t)) => t -> Predicate t
 endsWith sfx =
@@ -253,8 +257,8 @@ endsWith sfx =
 -- substring.
 --
 -- >>> accept (hasSubstr "i") "team"
--- >>> accept (hasSubstr "i") "partnership"
 -- False
+-- >>> accept (hasSubstr "i") "partnership"
 -- True
 hasSubstr :: (Show t, Seq.IsSequence t, Eq (Element t)) => t -> Predicate t
 hasSubstr s =
@@ -267,10 +271,10 @@ hasSubstr s =
 -- necessarily consecutive) subsequence.
 --
 -- >>> accept (hasSubsequence [1..5]) [1, 2, 3, 4, 5]
+-- True
 -- >>> accept (hasSubsequence [1..5]) [0, 1, 0, 2, 0, 3, 0, 4, 0, 5, 0]
+-- True
 -- >>> accept (hasSubsequence [1..5]) [5, 4, 3, 2, 1]
--- True
--- True
 -- False
 hasSubsequence :: (Show t, Seq.IsSequence t, Eq (Element t)) => t -> Predicate t
 hasSubsequence s =
@@ -290,10 +294,10 @@ hasSubsequence s =
 -- regard to case.
 --
 -- >>> accept (caseInsensitive startsWith "foo") "foot"
+-- True
 -- >>> accept (caseInsensitive startsWith "foo") "FOOT"
+-- True
 -- >>> accept (caseInsensitive startsWith "foo") "bar"
--- True
--- True
 -- False
 caseInsensitive ::
   (MonoTraversable t, Element t ~ Char) =>
@@ -310,8 +314,8 @@ caseInsensitive p s =
 -- | A 'Predicate' that accepts empty lists or other foldable structures.
 --
 -- >>> accept isEmpty []
--- >>> accept isEmpty [1, 2, 3]
 -- True
+-- >>> accept isEmpty [1, 2, 3]
 -- False
 isEmpty :: MonoFoldable t => Predicate t
 isEmpty =
@@ -323,8 +327,8 @@ isEmpty =
 -- | A 'Predicate' that accepts non-empty lists or other foldable structures.
 --
 -- >>> accept nonEmpty []
--- >>> accept nonEmpty [1, 2, 3]
 -- False
+-- >>> accept nonEmpty [1, 2, 3]
 -- True
 nonEmpty :: MonoFoldable t => Predicate t
 nonEmpty =
@@ -337,8 +341,8 @@ nonEmpty =
 -- number of elements match the child 'Predicate'.
 --
 -- >>> accept (sizeIs (lt 3)) ['a' .. 'f']
--- >>> accept (sizeIs (lt 3)) ['a' .. 'b']
 -- False
+-- >>> accept (sizeIs (lt 3)) ['a' .. 'b']
 -- True
 sizeIs :: MonoFoldable t => Predicate Int -> Predicate t
 sizeIs p =
@@ -351,10 +355,10 @@ sizeIs p =
 -- size, whose contents match the corresponding 'Predicate' in the given list.
 --
 -- >>> accept (elemsAre [lt 3, gt 4, lt 5]) []
--- >>> accept (elemsAre [lt 3, lt 4, lt 5]) [2, 3, 4]
--- >>> accept (elemsAre [lt 3, lt 4, lt 5]) [2, 10, 4]
 -- False
+-- >>> accept (elemsAre [lt 3, lt 4, lt 5]) [2, 3, 4]
 -- True
+-- >>> accept (elemsAre [lt 3, lt 4, lt 5]) [2, 10, 4]
 -- False
 elemsAre :: MonoFoldable t => [Predicate (Element t)] -> Predicate t
 elemsAre ps =
@@ -370,12 +374,12 @@ elemsAre ps =
 -- in any order.
 --
 -- >>> accept (unorderedElemsAre [lt 4, gt 10]) [2, 11]
+-- True
 -- >>> accept (unorderedElemsAre [lt 4, gt 10]) [11, 2]
+-- True
 -- >>> accept (unorderedElemsAre [lt 4, gt 10]) [2, 2]
--- >>> accept (unorderedElemsAre [lt 4, gt 10]) [2]
--- True
--- True
 -- False
+-- >>> accept (unorderedElemsAre [lt 4, gt 10]) [2]
 -- False
 unorderedElemsAre :: MonoFoldable t => [Predicate (Element t)] -> Predicate t
 unorderedElemsAre ps =
@@ -392,10 +396,10 @@ unorderedElemsAre ps =
 -- elements all match the child 'Predicate'.
 --
 -- >>> accept (each (gt 5)) [4, 5, 6]
--- >>> accept (each (gt 5)) [6, 7, 8]
--- >>> accept (each (gt 5)) []
 -- False
+-- >>> accept (each (gt 5)) [6, 7, 8]
 -- True
+-- >>> accept (each (gt 5)) []
 -- True
 each :: MonoFoldable t => Predicate (Element t) -> Predicate t
 each p =
@@ -408,10 +412,10 @@ each p =
 -- element matching the child 'Predicate'.
 --
 -- >>> accept (contains (gt 5)) [3, 4, 5]
--- >>> accept (contains (gt 5)) [4, 5, 6]
--- >>> accept (contains (gt 5)) []
 -- False
+-- >>> accept (contains (gt 5)) [4, 5, 6]
 -- True
+-- >>> accept (contains (gt 5)) []
 -- False
 contains :: MonoFoldable t => Predicate (Element t) -> Predicate t
 contains p =
@@ -426,8 +430,8 @@ contains p =
 -- 'contains' pn@.
 --
 -- >>> accept (containsAll [eq "foo", caseInsensitive eq "bar"]) ["foo", "BAR"]
--- >>> accept (containsAll [eq "foo", caseInsensitive eq "bar"]) ["foo"]
 -- True
+-- >>> accept (containsAll [eq "foo", caseInsensitive eq "bar"]) ["foo"]
 -- False
 containsAll :: MonoFoldable t => [Predicate (Element t)] -> Predicate t
 containsAll ps =
@@ -441,8 +445,8 @@ containsAll ps =
 -- equivalent to @'each' (p1 `'orP'` p2 `'orP'` ... `'orP'` pn)@.
 --
 -- >>> accept (containsOnly [eq "foo", lt "bar"]) ["foo", "alpha"]
--- >>> accept (containsOnly [eq "foo", lt "bar"]) ["foo", "alpha", "qux"]
 -- True
+-- >>> accept (containsOnly [eq "foo", lt "bar"]) ["foo", "alpha", "qux"]
 -- False
 containsOnly :: MonoFoldable t => [Predicate (Element t)] -> Predicate t
 containsOnly ps =
@@ -457,10 +461,10 @@ containsOnly ps =
 -- results are not.
 --
 -- >>> accept (eq 1.0) (sum (replicate 100 0.01))  -- fails due to rounding
--- >>> accept (approxEq 1.0) (sum (replicate 100 0.01))
--- >>> accept (approxEq 1.0) (sum (replicate 100 0.0099999))
 -- False
+-- >>> accept (approxEq 1.0) (sum (replicate 100 0.01))
 -- True
+-- >>> accept (approxEq 1.0) (sum (replicate 100 0.0099999))
 -- False
 approxEq :: (Show a, RealFloat a) => a -> Predicate a
 approxEq x =
@@ -474,10 +478,10 @@ approxEq x =
 -- | A 'Predicate' that accepts finite numbers of any 'RealFloat' type.
 --
 -- >>> accept finite 1.0
--- >>> accept finite (0 / 0)
--- >>> accept finite (1 / 0)
 -- True
+-- >>> accept finite (0 / 0)
 -- False
+-- >>> accept finite (1 / 0)
 -- False
 finite :: RealFloat a => Predicate a
 finite =
@@ -489,10 +493,10 @@ finite =
 -- | A 'Predicate' that accepts infinite numbers of any 'RealFrac' type.
 --
 -- >>> accept infinite 1.0
+-- False
 -- >>> accept infinite (0 / 0)
+-- False
 -- >>> accept infinite (1 / 0)
--- False
--- False
 -- True
 infinite :: RealFloat a => Predicate a
 infinite =
@@ -504,10 +508,10 @@ infinite =
 -- | A 'Predicate' that accepts NaN values of any 'RealFrac' type.
 --
 -- >>> accept nAn 1.0
--- >>> accept nAn (0 / 0)
--- >>> accept nAn (1 / 0)
 -- False
+-- >>> accept nAn (0 / 0)
 -- True
+-- >>> accept nAn (1 / 0)
 -- False
 nAn :: RealFloat a => Predicate a
 nAn =
@@ -521,8 +525,8 @@ nAn =
 -- description will be less helpful than standard 'Predicate's.
 --
 -- >>> accept (suchThat even) 3
--- >>> accept (suchThat even) 4
 -- False
+-- >>> accept (suchThat even) 4
 -- True
 suchThat :: HasCallStack => (a -> Bool) -> Predicate a
 suchThat f =
@@ -535,10 +539,10 @@ suchThat f =
 -- accepts values that match the pattern.
 --
 -- >>> accept $(match [p| Just (Left _) |]) Nothing
--- >>> accept $(match [p| Just (Left _) |]) (Just (Left 5))
--- >>> accept $(match [p| Just (Left _) |]) (Just (Right 5))
 -- False
+-- >>> accept $(match [p| Just (Left _) |]) (Just (Left 5))
 -- True
+-- >>> accept $(match [p| Just (Left _) |]) (Just (Right 5))
 -- False
 match :: PatQ -> ExpQ
 match qpat =
@@ -556,10 +560,10 @@ match qpat =
 -- argument is an Int, and also less than 42.
 --
 -- >>> accept (typed @String anything) "foo"
--- >>> accept (typed @String (sizeIs (gt 5))) "foo"
--- >>> accept (typed @String anything) (42 :: Int)
 -- True
+-- >>> accept (typed @String (sizeIs (gt 5))) "foo"
 -- False
+-- >>> accept (typed @String anything) (42 :: Int)
 -- False
 typed :: forall a b. (Typeable a, Typeable b) => Predicate a -> Predicate b
 typed p =

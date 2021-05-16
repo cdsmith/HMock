@@ -56,6 +56,7 @@ test-suite tests
                       data-default,
                       deepseq,
                       directory,
+                      doctest,
                       extra,
                       HMock,
                       hspec,
@@ -64,4 +65,4 @@ test-suite tests
                       template-haskell,
     hs-source-dirs:   test
     default-language: Haskell2010
-    ghc-options:      -Wall -Wincomplete-uni-patterns -Wno-orphans
+    ghc-options:      -threaded -Wall -Wincomplete-uni-patterns -Wno-orphans
