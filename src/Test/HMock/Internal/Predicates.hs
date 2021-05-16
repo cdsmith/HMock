@@ -457,9 +457,9 @@ containsOnly ps =
 -- value, so that reasonable rounding error is accepted but grossly inaccurate
 -- results are not.
 --
--- >>> accept (eq pi) (pi * 11 / 11)  -- Rounding error
--- >>> accept (approxEq pi) (pi * 11 / 11)
--- >>> accept (approxEq pi) 3.14  -- More than just rounding error
+-- >>> accept (eq 1.0) (sum (replicate 100 0.01))  -- fails due to rounding
+-- >>> accept (approxEq 1.0) (sum (replicate 100 0.01))
+-- >>> accept (approxEq 1.0) (sum (replicate 100 0.0099999))
 -- False
 -- True
 -- False
