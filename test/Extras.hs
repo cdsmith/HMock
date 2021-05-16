@@ -139,8 +139,11 @@ predicateTests = do
           ["foo", "bar", "FOO"]
           `shouldBe` False
 
-        accept (approxEq pi) (3.14 :: Double) `shouldBe` False
-        accept (approxEq pi) (pi * 1000 / 1000 :: Double) `shouldBe` True
+        -- Example of floating point rounding error:
+        pi * 11 / 11 `shouldNotBe` (pi :: Double)
+
+        accept (approxEq pi) (pi * 11 / 11 :: Double) `shouldBe` True
+        accept (approxEq pi) (3 :: Double) `shouldBe` False
 
         accept finite (1.0 :: Double) `shouldBe` True
         accept finite (1.0 / 0.0 :: Double) `shouldBe` False

@@ -457,8 +457,10 @@ containsOnly ps =
 -- value, so that reasonable rounding error is accepted but grossly inaccurate
 -- results are not.
 --
--- >>> accept (approxEq pi) (pi * 1000000 / 1000000)
--- >>> accept (approxEq pi) 3.14
+-- >>> accept (eq pi) (pi * 11 / 11)  -- Rounding error
+-- >>> accept (approxEq pi) (pi * 11 / 11)
+-- >>> accept (approxEq pi) 3.14  -- More than just rounding error
+-- False
 -- True
 -- False
 approxEq :: (Show a, RealFloat a) => a -> Predicate a
@@ -468,8 +470,7 @@ approxEq x =
       accept = \y -> abs (x - y) < diff
     }
   where
-    (_, ex) = decodeFloat x
-    diff = encodeFloat 1 (ex - floatDigits x + 10)
+    diff = encodeFloat 1 (snd (decodeFloat x) + floatDigits x `div` 2)
 
 -- | A 'Predicate' that accepts finite numbers of any 'RealFloat' type.
 --
