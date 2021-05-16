@@ -63,6 +63,10 @@ predicateTests = do
         accept (lt "bar" `orP` gt "foo") "quz" `shouldBe` True
         accept (lt "bar" `orP` gt "foo") "alpha" `shouldBe` True
 
+        accept (just (gt "foo")) Nothing `shouldBe` False
+        accept (just (gt "foo")) (Just "bar") `shouldBe` False
+        accept (just (gt "foo")) (Just "qux") `shouldBe` True
+
         accept (notP (gt "foo")) "bar" `shouldBe` True
         accept (notP (gt "foo")) "quz" `shouldBe` False
 
@@ -105,6 +109,7 @@ predicateTests = do
         show (gt "foo") `shouldBe` "> \"foo\""
         show (leq "foo") `shouldBe` "≤ \"foo\""
         show (geq "foo") `shouldBe` "≥ \"foo\""
+        show (just (gt "foo")) `shouldBe` "Just > \"foo\""
         show (lt "foo" `andP` gt "bar")
           `shouldBe` "< \"foo\" and > \"bar\""
         show (lt "bar" `orP` gt "foo")

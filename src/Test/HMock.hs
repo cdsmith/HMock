@@ -61,6 +61,7 @@ module Test.HMock
     geq,
     lt,
     leq,
+    just,
     anything,
     andP,
     orP,
