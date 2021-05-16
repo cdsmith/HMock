@@ -342,7 +342,7 @@ inSequence es = fromExpectSet (ExpectMulti InOrder es)
 --         [ 'expect' '$' adjustMirrors '|->' (),
 --           'expect' '$' fastenSeatBelt '|->' ()
 --         ],
---       'expect' '$' 'startCar' '|->' ()
+--       'expect' '$' startCar '|->' ()
 --     ]
 -- @
 inAnyOrder ::
