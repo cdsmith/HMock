@@ -1,7 +1,8 @@
 ## Better predicate descriptions
 
-Some predicates could do a better job explaining why they succeed or fail.  For example, `elemsAre` or `each` could explain which elements don't match.
-This means expanding the API to `Predicate` to include an optional explanation.
+Some predicates could do a better job explaining why they succeed or fail.  For
+example, `elemsAre` or `each` could explain which elements don't match.  This
+means expanding the API to `Predicate` to include an optional explanation.
 
 ## More predicates
 

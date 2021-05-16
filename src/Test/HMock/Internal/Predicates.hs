@@ -286,7 +286,7 @@ hasSubsequence s =
         Nothing -> False
         Just (_, ys') -> xs' `isSubsequenceOf` ys'
 
--- Transforms a 'Predicate' on 'String's or string-like types to match without
+-- | Transforms a 'Predicate' on 'String's or string-like types to match without
 -- regard to case.
 --
 -- >>> accept (caseInsensitive startsWith "foo") "foot"
