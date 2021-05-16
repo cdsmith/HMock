@@ -298,8 +298,7 @@ hasSubsequence s =
 caseInsensitive ::
   (MonoTraversable t, Element t ~ Char) =>
   (t -> Predicate t) ->
-  t ->
-  Predicate t
+  (t -> Predicate t)
 caseInsensitive p s =
   Predicate
     { showPredicate = "(case insensitive) " ++ show (p s),
