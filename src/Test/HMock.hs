@@ -92,6 +92,7 @@ module Test.HMock
 
     -- * Multiplicity
     Multiplicity,
+    meetsMultiplicity,
     once,
     anyMultiplicity,
     exactly,

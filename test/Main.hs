@@ -7,7 +7,8 @@ import Test.DocTest
 runDoctest :: IO ()
 runDoctest = doctest [
   "-isrc",
-  "src/Test/HMock/Internal/Predicates.hs"
+  "src/Test/HMock/Internal/Predicates.hs",
+  "src/Test/HMock/Internal/Multiplicity.hs"
   ]
 
 main :: IO ()

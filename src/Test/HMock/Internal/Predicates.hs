@@ -490,7 +490,7 @@ finite =
       accept = \x -> not (isInfinite x) && not (isNaN x)
     }
 
--- | A 'Predicate' that accepts infinite numbers of any 'RealFrac' type.
+-- | A 'Predicate' that accepts infinite numbers of any 'RealFloat' type.
 --
 -- >>> accept infinite 1.0
 -- False
@@ -505,7 +505,7 @@ infinite =
       accept = isInfinite
     }
 
--- | A 'Predicate' that accepts NaN values of any 'RealFrac' type.
+-- | A 'Predicate' that accepts NaN values of any 'RealFloat' type.
 --
 -- >>> accept nAn 1.0
 -- False
@@ -556,8 +556,7 @@ match qpat =
     |]
 
 -- | Converts a 'Predicate' to a new type.  Typically used with visible type
--- application, as in @'typed' @Int ('lt' 42)@.  This will only match if the
--- argument is an Int, and also less than 42.
+-- application, as in the examples below.
 --
 -- >>> accept (typed @String anything) "foo"
 -- True
