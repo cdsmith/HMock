@@ -41,6 +41,19 @@ predicateTests = do
         show (just (gt "foo")) `shouldBe` "Just (> \"foo\")"
         show (left (gt "foo")) `shouldBe` "Left (> \"foo\")"
         show (right (gt "foo")) `shouldBe` "Right (> \"foo\")"
+        show (zipP (eq 1) (eq 2) :: Predicate (Int, Int)) `shouldBe` "(1,2)"
+        show (zip3P (eq 1) (eq 2) (eq 3) :: Predicate (Int, Int, Int))
+          `shouldBe` "(1,2,3)"
+        show
+          ( zip4P (eq 1) (eq 2) (eq 3) (eq 4) ::
+              Predicate (Int, Int, Int, Int)
+          )
+          `shouldBe` "(1,2,3,4)"
+        show
+          ( zip5P (eq 1) (eq 2) (eq 3) (eq 4) (eq 5) ::
+              Predicate (Int, Int, Int, Int, Int)
+          )
+          `shouldBe` "(1,2,3,4,5)"
         show (lt "foo" `andP` gt "bar")
           `shouldBe` "< \"foo\" and > \"bar\""
         show (lt "bar" `orP` gt "foo")
@@ -75,16 +88,30 @@ predicateTests = do
           `shouldBe` "contains all of [> 5]"
         show (containsOnly [gt 5] :: Predicate [Int])
           `shouldBe` "contains only [> 5]"
+        show (containsKey (eq "foo") :: Predicate [(String, String)])
+          `shouldBe` "contains key \"foo\""
+        show
+          ( containsEntry (eq "foo") (eq "bar") ::
+              Predicate [(String, String)]
+          )
+          `shouldBe` "contains entry (\"foo\",\"bar\")"
+        show (keysAre [eq 1, eq 2, eq 3] :: Predicate [(Int, String)])
+          `shouldBe` "keys are [1,2,3]"
+        show
+          ( entriesAre [(eq 1, eq "one"), (eq 2, eq "two")] ::
+              Predicate [(Int, String)]
+          )
+          `shouldBe` "entries are [(1,\"one\"),(2,\"two\")]"
         show (approxEq 1.0 :: Predicate Double) `shouldBe` "≈ 1.0"
         show (finite :: Predicate Double) `shouldBe` "finite"
         show (infinite :: Predicate Double) `shouldBe` "infinite"
         show (nAn :: Predicate Double) `shouldBe` "NaN"
         show (is even :: Predicate Int)
           `shouldSatisfy` ("custom predicate at " `isPrefixOf`)
-        show ($$(qIs [|| even ||]) :: Predicate Int) `shouldBe` "even"
+        show ($$(qIs [||even||]) :: Predicate Int) `shouldBe` "even"
         show (with length (gt 5) :: Predicate String)
           `shouldSatisfy` ("property at " `isPrefixOf`)
-        show ($$(qWith [|| length @[] ||]) (gt 5) :: Predicate String)
+        show ($$(qWith [||length @[]||]) (gt 5) :: Predicate String)
           `shouldBe` "length @[]: > 5"
 
     it "matches patterns" $
