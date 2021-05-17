@@ -7,7 +7,6 @@ means expanding the API to `Predicate` to include an optional explanation.
 ## More predicates
 
 - pair predicates
-- regex matching for strings
 - property or field predicates
 
 ## Instances for effect systems

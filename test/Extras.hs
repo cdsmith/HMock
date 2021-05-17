@@ -55,6 +55,14 @@ predicateTests = do
           `shouldBe` "(case insensitive) starts with \"foo\""
         show (caseInsensitive endsWith "foo")
           `shouldBe` "(case insensitive) ends with \"foo\""
+        show (matchesRegex "foo" :: Predicate String)
+          `shouldBe` "/foo/"
+        show (matchesCaseInsensitiveRegex "foo" :: Predicate String)
+          `shouldBe` "/foo/i"
+        show (containsRegex "foo" :: Predicate String)
+          `shouldBe` "contains /foo/"
+        show (containsCaseInsensitiveRegex "foo" :: Predicate String)
+          `shouldBe` "contains /foo/i"
         show (isEmpty :: Predicate [()]) `shouldBe` "empty"
         show (nonEmpty :: Predicate [()]) `shouldBe` "nonempty"
         show (sizeIs (gt 5) :: Predicate [()]) `shouldBe` "size > 5"

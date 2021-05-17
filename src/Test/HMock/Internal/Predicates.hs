@@ -9,15 +9,17 @@
 module Test.HMock.Internal.Predicates where
 
 import Data.Char (toUpper)
+import Data.Maybe (isJust)
 import Data.MonoTraversable
 import qualified Data.Sequences as Seq
 import Data.Typeable (Proxy (..), Typeable, cast, typeRep)
-import GHC.Exts
+import GHC.Exts (IsList (Item, toList))
 import GHC.Stack (HasCallStack, callStack)
 import Language.Haskell.TH (ExpQ, PatQ, pprint)
 import Language.Haskell.TH.Syntax (lift)
 import Test.HMock.Internal.TH.Util (removeModNames)
 import Test.HMock.Internal.Util (choices, getSrcLoc, isSubsequenceOf, showWithLoc)
+import Text.Regex.TDFA
 
 -- $setup
 -- >>> :set -XTemplateHaskell
@@ -297,9 +299,13 @@ hasSubsequence s =
 -- >>> accept (caseInsensitive gt "NOTHING") "everything"
 -- False
 caseInsensitive ::
-  (MonoTraversable t, Element t ~ Char) =>
-  (t -> Predicate t) ->
-  (t -> Predicate t)
+  ( MonoFunctor t,
+    MonoFunctor a,
+    Element t ~ Char,
+    Element a ~ Char
+  ) =>
+  (t -> Predicate a) ->
+  (t -> Predicate a)
 caseInsensitive p s =
   Predicate
     { showPredicate = "(case insensitive) " ++ show (p s),
@@ -307,6 +313,121 @@ caseInsensitive p s =
     }
   where
     capP = p (omap toUpper s)
+
+-- | A 'Predicate' that accepts 'String's or string-like values matching a
+-- regular expression.  The expression must match the entire argument.
+--
+-- You should not use @'caseInsensitive' 'matchesRegex'@, because regular
+-- expression syntax itself is still case-sensitive even when the text you are
+-- matching is not.  Instead, use 'matchesCaseInsensitiveRegex'.
+--
+-- >>> accept (matchesRegex "x{2,5}y?") "xxxy"
+-- True
+-- >>> accept (matchesRegex "x{2,5}y?") "xyy"
+-- False
+-- >>> accept (matchesRegex "x{2,5}y?") "wxxxyz"
+-- False
+matchesRegex :: (RegexLike Regex a, Eq a) => String -> Predicate a
+matchesRegex s =
+  Predicate
+    { showPredicate = "/" ++ init (tail $ show s) ++ "/",
+      accept = \x -> case matchOnceText r x of
+        Just (a, _, b) -> a == empty && b == empty
+        Nothing -> False
+    }
+  where
+    r = makeRegexOpts comp exec s :: Regex
+    comp = defaultCompOpt {newSyntax = True, lastStarGreedy = True}
+    exec = defaultExecOpt {captureGroups = False}
+
+-- | A 'Predicate' that accepts 'String's or string-like values matching a
+-- regular expression in a case-insensitive way.  The expression must match the
+-- entire argument.
+--
+-- You should use this instead of @'caseInsensitive' 'matchesRegex'@, because
+-- regular expression syntax itself is still case-sensitive even when the text
+-- you are matching is not.
+--
+-- >>> accept (matchesCaseInsensitiveRegex "x{2,5}y?") "XXXY"
+-- True
+-- >>> accept (matchesCaseInsensitiveRegex "x{2,5}y?") "XYY"
+-- False
+-- >>> accept (matchesCaseInsensitiveRegex "x{2,5}y?") "WXXXYZ"
+-- False
+matchesCaseInsensitiveRegex ::
+  (RegexLike Regex a, Eq a) => String -> Predicate a
+matchesCaseInsensitiveRegex s =
+  Predicate
+    { showPredicate = "/" ++ init (tail $ show s) ++ "/i",
+      accept = \x -> case matchOnceText r x of
+        Just (a, _, b) -> a == empty && b == empty
+        Nothing -> False
+    }
+  where
+    r = makeRegexOpts comp exec s :: Regex
+    comp =
+      defaultCompOpt
+        { newSyntax = True,
+          lastStarGreedy = True,
+          caseSensitive = False
+        }
+    exec = defaultExecOpt {captureGroups = False}
+
+-- | A 'Predicate' that accepts 'String's or string-like values containing a
+-- match for a regular expression.  The expression need not match the entire
+-- argument.
+--
+-- You should not use @'caseInsensitive' 'containsRegex'@, because regular
+-- expression syntax itself is still case-sensitive even when the text you are
+-- matching is not.  Instead, use 'containsCaseInsensitiveRegex'.
+--
+-- >>> accept (containsRegex "x{2,5}y?") "xxxy"
+-- True
+-- >>> accept (containsRegex "x{2,5}y?") "xyy"
+-- False
+-- >>> accept (containsRegex "x{2,5}y?") "wxxxyz"
+-- True
+containsRegex :: (RegexLike Regex a, Eq a) => String -> Predicate a
+containsRegex s =
+  Predicate
+    { showPredicate = "contains /" ++ init (tail $ show s) ++ "/",
+      accept = isJust . matchOnce r
+    }
+  where
+    r = makeRegexOpts comp exec s :: Regex
+    comp = defaultCompOpt {newSyntax = True, lastStarGreedy = True}
+    exec = defaultExecOpt {captureGroups = False}
+
+-- | A 'Predicate' that accepts 'String's or string-like values containing a
+-- match for a regular expression in a case-insensitive way.  The expression
+-- need match the entire argument.
+--
+-- You should use this instead of @'caseInsensitive' 'containsRegex'@, because
+-- regular expression syntax itself is still case-sensitive even when the text
+-- you are matching is not.
+--
+-- >>> accept (containsCaseInsensitiveRegex "x{2,5}y?") "XXXY"
+-- True
+-- >>> accept (containsCaseInsensitiveRegex "x{2,5}y?") "XYY"
+-- False
+-- >>> accept (containsCaseInsensitiveRegex "x{2,5}y?") "WXXXYZ"
+-- True
+containsCaseInsensitiveRegex ::
+  (RegexLike Regex a, Eq a) => String -> Predicate a
+containsCaseInsensitiveRegex s =
+  Predicate
+    { showPredicate = "contains /" ++ init (tail $ show s) ++ "/i",
+      accept = isJust . matchOnce r
+    }
+  where
+    r = makeRegexOpts comp exec s :: Regex
+    comp =
+      defaultCompOpt
+        { newSyntax = True,
+          lastStarGreedy = True,
+          caseSensitive = False
+        }
+    exec = defaultExecOpt {captureGroups = False}
 
 -- | A 'Predicate' that accepts empty data structures.
 --
@@ -558,7 +679,7 @@ entriesAre ps =
 -- True
 -- >>> accept (approxEq 1.0) (sum (replicate 100 0.009999))
 -- False
-approxEq :: (Show a, RealFloat a) => a -> Predicate a
+approxEq :: (RealFloat a, Show a) => a -> Predicate a
 approxEq x =
   Predicate
     { showPredicate = "≈ " ++ show x,
