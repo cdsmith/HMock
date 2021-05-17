@@ -460,11 +460,18 @@ containsOnly ps =
 -- value, so that reasonable rounding error is accepted but grossly inaccurate
 -- results are not.
 --
--- >>> accept (eq 1.0) (sum (replicate 100 0.01))  -- fails due to rounding
+-- The following naive use of 'eq' fails due to rounding:
+--
+-- >>> accept (eq 1.0) (sum (replicate 100 0.01))
 -- False
+--
+-- The solution is to use 'approxEq', which accounts for rounding error.
+-- However, 'approxEq' doesn't accept results that are far enough off that they
+-- exceed reasonable rounding error.
+--
 -- >>> accept (approxEq 1.0) (sum (replicate 100 0.01))
 -- True
--- >>> accept (approxEq 1.0) (sum (replicate 100 0.0099999))
+-- >>> accept (approxEq 1.0) (sum (replicate 100 0.009999))
 -- False
 approxEq :: (Show a, RealFloat a) => a -> Predicate a
 approxEq x =

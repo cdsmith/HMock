@@ -22,8 +22,8 @@ extra-source-files: CHANGELOG.md
 
 library
     exposed-modules:  Test.HMock,
-                      Test.HMock.TH
-    other-modules:    Test.HMock.Internal.Multiplicity,
+                      Test.HMock.TH,
+                      Test.HMock.Internal.Multiplicity,
                       Test.HMock.Internal.Core,
                       Test.HMock.Internal.Predicates,
                       Test.HMock.Internal.TH,
@@ -31,15 +31,15 @@ library
                       Test.HMock.Internal.Util
     build-depends:    base >=4.11.0 && < 4.16,
                       constraints >= 0.13 && < 0.14,
-                      template-haskell >= 2.13.0 && < 2.18,
-                      mtl >= 2.2.2 && < 2.3,
                       data-default >= 0.7.1 && < 0.8,
                       exceptions >= 0.10.4 && < 0.11,
                       extra >= 1.7.9 && < 1.8,
                       monad-control >= 1.0.2 && < 1.1,
                       mono-traversable >= 1.0.15 && < 1.1,
-                      transformers-base >= 0.4.5 && < 0.5,
+                      mtl >= 2.2.2 && < 2.3,
                       syb >= 0.7.2 && < 0.8,
+                      template-haskell >= 2.13.0 && < 2.18,
+                      transformers-base >= 0.4.5 && < 0.5,
     hs-source-dirs:   src
     default-language: Haskell2010
     ghc-options:      -Wall -Wincomplete-uni-patterns
@@ -52,13 +52,12 @@ test-suite tests
                       Extras,
                       QuasiMock,
                       THUtil
-    build-depends:    base,
+    build-depends:    HMock,
+                      base,
                       data-default,
                       deepseq,
                       directory,
-                      doctest,
                       extra,
-                      HMock,
                       hspec,
                       mtl,
                       syb,
@@ -70,8 +69,12 @@ test-suite tests
 test-suite doctests
     type:             exitcode-stdio-1.0
     main-is:          DocTests.hs
-    build-depends:    base,
-                      doctest,
-    hs-source-dirs:   test
+    other-modules:    DocTests.Test.HMock.Internal.Predicates,
+                      DocTests.Test.HMock.Internal.Multiplicity
+    build-depends:    HMock,
+                      base,
+                      doctest-exitcode-stdio,
+                      doctest-lib,
+    hs-source-dirs:   doctest
     default-language: Haskell2010
-    ghc-options:      -threaded -Wall -Wincomplete-uni-patterns -Wno-orphans
+    ghc-options:      -threaded
