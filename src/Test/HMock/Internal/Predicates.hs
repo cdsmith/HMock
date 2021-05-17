@@ -138,12 +138,12 @@ leq x =
 -- | A 'Predicate' that accepts 'Maybe' values of @'Just' x@, where @x@ matches
 -- the given child 'Predicate'.
 --
--- >>> accept (just (lt 5)) Nothing
+-- >>> accept (just (eq "value")) Nothing
 -- False
--- >>> accept (just (lt 5)) (Just 10)
--- False
--- >>> accept (just (lt 5)) (Just 4)
+-- >>> accept (just (eq "value")) (Just "value")
 -- True
+-- >>> accept (just (eq "value")) (Just "wrong value")
+-- False
 just :: Predicate a -> Predicate (Maybe a)
 just p =
   Predicate
@@ -154,11 +154,11 @@ just p =
 -- | A 'Predicate' that accepts an 'Either' value of @'Left' x@, where @x@
 -- matches the given child 'Predicate'.
 --
--- >>> accept (left (lt 5)) (Left 4)
+-- >>> accept (left (eq "value")) (Left "value")
 -- True
--- >>> accept (left (lt 5)) (Left 5)
+-- >>> accept (left (eq "value")) (Right "value")
 -- False
--- >>> accept (left (lt 5)) (Right 4)
+-- >>> accept (left (eq "value")) (Left "wrong value")
 -- False
 left :: Predicate a -> Predicate (Either a b)
 left p =
@@ -170,11 +170,11 @@ left p =
 -- | A 'Predicate' that accepts an 'Either' value of @'Right' x@, where @x@
 -- matches the given child 'Predicate'.
 --
--- >>> accept (right (lt 5)) (Left 4)
--- False
--- >>> accept (right (lt 5)) (Right 4)
+-- >>> accept (right (eq "value")) (Right "value")
 -- True
--- >>> accept (right (lt 5)) (Right 5)
+-- >>> accept (right (eq "value")) (Right "wrong value")
+-- False
+-- >>> accept (right (eq "value")) (Left "value")
 -- False
 right :: Predicate b -> Predicate (Either a b)
 right p =
@@ -185,11 +185,11 @@ right p =
 
 -- | A 'Predicate' that accepts anything accepted by both of its children.
 --
--- >>> accept (lt 5 `andP` gt 3) 3
--- False
--- >>> accept (lt 5 `andP` gt 3) 4
+-- >>> accept (lt "foo" `andP` gt "bar") "eta"
 -- True
--- >>> accept (lt 5 `andP` gt 3) 5
+-- >>> accept (lt "foo" `andP` gt "bar") "quz"
+-- False
+-- >>> accept (lt "foo" `andP` gt "bar") "alpha"
 -- False
 andP :: Predicate a -> Predicate a -> Predicate a
 p `andP` q =
@@ -200,11 +200,11 @@ p `andP` q =
 
 -- | A 'Predicate' that accepts anything accepted by either of its children.
 --
--- >>> accept (lt 4 `orP` gt 5) 3
--- True
--- >>> accept (lt 4 `orP` gt 5) 4
+-- >>> accept (lt "bar" `orP` gt "foo") "eta"
 -- False
--- >>> accept (lt 4 `orP` gt 5) 6
+-- >>> accept (lt "bar" `orP` gt "foo") "quz"
+-- True
+-- >>> accept (lt "bar" `orP` gt "foo") "alpha"
 -- True
 orP :: Predicate a -> Predicate a -> Predicate a
 p `orP` q =
@@ -216,9 +216,9 @@ p `orP` q =
 -- | A 'Predicate' that inverts another 'Predicate', accepting whatever its
 -- child rejects, and rejecting whatever its child accepts.
 --
--- >>> accept (notP (eq 5)) 4
+-- >>> accept (notP (eq "negative")) "positive"
 -- True
--- >>> accept (notP (eq 5)) 5
+-- >>> accept (notP (eq "negative")) "negative"
 -- False
 notP :: Predicate a -> Predicate a
 notP p =
@@ -229,9 +229,9 @@ notP p =
 
 -- | A 'Predicate' that accepts sequences that start with the given prefix.
 --
--- >>> accept (startsWith "foo") "football"
+-- >>> accept (startsWith "fun") "fungible"
 -- True
--- >>> accept (startsWith "foo") "soccer"
+-- >>> accept (startsWith "gib") "fungible"
 -- False
 startsWith :: (Show t, Seq.IsSequence t, Eq (Element t)) => t -> Predicate t
 startsWith pfx =
@@ -274,7 +274,7 @@ hasSubstr s =
 -- True
 -- >>> accept (hasSubsequence [1..5]) [0, 1, 0, 2, 0, 3, 0, 4, 0, 5, 0]
 -- True
--- >>> accept (hasSubsequence [1..5]) [5, 4, 3, 2, 1]
+-- >>> accept (hasSubsequence [1..5]) [2, 3, 5, 7, 11]
 -- False
 hasSubsequence :: (Show t, Seq.IsSequence t, Eq (Element t)) => t -> Predicate t
 hasSubsequence s =
@@ -293,11 +293,13 @@ hasSubsequence s =
 -- | Transforms a 'Predicate' on 'String's or string-like types to match without
 -- regard to case.
 --
--- >>> accept (caseInsensitive startsWith "foo") "foot"
+-- >>> accept (caseInsensitive startsWith "foo") "FOOTBALL!"
 -- True
--- >>> accept (caseInsensitive startsWith "foo") "FOOT"
+-- >>> accept (caseInsensitive endsWith "ball") "soccer"
+-- False
+-- >>> accept (caseInsensitive eq "time") "TIME"
 -- True
--- >>> accept (caseInsensitive startsWith "foo") "bar"
+-- >>> accept (caseInsensitive gt "NOTHING") "everything"
 -- False
 caseInsensitive ::
   (MonoTraversable t, Element t ~ Char) =>
@@ -317,6 +319,10 @@ caseInsensitive p s =
 -- True
 -- >>> accept isEmpty [1, 2, 3]
 -- False
+-- >>> accept isEmpty ""
+-- True
+-- >>> accept isEmpty "gas tank"
+-- False
 isEmpty :: MonoFoldable t => Predicate t
 isEmpty =
   Predicate
@@ -329,6 +335,10 @@ isEmpty =
 -- >>> accept nonEmpty []
 -- False
 -- >>> accept nonEmpty [1, 2, 3]
+-- True
+-- >>> accept nonEmpty ""
+-- False
+-- >>> accept nonEmpty "gas tank"
 -- True
 nonEmpty :: MonoFoldable t => Predicate t
 nonEmpty =
@@ -354,10 +364,10 @@ sizeIs p =
 -- | A 'Predicate' that accepts lists or other 'Foldable' structures of a fixed
 -- size, whose contents match the corresponding 'Predicate' in the given list.
 --
--- >>> accept (elemsAre [lt 3, gt 4, lt 5]) []
--- False
 -- >>> accept (elemsAre [lt 3, lt 4, lt 5]) [2, 3, 4]
 -- True
+-- >>> accept (elemsAre [lt 3, lt 4, lt 5]) [2, 3, 4, 5]
+-- False
 -- >>> accept (elemsAre [lt 3, lt 4, lt 5]) [2, 10, 4]
 -- False
 elemsAre :: MonoFoldable t => [Predicate (Element t)] -> Predicate t
@@ -373,13 +383,13 @@ elemsAre ps =
 -- size, whose contents match the corresponding 'Predicate' in the given list
 -- in any order.
 --
--- >>> accept (unorderedElemsAre [lt 4, gt 10]) [2, 11]
+-- >>> accept (unorderedElemsAre [eq 1, eq 2, eq 3]) [1, 2, 3]
 -- True
--- >>> accept (unorderedElemsAre [lt 4, gt 10]) [11, 2]
+-- >>> accept (unorderedElemsAre [eq 1, eq 2, eq 3]) [2, 3, 1]
 -- True
--- >>> accept (unorderedElemsAre [lt 4, gt 10]) [2, 2]
+-- >>> accept (unorderedElemsAre [eq 1, eq 2, eq 3]) [1, 2, 3, 4]
 -- False
--- >>> accept (unorderedElemsAre [lt 4, gt 10]) [2]
+-- >>> accept (unorderedElemsAre [eq 1, eq 2, eq 3]) [1, 3]
 -- False
 unorderedElemsAre :: MonoFoldable t => [Predicate (Element t)] -> Predicate t
 unorderedElemsAre ps =
@@ -429,10 +439,12 @@ contains p =
 -- is equivalent to @'contains' p1 `'andP'` 'contains' p2 `'andP'` ... `'andP'`
 -- 'contains' pn@.
 --
--- >>> accept (containsAll [eq "foo", caseInsensitive eq "bar"]) ["foo", "BAR"]
+-- >>> accept (containsAll [eq "foo", eq "bar"]) ["bar", "foo"]
 -- True
--- >>> accept (containsAll [eq "foo", caseInsensitive eq "bar"]) ["foo"]
+-- >>> accept (containsAll [eq "foo", eq "bar"]) ["foo"]
 -- False
+-- >>> accept (containsAll [eq "foo", eq "bar"]) ["foo", "bar", "qux"]
+-- True
 containsAll :: MonoFoldable t => [Predicate (Element t)] -> Predicate t
 containsAll ps =
   Predicate
@@ -444,9 +456,11 @@ containsAll ps =
 -- least one of the child predicates.  @'containsOnly' [p1, p2, ..., pn]@ is
 -- equivalent to @'each' (p1 `'orP'` p2 `'orP'` ... `'orP'` pn)@.
 --
--- >>> accept (containsOnly [eq "foo", lt "bar"]) ["foo", "alpha"]
+-- >>> accept (containsOnly [eq "foo", eq "bar"]) ["foo", "foo"]
 -- True
--- >>> accept (containsOnly [eq "foo", lt "bar"]) ["foo", "alpha", "qux"]
+-- >>> accept (containsOnly [eq "foo", eq "bar"]) ["foo", "bar"]
+-- True
+-- >>> accept (containsOnly [eq "foo", eq "bar"]) ["foo", "qux"]
 -- False
 containsOnly :: MonoFoldable t => [Predicate (Element t)] -> Predicate t
 containsOnly ps =
@@ -467,7 +481,7 @@ containsOnly ps =
 --
 -- The solution is to use 'approxEq', which accounts for rounding error.
 -- However, 'approxEq' doesn't accept results that are far enough off that they
--- exceed reasonable rounding error.
+-- likely arise from incorrect calculations instead of rounding error.
 --
 -- >>> accept (approxEq 1.0) (sum (replicate 100 0.01))
 -- True
