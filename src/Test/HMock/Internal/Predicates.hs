@@ -15,11 +15,11 @@ import qualified Data.Sequences as Seq
 import Data.Typeable (Proxy (..), Typeable, cast, typeRep)
 import GHC.Exts (IsList (Item, toList))
 import GHC.Stack (HasCallStack, callStack)
-import Language.Haskell.TH (ExpQ, PatQ, pprint)
-import Language.Haskell.TH.Syntax (lift)
+import Language.Haskell.TH (ExpQ, PatQ, Q, TExp, pprint, unType)
+import Language.Haskell.TH.Syntax (lift, liftTyped)
 import Test.HMock.Internal.TH.Util (removeModNames)
 import Test.HMock.Internal.Util (choices, getSrcLoc, isSubsequenceOf, showWithLoc)
-import Text.Regex.TDFA
+import Text.Regex.TDFA hiding (match)
 
 -- $setup
 -- >>> :set -XTemplateHaskell
@@ -139,6 +139,24 @@ leq x =
       accept = (<= x)
     }
 
+-- | A 'Predicate' that matches 'True' values.
+--
+-- >>> accept true True
+-- True
+-- >>> accept true False
+-- False
+true :: Predicate Bool
+true = eq True
+
+-- | A 'Predicate' that matches 'False' values.
+--
+-- >>> accept false True
+-- False
+-- >>> accept false False
+-- True
+false :: Predicate Bool
+false = eq False
+
 -- | A 'Predicate' that accepts 'Maybe' values of @'Just' x@, where @x@ matches
 -- the given child 'Predicate'.
 --
@@ -185,6 +203,76 @@ right p =
   Predicate
     { showPredicate = "Right (" ++ showPredicate p ++ ")",
       accept = \case Right x -> accept p x; _ -> False
+    }
+
+-- | A 'Predicate' that accepts pairs whose elements satisfy the corresponding
+-- child 'Predicates'.
+--
+-- >>> accept (zipP (eq "foo") (eq "bar")) ("foo", "bar")
+-- True
+-- >>> accept (zipP (eq "foo") (eq "bar")) ("bar", "foo")
+-- False
+zipP :: Predicate a -> Predicate b -> Predicate (a, b)
+zipP p q =
+  Predicate
+    { showPredicate = show (p, q),
+      accept = \(x, y) -> accept p x && accept q y
+    }
+
+-- | A 'Predicate' that accepts 3-tuples whose elements satisfy the
+-- corresponding child 'Predicates'.
+--
+-- >>> accept (zip3P (eq "foo") (eq "bar") (eq "qux")) ("foo", "bar", "qux")
+-- True
+-- >>> accept (zip3P (eq "foo") (eq "bar") (eq "qux")) ("qux", "bar", "foo")
+-- False
+zip3P :: Predicate a -> Predicate b -> Predicate c -> Predicate (a, b, c)
+zip3P p1 p2 p3 =
+  Predicate
+    { showPredicate = show (p1, p2, p3),
+      accept = \(x1, x2, x3) -> accept p1 x1 && accept p2 x2 && accept p3 x3
+    }
+
+-- | A 'Predicate' that accepts 3-tuples whose elements satisfy the
+-- corresponding child 'Predicates'.
+--
+-- >>> accept (zip4P (eq 1) (eq 2) (eq 3) (eq 4)) (1, 2, 3, 4)
+-- True
+-- >>> accept (zip4P (eq 1) (eq 2) (eq 3) (eq 4)) (4, 3, 2, 1)
+-- False
+zip4P ::
+  Predicate a ->
+  Predicate b ->
+  Predicate c ->
+  Predicate d ->
+  Predicate (a, b, c, d)
+zip4P p1 p2 p3 p4 =
+  Predicate
+    { showPredicate = show (p1, p2, p3, p4),
+      accept = \(x1, x2, x3, x4) ->
+        accept p1 x1 && accept p2 x2 && accept p3 x3 && accept p4 x4
+    }
+
+-- | A 'Predicate' that accepts 3-tuples whose elements satisfy the
+-- corresponding child 'Predicates'.
+--
+-- >>> accept (zip5P (eq 1) (eq 2) (eq 3) (eq 4) (eq 5)) (1, 2, 3, 4, 5)
+-- True
+-- >>> accept (zip5P (eq 1) (eq 2) (eq 3) (eq 4) (eq 5)) (5, 4, 3, 2, 1)
+-- False
+zip5P ::
+  Predicate a ->
+  Predicate b ->
+  Predicate c ->
+  Predicate d ->
+  Predicate e ->
+  Predicate (a, b, c, d, e)
+zip5P p1 p2 p3 p4 p5 =
+  Predicate
+    { showPredicate = show (p1, p2, p3, p4, p5),
+      accept = \(x1, x2, x3, x4, x5) ->
+        accept p1 x1 && accept p2 x2 && accept p3 x3 && accept p4 x4
+          && accept p5 x5
     }
 
 -- | A 'Predicate' that accepts anything accepted by both of its children.
@@ -737,28 +825,97 @@ nAn =
 -- can be used to build a 'Predicate' that checks anything at all.  However, its
 -- description will be less helpful than standard 'Predicate's.
 --
--- >>> accept (suchThat even) 3
+-- >>> accept (is even) 3
 -- False
--- >>> accept (suchThat even) 4
+-- >>> accept (is even) 4
 -- True
-suchThat :: HasCallStack => (a -> Bool) -> Predicate a
-suchThat f =
+is :: HasCallStack => (a -> Bool) -> Predicate a
+is f =
   Predicate
     { showPredicate = showWithLoc (getSrcLoc callStack) "custom predicate",
       accept = f
     }
 
+-- | A Template Haskell splice that acts like 'is', but receives a quoted typed
+-- expression at compile time and has a more helpful description for error
+-- messages.
+--
+-- >>> accept $$(qIs [|| even ||]) 3
+-- False
+-- >>> accept $$(qIs [|| even ||]) 4
+-- True
+--
+-- >>> show $$(qIs [|| even ||])
+-- "even"
+qIs :: HasCallStack => Q (TExp (a -> Bool)) -> Q (TExp (Predicate a))
+qIs f =
+  [||
+  Predicate
+    { showPredicate = $$(liftTyped . pprint . removeModNames . unType =<< f),
+      accept = $$f
+    }
+  ||]
+
+-- | A combinator to lift a 'Predicate' to work on a property or computed value
+-- of the original value.
+--
+-- >>> accept (with abs (gt 5)) (-6)
+-- True
+-- >>> accept (with abs (gt 5)) (-5)
+-- False
+-- >>> accept (with reverse (eq "olleh")) "hello"
+-- True
+-- >>> accept (with reverse (eq "olleh")) "goodbye"
+-- False
+with :: HasCallStack => (a -> b) -> Predicate b -> Predicate a
+with f p =
+  Predicate
+    { showPredicate =
+        showWithLoc (getSrcLoc callStack) "property" ++ ": " ++ show p,
+      accept = accept p . f
+    }
+
+-- | A Template Haskell splice that acts like 'is', but receives a quoted typed
+-- expression at compile time and has a more helpful description for error
+-- messages.
+--
+-- >>> accept ($$(qWith [|| abs ||]) (gt 5)) (-6)
+-- True
+-- >>> accept ($$(qWith [|| abs ||]) (gt 5)) (-5)
+-- False
+-- >>> accept ($$(qWith [|| reverse ||]) (eq "olleh")) "hello"
+-- True
+-- >>> accept ($$(qWith [|| reverse ||]) (eq "olleh")) "goodbye"
+-- False
+--
+-- >>> show ($$(qWith [|| abs ||]) (gt 5))
+-- "abs: > 5"
+qWith :: Q (TExp (a -> b)) -> Q (TExp (Predicate b -> Predicate a))
+qWith f =
+  [||
+  \p ->
+  Predicate
+    { showPredicate =
+        $$(liftTyped . pprint . removeModNames . unType =<< f) ++ ": "
+          ++ show p,
+      accept = accept p . $$f
+    }
+  ||]
+
 -- | A Template Haskell splice that turns a quoted pattern into a predicate that
 -- accepts values that match the pattern.
 --
--- >>> accept $(match [p| Just (Left _) |]) Nothing
+-- >>> accept $(qMatch [p| Just (Left _) |]) Nothing
 -- False
--- >>> accept $(match [p| Just (Left _) |]) (Just (Left 5))
+-- >>> accept $(qMatch [p| Just (Left _) |]) (Just (Left 5))
 -- True
--- >>> accept $(match [p| Just (Left _) |]) (Just (Right 5))
+-- >>> accept $(qMatch [p| Just (Left _) |]) (Just (Right 5))
 -- False
-match :: PatQ -> ExpQ
-match qpat =
+--
+-- >>> show $(qMatch [p| Just (Left _) |])
+-- "Just (Left _)"
+qMatch :: PatQ -> ExpQ
+qMatch qpat =
   [|
     Predicate
       { showPredicate = $(lift . pprint . removeModNames =<< qpat),

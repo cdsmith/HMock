@@ -71,15 +71,15 @@ setupQuasi = do
     qReifyInstances_ ''Eq [ConT ''Bool]
       |-> $(reifyInstancesStatic ''Eq [ConT ''Bool])
   whenever $
-    QReifyInstances_ (eq ''Show) (suchThat isFunctionType) |-> []
+    QReifyInstances_ (eq ''Show) (is functionType) |-> []
   whenever $
-    QReifyInstances_ (eq ''Eq) (suchThat isFunctionType) |-> []
+    QReifyInstances_ (eq ''Eq) (is functionType) |-> []
 
   whenever $
-    QReifyInstances_ (eq ''Show) (elemsAre [$(match [p|AppT ListT (VarT _)|])])
+    QReifyInstances_ (eq ''Show) (elemsAre [$(qMatch [p|AppT ListT (VarT _)|])])
       |-> $(reifyInstancesStatic ''Show [AppT ListT (VarT (mkName "a_0"))])
   whenever $
-    QReifyInstances_ (eq ''Eq) (elemsAre [$(match [p|AppT ListT (VarT _)|])])
+    QReifyInstances_ (eq ''Eq) (elemsAre [$(qMatch [p|AppT ListT (VarT _)|])])
       |-> $(reifyInstancesStatic ''Eq [AppT ListT (VarT (mkName "a_0"))])
 
 class MonadSimple m where
@@ -447,12 +447,12 @@ polyArgTests = describe "MonadPolyArg" $ do
     example $ do
       let success = runMyBase . runMockT $ do
             expect $
-              PolyArg_ (eq "foo") (suchThat ((== 1) . fromEnum)) anything |-> ()
+              PolyArg_ (eq "foo") (with fromEnum (eq 1)) anything |-> ()
             polyArg "foo" (toEnum 1 :: Bool) "hello"
 
           failure = runMyBase . runMockT $ do
             expect $
-              PolyArg_ (eq "foo") (suchThat ((== 1) . fromEnum)) anything |-> ()
+              PolyArg_ (eq "foo") (with fromEnum (eq 1)) anything |-> ()
             polyArg "foo" (toEnum 2 :: Bool) "hello"
 
       success

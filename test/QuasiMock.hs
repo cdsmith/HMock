@@ -82,8 +82,8 @@ deriveRecursive Nothing ''Lift ''InstanceDec
 reifyInstancesStatic :: Name -> [Type] -> Q Exp
 reifyInstancesStatic n ts = reifyInstances n ts >>= lift
 
-isFunctionType :: [Type] -> Bool
-isFunctionType = everything (||) (mkQ False isArrow)
+functionType :: [Type] -> Bool
+functionType = everything (||) (mkQ False isArrow)
   where
     isArrow ArrowT = True
     isArrow _ = False

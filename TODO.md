@@ -4,11 +4,6 @@ Some predicates could do a better job explaining why they succeed or fail.  For
 example, `elemsAre` or `each` could explain which elements don't match.  This
 means expanding the API to `Predicate` to include an optional explanation.
 
-## More predicates
-
-- pair predicates
-- property or field predicates
-
 ## Instances for effect systems
 
 An increasing number of people are using libraries like `eff`, `polysemy`,

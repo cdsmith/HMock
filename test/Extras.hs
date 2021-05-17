@@ -79,12 +79,17 @@ predicateTests = do
         show (finite :: Predicate Double) `shouldBe` "finite"
         show (infinite :: Predicate Double) `shouldBe` "infinite"
         show (nAn :: Predicate Double) `shouldBe` "NaN"
-        show (suchThat ((> 5) . length) :: Predicate String)
+        show (is even :: Predicate Int)
           `shouldSatisfy` ("custom predicate at " `isPrefixOf`)
+        show ($$(qIs [|| even ||]) :: Predicate Int) `shouldBe` "even"
+        show (with length (gt 5) :: Predicate String)
+          `shouldSatisfy` ("property at " `isPrefixOf`)
+        show ($$(qWith [|| length @[] ||]) (gt 5) :: Predicate String)
+          `shouldBe` "length @[]: > 5"
 
     it "matches patterns" $
       example $ do
-        let p = $(match [p|Just (Left _)|])
+        let p = $(qMatch [p|Just (Left _)|])
         show p `shouldBe` "Just (Left _)"
 
         accept p (Just (Left "foo")) `shouldBe` True

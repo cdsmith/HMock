@@ -136,7 +136,7 @@ coreTests = do
     it "stores source location in suchThat predicate" $
       example $ do
         let test = runMockT $ do
-              expect $ ReadFile_ (suchThat ("foo" `isPrefixOf`)) |-> "foo"
+              expect $ ReadFile_ (is ("foo" `isPrefixOf`)) |-> "foo"
               readFile "bar.txt"
 
         test `shouldThrow` errorWith ("Core.hs" `isInfixOf`)
