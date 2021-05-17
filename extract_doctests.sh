@@ -12,8 +12,8 @@ MODULES=$(grep -l -- '-- >>>' $(find src -name *.hs) \
              | sed 's/src\///' | sed 's/\.hs$//' | sed 's/\//./g')
 
 $CMD --import-dir src \
-     --output-dir doctest \
+     --output-dir test \
      --import-tested \
      --module-prefix DocTests \
-     --executable-main DocTests.hs \
+     --library-main All \
      $MODULES

@@ -21,6 +21,7 @@ import Test.HMock.Internal.Util (choices, getSrcLoc, showWithLoc)
 -- $setup
 -- >>> :set -XTemplateHaskell
 -- >>> :set -XTypeApplications
+-- >>> :set -Wno-type-defaults
 
 -- | A predicate, which tests values and either accepts or rejects them.  This
 -- is similar to @a -> 'Bool'@, but also has a 'Show' instance to describe what
