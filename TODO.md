@@ -8,7 +8,6 @@ means expanding the API to `Predicate` to include an optional explanation.
 
 - pair predicates
 - regex matching for strings
-- containsKey, containsValue, containsEntry (for maps)
 - property or field predicates
 
 ## Instances for effect systems

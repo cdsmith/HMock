@@ -12,11 +12,12 @@ import Data.Char (toUpper)
 import Data.MonoTraversable
 import qualified Data.Sequences as Seq
 import Data.Typeable (Proxy (..), Typeable, cast, typeRep)
+import GHC.Exts
 import GHC.Stack (HasCallStack, callStack)
 import Language.Haskell.TH (ExpQ, PatQ, pprint)
 import Language.Haskell.TH.Syntax (lift)
 import Test.HMock.Internal.TH.Util (removeModNames)
-import Test.HMock.Internal.Util (choices, getSrcLoc, showWithLoc)
+import Test.HMock.Internal.Util (choices, getSrcLoc, isSubsequenceOf, showWithLoc)
 
 -- $setup
 -- >>> :set -XTemplateHaskell
@@ -283,13 +284,6 @@ hasSubsequence s =
     { showPredicate = "has subsequence " ++ show s,
       accept = (s `isSubsequenceOf`)
     }
-  where
-    isSubsequenceOf :: (Seq.IsSequence t, Eq (Element t)) => t -> t -> Bool
-    xs `isSubsequenceOf` ys = case Seq.uncons xs of
-      Nothing -> True
-      Just (x, xs') -> case Seq.uncons (snd (Seq.break (== x) ys)) of
-        Nothing -> False
-        Just (_, ys') -> xs' `isSubsequenceOf` ys'
 
 -- | Transforms a 'Predicate' on 'String's or string-like types to match without
 -- regard to case.
@@ -314,7 +308,7 @@ caseInsensitive p s =
   where
     capP = p (omap toUpper s)
 
--- | A 'Predicate' that accepts empty lists or other foldable structures.
+-- | A 'Predicate' that accepts empty data structures.
 --
 -- >>> accept isEmpty []
 -- True
@@ -331,7 +325,7 @@ isEmpty =
       accept = onull
     }
 
--- | A 'Predicate' that accepts non-empty lists or other foldable structures.
+-- | A 'Predicate' that accepts non-empty data structures.
 --
 -- >>> accept nonEmpty []
 -- False
@@ -348,8 +342,8 @@ nonEmpty =
       accept = not . onull
     }
 
--- | A 'Predicate' that accepts lists or other 'Foldable' structures whose
--- number of elements match the child 'Predicate'.
+-- | A 'Predicate' that accepts data structures whose number of elements match
+-- the child 'Predicate'.
 --
 -- >>> accept (sizeIs (lt 3)) ['a' .. 'f']
 -- False
@@ -362,8 +356,8 @@ sizeIs p =
       accept = accept p . olength
     }
 
--- | A 'Predicate' that accepts lists or other 'Foldable' structures of a fixed
--- size, whose contents match the corresponding 'Predicate' in the given list.
+-- | A 'Predicate' that accepts data structures whose contents each match the
+-- corresponding 'Predicate' in the given list, in the same order.
 --
 -- >>> accept (elemsAre [lt 3, lt 4, lt 5]) [2, 3, 4]
 -- True
@@ -380,9 +374,8 @@ elemsAre ps =
           && and (zipWith accept ps (otoList xs))
     }
 
--- | A 'Predicate' that accepts lists or other 'Foldable' structures of a fixed
--- size, whose contents match the corresponding 'Predicate' in the given list
--- in any order.
+-- | A 'Predicate' that accepts data structures whose contents each match the
+-- corresponding 'Predicate' in the given list, in any order.
 --
 -- >>> accept (unorderedElemsAre [eq 1, eq 2, eq 3]) [1, 2, 3]
 -- True
@@ -403,8 +396,8 @@ unorderedElemsAre ps =
     matches (q : qs) xs = or [matches qs ys | (y, ys) <- choices xs, accept q y]
     matches [] xs = null xs
 
--- | A 'Predicate' that accepts lists or other 'Foldable' structures whose
--- elements all match the child 'Predicate'.
+-- | A 'Predicate' that accepts data structures whose elements each match the
+-- child 'Predicate'.
 --
 -- >>> accept (each (gt 5)) [4, 5, 6]
 -- False
@@ -435,7 +428,7 @@ contains p =
       accept = oany (accept p)
     }
 
--- | A 'Predicate' that accepts date structures which contain an element
+-- | A 'Predicate' that accepts data structures which contain an element
 -- satisfying each of the child predicates.  @'containsAll' [p1, p2, ..., pn]@
 -- is equivalent to @'contains' p1 `'andP'` 'contains' p2 `'andP'` ... `'andP'`
 -- 'contains' pn@.
@@ -453,7 +446,7 @@ containsAll ps =
       accept = \xs -> all (flip oany xs . accept) ps
     }
 
--- | A 'Predicate' that accepts date structures whose elements all satisfy at
+-- | A 'Predicate' that accepts data structures whose elements all satisfy at
 -- least one of the child predicates.  @'containsOnly' [p1, p2, ..., pn]@ is
 -- equivalent to @'each' (p1 `'orP'` p2 `'orP'` ... `'orP'` pn)@.
 --
@@ -469,6 +462,83 @@ containsOnly ps =
     { showPredicate = "contains only " ++ show ps,
       accept = oall (\x -> any (`accept` x) ps)
     }
+
+-- | A 'Predicate' that accepts map-like structures which contain a key matching
+-- the child 'Predicate'.
+--
+-- >>> accept (containsKey (eq "foo")) [("foo", 1), ("bar", 2)]
+-- True
+-- >>> accept (containsKey (eq "foo")) [("bar", 1), ("qux", 2)]
+-- False
+containsKey :: (IsList t, Item t ~ (k, v)) => Predicate k -> Predicate t
+containsKey p =
+  Predicate
+    { showPredicate = "contains key " ++ show p,
+      accept = \m -> any (accept p) (fst <$> toList m)
+    }
+
+-- | A 'Predicate' that accepts map-like structures which contain a key/value
+-- pair matched by the given child 'Predicate's (one for the key, and one for
+-- the value).
+--
+-- >>> accept (containsEntry (eq "foo") (gt 10)) [("foo", 12), ("bar", 5)]
+-- True
+-- >>> accept (containsEntry (eq "foo") (gt 10)) [("foo", 5), ("bar", 12)]
+-- False
+-- >>> accept (containsEntry (eq "foo") (gt 10)) [("bar", 12)]
+-- False
+containsEntry ::
+  (IsList t, Item t ~ (k, v)) => Predicate k -> Predicate v -> Predicate t
+containsEntry p q =
+  Predicate
+    { showPredicate = "contains entry " ++ show (p, q),
+      accept = any (\(x, y) -> accept p x && accept q y) . toList
+    }
+
+-- | A 'Predicate' that accepts map-like structures whose keys are exactly those
+-- matched by the given list of 'Predicates', in any order.
+--
+-- >>> accept (keysAre [eq "a", eq "b", eq "c"]) [("a", 1), ("b", 2), ("c", 3)]
+-- True
+-- >>> accept (keysAre [eq "a", eq "b", eq "c"]) [("c", 1), ("b", 2), ("a", 3)]
+-- True
+-- >>> accept (keysAre [eq "a", eq "b", eq "c"]) [("a", 1), ("c", 3)]
+-- False
+-- >>> accept (keysAre [eq "a", eq "b"]) [("a", 1), ("b", 2), ("c", 3)]
+-- False
+keysAre ::
+  (IsList t, Item t ~ (k, v)) => [Predicate k] -> Predicate t
+keysAre ps =
+  Predicate
+    { showPredicate = "keys are " ++ show ps,
+      accept = matches ps . map fst . toList
+    }
+  where
+    matches (q : qs) xs = or [matches qs ys | (y, ys) <- choices xs, accept q y]
+    matches [] xs = null xs
+
+-- | A 'Predicate' that accepts map-like structures whose entries are exactly
+-- those matched by the given list of 'Predicate' pairs, in any order.
+--
+-- >>> accept (entriesAre [(eq 1, eq 2), (eq 3, eq 4)]) [(1, 2), (3, 4)]
+-- True
+-- >>> accept (entriesAre [(eq 1, eq 2), (eq 3, eq 4)]) [(3, 4), (1, 2)]
+-- True
+-- >>> accept (entriesAre [(eq 1, eq 2), (eq 3, eq 4)]) [(1, 4), (3, 2)]
+-- False
+-- >>> accept (entriesAre [(eq 1, eq 2), (eq 3, eq 4)]) [(1, 2), (3, 4), (5, 6)]
+-- False
+entriesAre ::
+  (IsList t, Item t ~ (k, v)) => [(Predicate k, Predicate v)] -> Predicate t
+entriesAre ps =
+  Predicate
+    { showPredicate = "entries are " ++ show ps,
+      accept = matches ps . toList
+    }
+  where
+    matches ((p, q) : pqs) xs =
+      or [matches pqs ys | ((k, v), ys) <- choices xs, accept p k, accept q v]
+    matches [] xs = null xs
 
 -- | A 'Predicate' that accepts values of 'RealFloat' types that are close to
 -- the given number.  The expected precision is scaled based on the target
