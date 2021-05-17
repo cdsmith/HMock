@@ -29,6 +29,137 @@ multiplicityTests = do
 predicateTests :: SpecWith ()
 predicateTests = do
   describe "Predicate" $ do
+    it "accepts the right values" $
+      example $ do
+        accept anything "foo" `shouldBe` True
+
+        accept (eq "foo") "foo" `shouldBe` True
+        accept (eq "foo") "bar" `shouldBe` False
+
+        accept (neq "foo") "foo" `shouldBe` False
+        accept (neq "foo") "bar" `shouldBe` True
+
+        accept (gt "foo") "bar" `shouldBe` False
+        accept (gt "foo") "foo" `shouldBe` False
+        accept (gt "foo") "quz" `shouldBe` True
+
+        accept (geq "foo") "bar" `shouldBe` False
+        accept (geq "foo") "foo" `shouldBe` True
+        accept (geq "foo") "quz" `shouldBe` True
+
+        accept (lt "foo") "bar" `shouldBe` True
+        accept (lt "foo") "foo" `shouldBe` False
+        accept (lt "foo") "quz" `shouldBe` False
+
+        accept (leq "foo") "bar" `shouldBe` True
+        accept (leq "foo") "foo" `shouldBe` True
+        accept (leq "foo") "quz" `shouldBe` False
+
+        accept (just (gt "foo")) Nothing `shouldBe` False
+        accept (just (gt "foo")) (Just "bar") `shouldBe` False
+        accept (just (gt "foo")) (Just "qux") `shouldBe` True
+
+        accept (left (gt "foo")) (Left "qux") `shouldBe` True
+        accept (left (gt "foo")) (Left "bar") `shouldBe` False
+        accept (left (gt "foo")) (Right "qux") `shouldBe` False
+
+        accept (right (gt "foo")) (Left "qux") `shouldBe` False
+        accept (right (gt "foo")) (Right "bar") `shouldBe` False
+        accept (right (gt "foo")) (Right "qux") `shouldBe` True
+
+        accept (lt "foo" `andP` gt "bar") "eta" `shouldBe` True
+        accept (lt "foo" `andP` gt "bar") "quz" `shouldBe` False
+        accept (lt "foo" `andP` gt "bar") "alpha" `shouldBe` False
+
+        accept (lt "bar" `orP` gt "foo") "eta" `shouldBe` False
+        accept (lt "bar" `orP` gt "foo") "quz" `shouldBe` True
+        accept (lt "bar" `orP` gt "foo") "alpha" `shouldBe` True
+
+        accept (notP (gt "foo")) "bar" `shouldBe` True
+        accept (notP (gt "foo")) "quz" `shouldBe` False
+
+        accept (startsWith "fun") "fungible" `shouldBe` True
+        accept (startsWith "gib") "fungible" `shouldBe` False
+
+        accept (endsWith "ing") "yearning" `shouldBe` True
+        accept (endsWith "ed") "burnt" `shouldBe` False
+
+        accept (hasSubstr "i") "team" `shouldBe` False
+        accept (hasSubstr "ea") "team" `shouldBe` True
+
+        accept (hasSubsequence "abc") "abc" `shouldBe` True
+        accept (hasSubsequence "abc") "zazbzcz" `shouldBe` True
+        accept (hasSubsequence "abc") "cba" `shouldBe` False
+
+        accept (caseInsensitive eq "foo") "foo" `shouldBe` True
+        accept (caseInsensitive eq "foo") "FOO" `shouldBe` True
+        accept (caseInsensitive eq "foo") "bar" `shouldBe` False
+        accept (caseInsensitive startsWith "foo") "FOOTBALL" `shouldBe` True
+        accept (caseInsensitive startsWith "foo") "SOCCER" `shouldBe` False
+
+        accept isEmpty "" `shouldBe` True
+        accept isEmpty "foo" `shouldBe` False
+
+        accept nonEmpty "" `shouldBe` False
+        accept nonEmpty "foo" `shouldBe` True
+
+        accept (sizeIs (gt 2)) ["a", "b", "c"] `shouldBe` True
+        accept (sizeIs (gt 2)) ["a", "b"] `shouldBe` False
+
+        accept (elemsAre [gt "a", lt "b"]) ["c", "a"] `shouldBe` True
+        accept (elemsAre [gt "a", lt "b"]) ["c", "c"] `shouldBe` False
+        accept (elemsAre [gt "a", lt "b"]) ["c"] `shouldBe` False
+
+        accept (unorderedElemsAre [gt "n", lt "d"]) ["a", "z"] `shouldBe` True
+        accept (unorderedElemsAre [gt "n", lt "d"]) ["z", "a"] `shouldBe` True
+        accept (unorderedElemsAre [gt "n", lt "d"]) ["a", "a"] `shouldBe` False
+        accept (unorderedElemsAre [lt "d"]) ["a", "a"] `shouldBe` False
+
+        accept (each (gt "a")) ["c", "b"] `shouldBe` True
+        accept (each (gt "a")) ["a", "b"] `shouldBe` False
+
+        accept (contains (gt "a")) ["a", "b"] `shouldBe` True
+        accept (contains (gt "a")) ["a", "a"] `shouldBe` False
+
+        accept
+          (containsAll [eq "foo", caseInsensitive eq "bar"])
+          ["qux", "BAR", "foo"]
+          `shouldBe` True
+        accept
+          (containsAll [eq "foo", caseInsensitive eq "bar"])
+          ["qux", "bar", "FOO"]
+          `shouldBe` False
+
+        accept
+          (containsOnly [eq "foo", caseInsensitive eq "bar"])
+          ["foo", "bar", "BAR"]
+          `shouldBe` True
+        accept
+          (containsOnly [eq "foo", caseInsensitive eq "bar"])
+          ["foo", "bar", "FOO"]
+          `shouldBe` False
+
+        -- Example of floating point rounding error:
+        pi * 11 / 11 `shouldNotBe` (pi :: Double)
+
+        accept (approxEq pi) (pi * 11 / 11 :: Double) `shouldBe` True
+        accept (approxEq pi) (3 :: Double) `shouldBe` False
+
+        accept finite (1.0 :: Double) `shouldBe` True
+        accept finite (1.0 / 0.0 :: Double) `shouldBe` False
+        accept finite (0.0 / 0.0 :: Double) `shouldBe` False
+
+        accept infinite (1.0 :: Double) `shouldBe` False
+        accept infinite (1.0 / 0.0 :: Double) `shouldBe` True
+        accept infinite (0.0 / 0.0 :: Double) `shouldBe` False
+
+        accept nAn (1.0 :: Double) `shouldBe` False
+        accept nAn (1.0 / 0.0 :: Double) `shouldBe` False
+        accept nAn (0.0 / 0.0 :: Double) `shouldBe` True
+
+        accept (suchThat ((> 5) . length)) "lengthy" `shouldBe` True
+        accept (suchThat ((> 5) . length)) "short" `shouldBe` False
+
     it "describes itself" $
       example $ do
         show anything `shouldBe` "anything"
