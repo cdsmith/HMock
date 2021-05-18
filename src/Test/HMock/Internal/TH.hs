@@ -27,18 +27,18 @@ import Data.Bool (bool)
 import Data.Char (toUpper)
 import Data.Default (Default (..))
 import Data.Either (partitionEithers)
-import Data.Generics
 import qualified Data.Kind
 import Data.List (foldl', (\\))
 import Data.Maybe (catMaybes)
+import Data.Typeable (Typeable, type (:~:) (Refl))
 import GHC.Stack (HasCallStack)
 import GHC.TypeLits (Symbol)
 import Language.Haskell.TH hiding (Match, match)
 import Language.Haskell.TH.Syntax (Lift (lift))
 import Test.HMock.Internal.Core
-import Test.HMock.Internal.Util
 import Test.HMock.Internal.Predicates (Predicate (accept), eq)
 import Test.HMock.Internal.TH.Util
+import Test.HMock.Internal.Util
 
 -- | Custom options for deriving a 'Mockable' class.
 data MockableOptions = MockableOptions

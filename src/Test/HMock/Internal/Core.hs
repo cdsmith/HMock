@@ -12,6 +12,7 @@
 
 module Test.HMock.Internal.Core where
 
+import Control.Arrow (second)
 import Control.Monad.Base (MonadBase)
 import Control.Monad.Catch (MonadCatch, MonadMask, MonadThrow)
 import Control.Monad.Cont (MonadCont)
@@ -39,10 +40,6 @@ import Test.HMock.Internal.Multiplicity
     once,
   )
 import Test.HMock.Internal.Util (Loc, getSrcLoc, showWithLoc)
-
-#if !MIN_VERSION_base(4, 13, 0)
-import Control.Monad.Fail (MonadFail)
-#endif
 
 -- | The result of matching a @'Matcher' a@ with an @'Action' b@.  Because the
 -- types should already guarantee that the methods match, all that's left is to
@@ -84,7 +81,7 @@ data
     (m :: Type -> Type)
   where
   -- | Matches an 'Action' and performs a response in the 'MockT' monad.  This
-  -- is a vary flexible response, which can look at arguments, do things in the
+  -- is a very flexible response, which can look at arguments, do things in the
   -- base monad, set up more expectations, etc.
   (:->) ::
     Matcher cls name m a ->
@@ -96,16 +93,6 @@ data
 -- known result.
 (|->) :: (Mockable cls, Monad m) => Matcher cls name m a -> a -> Rule cls name m
 m |-> r = m :-> const (return r)
-
-newtype Priority where
-  Priority :: Int -> Priority
-  deriving (Show, Eq, Ord)
-
-lowPriority :: Priority
-lowPriority = Priority 0
-
-normalPriority :: Priority
-normalPriority = Priority 1
 
 -- | A single step of an expectation.
 data Step where
@@ -123,44 +110,37 @@ data Order = InOrder | AnyOrder deriving (Eq)
 -- below) to avoid GHC warnings about unused return values.
 data ExpectSet (m :: Type -> Type) a where
   ExpectNothing :: ExpectSet m ()
-  Expect :: Priority -> Multiplicity -> Step -> ExpectSet m ()
+  Expect :: Multiplicity -> Step -> ExpectSet m ()
   ExpectMulti :: Order -> [ExpectSet m ()] -> ExpectSet m ()
 
 -- | Converts a set of expectations into a string that summarizes them, with
 -- the given prefix (used to indent).
 formatExpectSet :: String -> ExpectSet m () -> String
 formatExpectSet prefix ExpectNothing = prefix ++ "nothing"
-formatExpectSet prefix (Expect prio multiplicity (Step loc (m :-> _))) =
-  prefix ++ showWithLoc loc (showMatcher Nothing m) ++ modifierDesc
+formatExpectSet prefix (Expect multiplicity (Step loc (m :-> _))) =
+  prefix ++ showWithLoc loc (showMatcher Nothing m) ++ mult
   where
-    modifiers = prioModifier ++ multModifier
-    prioModifier
-      | prio == lowPriority = ["low priority"]
-      | otherwise = []
-    multModifier
-      | multiplicity == once = []
-      | otherwise = [show multiplicity]
-    modifierDesc
-      | null modifiers = ""
-      | otherwise = " (" ++ intercalate ", " modifiers ++ ")"
+    mult
+      | multiplicity == once = ""
+      | otherwise = " [" ++ show multiplicity ++ "]"
 formatExpectSet prefix (ExpectMulti order xs) =
   let label = if order == InOrder then "in sequence:\n" else "in any order:\n"
    in prefix ++ label ++ unlines (map (formatExpectSet (prefix ++ "  ")) xs)
 
 -- | Get a list of steps that can match actions right now, together with the
 -- remaining expectations if each one were to match.
-liveSteps :: ExpectSet m () -> [(Priority, Step, ExpectSet m ())]
-liveSteps = map (\(p, s, e) -> (p, s, simplify e)) . go
+liveSteps :: ExpectSet m () -> [(Step, ExpectSet m ())]
+liveSteps = map (second simplify) . go
   where
-    go :: ExpectSet m () -> [(Priority, Step, ExpectSet m ())]
+    go :: ExpectSet m () -> [(Step, ExpectSet m ())]
     go ExpectNothing = []
-    go (Expect prio multiplicity step) = case decMultiplicity multiplicity of
-      Nothing -> [(prio, step, ExpectNothing)]
-      Just multiplicity' -> [(prio, step, Expect prio multiplicity' step)]
+    go (Expect multiplicity step) = case decMultiplicity multiplicity of
+      Nothing -> [(step, ExpectNothing)]
+      Just multiplicity' -> [(step, Expect multiplicity' step)]
     go (ExpectMulti order es) =
-      [ (p, a, ExpectMulti order (e' : es'))
+      [ (a, ExpectMulti order (e' : es'))
         | (e, es') <- nextSteps es,
-          (p, a, e') <- go e
+          (a, e') <- go e
       ]
       where
         nextSteps [] = []
@@ -197,7 +177,7 @@ excess = simplify . go
   where
     go :: ExpectSet m () -> ExpectSet m ()
     go ExpectNothing = ExpectNothing
-    go e@(Expect _ mult _)
+    go e@(Expect mult _)
       | exhaustable mult = ExpectNothing
       | otherwise = e
     go (ExpectMulti order xs) = ExpectMulti order (map go xs)
@@ -214,11 +194,10 @@ instance Expectable ExpectSet where
 makeExpect ::
   (Mockable cls, Typeable m, KnownSymbol name) =>
   CallStack ->
-  Priority ->
   Multiplicity ->
   Rule cls name m ->
   ExpectSet m ()
-makeExpect cs prio mult wr = Expect prio mult (Step (getSrcLoc cs) wr)
+makeExpect cs mult wr = Expect mult (Step (getSrcLoc cs) wr)
 
 -- | Creates an expectation that an action is performed once.  This is
 -- equivalent to @'expectN' 'once'@, but shorter.
@@ -238,7 +217,7 @@ expect ::
   ) =>
   Rule cls name m ->
   t m ()
-expect = fromExpectSet . makeExpect callStack normalPriority once
+expect = fromExpectSet . makeExpect callStack once
 
 -- | Creates an expectation that an action is performed some number of times.
 --
@@ -263,40 +242,18 @@ expectN ::
   -- | The action and its response.
   Rule cls name m ->
   t m ()
-expectN = (fromExpectSet .) . makeExpect callStack normalPriority
+expectN = (fromExpectSet .) . makeExpect callStack
 
--- | Creates an expectation that an action is performed any number of times.
--- This is equivalent to @'expectN' 'anyMultiplicity'@, but shorter.
+-- | Specifies a response if a matching action is performed, but doesn't expect
+-- anything.  This is equivalent to @'expectN' 'anyMultiplicity'@, but shorter.
+--
+-- In this example, the later use of 'whenever' overrides earlier uses, but only
+-- for calls that match its conditions.
 --
 -- @
 --   'runMockT' '$' do
---     'expectAny' '$' FetchFullName_ anything '|->' "John Doe"
---
---     callCodeUnderTest
--- @
-expectAny ::
-  ( HasCallStack,
-    Mockable cls,
-    Typeable m,
-    Monad m,
-    KnownSymbol name,
-    Expectable t
-  ) =>
-  Rule cls name m ->
-  t m ()
-expectAny = fromExpectSet . makeExpect callStack normalPriority anyMultiplicity
-
--- | Specifies a default response if a matching action is performed.  This
--- differs from 'expectAny' because other expectations will always override
--- this default.
---
--- In this example, 'whenever' installs a default behavior for @readFile@, but
--- does not override the behavior for @"config.txt"@:
---
--- @
---   'runMockT' '$' do
---     'expectAny' '$' readFile_ "config.txt" '|->' "lang: klingon"
 --     'whenever' '$' ReadFile_ anything '|->' "tlhIngan maH!"
+--     'whenever' '$' readFile_ "config.txt" '|->' "lang: klingon"
 --
 --     callCodeUnderTest
 -- @
@@ -310,7 +267,7 @@ whenever ::
   ) =>
   Rule cls name m ->
   t m ()
-whenever = fromExpectSet . makeExpect callStack lowPriority anyMultiplicity
+whenever = fromExpectSet . makeExpect callStack anyMultiplicity
 
 -- | Creates a sequential expectation.  Other actions can still happen during
 -- the sequence, but these specific expectations must be met in this order.
@@ -402,19 +359,18 @@ mockMethod a = withFrozenCallStack $
     expected <- get
     let (partials, fulls) = partitionEithers (tryMatch <$> liveSteps expected)
     let orderedPartials = snd <$> sortBy (compare `on` fst) (catMaybes partials)
-    let orderedFulls = snd <$> sortBy (flip compare `on` fst) fulls
-    case (orderedPartials, orderedFulls) of
+    case (orderedPartials, fulls) of
       (_, response : _) -> response
       ([], []) -> noMatchError a
       (_, []) -> partialMatchError a orderedPartials
   where
     tryMatch ::
-      (Priority, Step, ExpectSet m ()) ->
-      Either (Maybe (Int, String)) (Priority, StateT (ExpectSet m ()) m a)
-    tryMatch (prio, Step loc step, e)
+      (Step, ExpectSet m ()) ->
+      Either (Maybe (Int, String)) (StateT (ExpectSet m ()) m a)
+    tryMatch (Step loc step, e)
       | Just (m :-> impl) <- cast step = case matchAction m a of
         NoMatch n -> Left (Just (n, showWithLoc loc (showMatcher (Just a) m)))
-        Match Refl | MockT r <- impl a -> Right (prio, put e >> r)
+        Match Refl | MockT r <- impl a -> Right (put e >> r)
       | otherwise = Left Nothing
 
 -- An error for an action that matches no expectations at all.

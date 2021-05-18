@@ -151,17 +151,19 @@ coreTests = do
         r1 <- readFile "foo.txt"
         r2 <- readFile "foo.txt"
         r3 <- readFile "foo.txt"
+        r4 <- readFile "foo.txt"
 
         liftIO $ r1 `shouldBe` "d"
         liftIO $ r2 `shouldBe` "c"
         liftIO $ r3 `shouldBe` "b"
+        liftIO $ r4 `shouldBe` "b"
 
     it "matches flexible multiplicity" $
       example $ do
         let setExpectations = do
               expectN (atLeast 3) $ readFile_ "foo.txt" |-> "foo"
               expectN (atMost 2) $ readFile_ "bar.txt" |-> "bar"
-              expectAny $ readFile_ "baz.txt" |-> "baz"
+              whenever $ readFile_ "baz.txt" |-> "baz"
 
             success1 = runMockT $ do
               setExpectations
@@ -249,25 +251,12 @@ coreTests = do
         _ <- readFile "c"
         return ()
 
-    it "overrides default responses" $
-      example $ do
-        responses <- runMockT $ do
-          whenever $ ReadFile_ anything |-> "default"
-          inSequence
-            [ expect $ readFile_ "a.txt" |-> "A1",
-              expectN (exactly 2) $ readFile_ "a.txt" |-> "A2"
-            ]
-          expectAny $ readFile_ "b.txt" |-> "B"
-
-          mapM readFile (replicate 4 "a.txt" ++ replicate 2 "b.txt")
-        responses `shouldBe` ["A1", "A2", "A2", "default", "B", "B"]
-
     it "consumes optional calls in sequences" $
       example $ do
         let setExpectations =
               inSequence
-                [ expectAny $ writeFile_ "foo.txt" "foo" |-> (),
-                  expectAny $ writeFile_ "foo.txt" "bar" |-> ()
+                [ whenever $ writeFile_ "foo.txt" "foo" |-> (),
+                  whenever $ writeFile_ "foo.txt" "bar" |-> ()
                 ]
 
             success = runMockT $ do

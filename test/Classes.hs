@@ -102,10 +102,10 @@ simpleTests = describe "MonadSimple" $ do
     example . runMockT $ do
       setupQuasi
       whenever $ qReify_ ''MonadSimple |-> $(reifyStatic ''MonadSimple)
-      expectAny $ qIsExtEnabled_ FlexibleInstances |-> False
-      expectAny $ qIsExtEnabled_ ScopedTypeVariables |-> False
-      expectAny $ qIsExtEnabled_ RankNTypes |-> False
-      expectAny $ qIsExtEnabled_ FlexibleContexts |-> False
+      whenever $ qIsExtEnabled_ FlexibleInstances |-> False
+      whenever $ qIsExtEnabled_ ScopedTypeVariables |-> False
+      whenever $ qIsExtEnabled_ RankNTypes |-> False
+      whenever $ qIsExtEnabled_ FlexibleContexts |-> False
 
       _ <- runQ (makeMockable ''MonadSimple)
       return ()
@@ -114,7 +114,7 @@ simpleTests = describe "MonadSimple" $ do
     example $ do
       let missingGADTs = runMockT $ do
             setupQuasi
-            expectAny $ qIsExtEnabled_ GADTs |-> False
+            whenever $ qIsExtEnabled_ GADTs |-> False
             expect $ QReport_ anything (hasSubstr "Please enable GADTs") |-> ()
 
             _ <- runQ (makeMockable ''MonadSimple)
@@ -126,7 +126,7 @@ simpleTests = describe "MonadSimple" $ do
     example $ do
       let missingTypeFamilies = runMockT $ do
             setupQuasi
-            expectAny $ qIsExtEnabled_ TypeFamilies |-> False
+            whenever $ qIsExtEnabled_ TypeFamilies |-> False
             expect $
               QReport_ anything (hasSubstr "Please enable TypeFamilies") |-> ()
 
@@ -139,7 +139,7 @@ simpleTests = describe "MonadSimple" $ do
     example $ do
       let missingDataKinds = runMockT $ do
             setupQuasi
-            expectAny $ qIsExtEnabled_ DataKinds |-> False
+            whenever $ qIsExtEnabled_ DataKinds |-> False
             expect $
               QReport_ anything (hasSubstr "Please enable DataKinds") |-> ()
 
@@ -223,7 +223,7 @@ superTests = describe "MonadSuper" $ do
   it "fails when FlexibleContexts is disabled" $ do
     let missingFlexibleContexts = runMockT $ do
           setupQuasi
-          expectAny $ qIsExtEnabled_ FlexibleContexts |-> False
+          whenever $ qIsExtEnabled_ FlexibleContexts |-> False
           whenever $ qReify_ ''MonadSuper |-> $(reifyStatic ''MonadSuper)
           expect $
             QReport_ anything (hasSubstr "Please enable FlexibleContexts")
@@ -300,7 +300,7 @@ fdSpecializedTests = describe "MonadFDSpecialized" $ do
             whenever $
               qReify_ ''MonadFDSpecialized
                 |-> $(reifyStatic ''MonadFDSpecialized)
-            expectAny $ qIsExtEnabled_ FlexibleInstances |-> False
+            whenever $ qIsExtEnabled_ FlexibleInstances |-> False
             expect $
               QReport_ anything (hasSubstr "Please enable FlexibleInstances")
                 |-> ()
@@ -419,7 +419,7 @@ polyArgTests = describe "MonadPolyArg" $ do
             setupQuasi
             whenever $
               qReify_ ''MonadPolyArg |-> $(reifyStatic ''MonadPolyArg)
-            expectAny $ qIsExtEnabled_ ScopedTypeVariables |-> False
+            whenever $ qIsExtEnabled_ ScopedTypeVariables |-> False
             expect $
               QReport_ anything (hasSubstr "Please enable ScopedTypeVariables")
                 |-> ()
@@ -434,7 +434,7 @@ polyArgTests = describe "MonadPolyArg" $ do
       let missingRankNTypes = runMockT $ do
             setupQuasi
             whenever $ qReify_ ''MonadPolyArg |-> $(reifyStatic ''MonadPolyArg)
-            expectAny $ qIsExtEnabled_ RankNTypes |-> False
+            whenever $ qIsExtEnabled_ RankNTypes |-> False
             expect $
               QReport_ anything (hasSubstr "Please enable RankNTypes") |-> ()
 
