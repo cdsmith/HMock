@@ -132,22 +132,20 @@ formatExpectSet prefix (ExpectMulti order xs) =
 liveSteps :: ExpectSet m () -> [(Step, ExpectSet m ())]
 liveSteps = map (second simplify) . go
   where
-    go :: ExpectSet m () -> [(Step, ExpectSet m ())]
     go ExpectNothing = []
     go (Expect multiplicity step) = case decMultiplicity multiplicity of
       Nothing -> [(step, ExpectNothing)]
       Just multiplicity' -> [(step, Expect multiplicity' step)]
-    go (ExpectMulti order es) =
-      [ (a, ExpectMulti order (e' : es'))
-        | (e, es') <- nextSteps es,
-          (a, e') <- go e
-      ]
+    go (ExpectMulti order es) = fmap (ExpectMulti order) <$> nextSteps order es
+
+    nextSteps _ [] = []
+    nextSteps order (e : es)
+      | AnyOrder <- order = eOptions ++ map (fmap (e :)) esOptions
+      | ExpectNothing <- excess e = eOptions ++ esOptions
+      | otherwise = eOptions
       where
-        nextSteps [] = []
-        nextSteps (x : xs)
-          | order == InOrder, ExpectNothing <- excess x = (x, xs) : nextSteps xs
-          | order == InOrder = [(x, xs)]
-          | otherwise = (x, xs) : (fmap (x :) <$> nextSteps xs)
+        eOptions = fmap (: es) <$> go e
+        esOptions = nextSteps order es
 
 -- | Simplifies a set of expectations.  This removes unnecessary occurrences of
 -- 'ExpectNothing' and collapses nested lists with the same ordering
