@@ -786,19 +786,19 @@ test = do
 {-# LINE 843 "src/Test/HMock/Internal/Predicates.hs" #-}
  DocTest.example
 {-# LINE 843 "src/Test/HMock/Internal/Predicates.hs" #-}
-      (accept $$(qIs [|| even ||]) 3)
+      (accept $(qIs [| even |]) 3)
   [ExpectedLine [LineChunk "False"]]
  DocTest.printPrefix "Test.HMock.Internal.Predicates:845: "
 {-# LINE 845 "src/Test/HMock/Internal/Predicates.hs" #-}
  DocTest.example
 {-# LINE 845 "src/Test/HMock/Internal/Predicates.hs" #-}
-      (accept $$(qIs [|| even ||]) 4)
+      (accept $(qIs [| even |]) 4)
   [ExpectedLine [LineChunk "True"]]
  DocTest.printPrefix "Test.HMock.Internal.Predicates:848: "
 {-# LINE 848 "src/Test/HMock/Internal/Predicates.hs" #-}
  DocTest.example
 {-# LINE 848 "src/Test/HMock/Internal/Predicates.hs" #-}
-      (show $$(qIs [|| even ||]))
+      (show $(qIs [| even |]))
   [ExpectedLine [LineChunk "\"even\""]]
  DocTest.printPrefix "Test.HMock.Internal.Predicates:862: "
 {-# LINE 862 "src/Test/HMock/Internal/Predicates.hs" #-}
@@ -828,71 +828,71 @@ test = do
 {-# LINE 882 "src/Test/HMock/Internal/Predicates.hs" #-}
  DocTest.example
 {-# LINE 882 "src/Test/HMock/Internal/Predicates.hs" #-}
-      (accept ($$(qWith [|| abs ||]) (gt 5)) (-6))
+      (accept ($(qWith [| abs |]) (gt 5)) (-6))
   [ExpectedLine [LineChunk "True"]]
  DocTest.printPrefix "Test.HMock.Internal.Predicates:884: "
 {-# LINE 884 "src/Test/HMock/Internal/Predicates.hs" #-}
  DocTest.example
 {-# LINE 884 "src/Test/HMock/Internal/Predicates.hs" #-}
-      (accept ($$(qWith [|| abs ||]) (gt 5)) (-5))
+      (accept ($(qWith [| abs |]) (gt 5)) (-5))
   [ExpectedLine [LineChunk "False"]]
  DocTest.printPrefix "Test.HMock.Internal.Predicates:886: "
 {-# LINE 886 "src/Test/HMock/Internal/Predicates.hs" #-}
  DocTest.example
 {-# LINE 886 "src/Test/HMock/Internal/Predicates.hs" #-}
-      (accept ($$(qWith [|| reverse ||]) (eq "olleh")) "hello")
+      (accept ($(qWith [| reverse |]) (eq "olleh")) "hello")
   [ExpectedLine [LineChunk "True"]]
  DocTest.printPrefix "Test.HMock.Internal.Predicates:888: "
 {-# LINE 888 "src/Test/HMock/Internal/Predicates.hs" #-}
  DocTest.example
 {-# LINE 888 "src/Test/HMock/Internal/Predicates.hs" #-}
-      (accept ($$(qWith [|| reverse ||]) (eq "olleh")) "goodbye")
+      (accept ($(qWith [| reverse |]) (eq "olleh")) "goodbye")
   [ExpectedLine [LineChunk "False"]]
  DocTest.printPrefix "Test.HMock.Internal.Predicates:891: "
 {-# LINE 891 "src/Test/HMock/Internal/Predicates.hs" #-}
  DocTest.example
 {-# LINE 891 "src/Test/HMock/Internal/Predicates.hs" #-}
-      (show ($$(qWith [|| abs ||]) (gt 5)))
+      (show ($(qWith [| abs |]) (gt 5)))
   [ExpectedLine [LineChunk "\"abs: > 5\""]]
- DocTest.printPrefix "Test.HMock.Internal.Predicates:908: "
-{-# LINE 908 "src/Test/HMock/Internal/Predicates.hs" #-}
+ DocTest.printPrefix "Test.HMock.Internal.Predicates:907: "
+{-# LINE 907 "src/Test/HMock/Internal/Predicates.hs" #-}
  DocTest.example
-{-# LINE 908 "src/Test/HMock/Internal/Predicates.hs" #-}
+{-# LINE 907 "src/Test/HMock/Internal/Predicates.hs" #-}
       (accept $(qMatch [p| Just (Left _) |]) Nothing)
   [ExpectedLine [LineChunk "False"]]
- DocTest.printPrefix "Test.HMock.Internal.Predicates:910: "
-{-# LINE 910 "src/Test/HMock/Internal/Predicates.hs" #-}
+ DocTest.printPrefix "Test.HMock.Internal.Predicates:909: "
+{-# LINE 909 "src/Test/HMock/Internal/Predicates.hs" #-}
  DocTest.example
-{-# LINE 910 "src/Test/HMock/Internal/Predicates.hs" #-}
+{-# LINE 909 "src/Test/HMock/Internal/Predicates.hs" #-}
       (accept $(qMatch [p| Just (Left _) |]) (Just (Left 5)))
   [ExpectedLine [LineChunk "True"]]
- DocTest.printPrefix "Test.HMock.Internal.Predicates:912: "
-{-# LINE 912 "src/Test/HMock/Internal/Predicates.hs" #-}
+ DocTest.printPrefix "Test.HMock.Internal.Predicates:911: "
+{-# LINE 911 "src/Test/HMock/Internal/Predicates.hs" #-}
  DocTest.example
-{-# LINE 912 "src/Test/HMock/Internal/Predicates.hs" #-}
+{-# LINE 911 "src/Test/HMock/Internal/Predicates.hs" #-}
       (accept $(qMatch [p| Just (Left _) |]) (Just (Right 5)))
   [ExpectedLine [LineChunk "False"]]
- DocTest.printPrefix "Test.HMock.Internal.Predicates:915: "
-{-# LINE 915 "src/Test/HMock/Internal/Predicates.hs" #-}
+ DocTest.printPrefix "Test.HMock.Internal.Predicates:914: "
+{-# LINE 914 "src/Test/HMock/Internal/Predicates.hs" #-}
  DocTest.example
-{-# LINE 915 "src/Test/HMock/Internal/Predicates.hs" #-}
+{-# LINE 914 "src/Test/HMock/Internal/Predicates.hs" #-}
       (show $(qMatch [p| Just (Left _) |]))
   [ExpectedLine [LineChunk "\"Just (Left _)\""]]
- DocTest.printPrefix "Test.HMock.Internal.Predicates:931: "
-{-# LINE 931 "src/Test/HMock/Internal/Predicates.hs" #-}
+ DocTest.printPrefix "Test.HMock.Internal.Predicates:930: "
+{-# LINE 930 "src/Test/HMock/Internal/Predicates.hs" #-}
  DocTest.example
-{-# LINE 931 "src/Test/HMock/Internal/Predicates.hs" #-}
+{-# LINE 930 "src/Test/HMock/Internal/Predicates.hs" #-}
       (accept (typed @String anything) "foo")
   [ExpectedLine [LineChunk "True"]]
- DocTest.printPrefix "Test.HMock.Internal.Predicates:933: "
-{-# LINE 933 "src/Test/HMock/Internal/Predicates.hs" #-}
+ DocTest.printPrefix "Test.HMock.Internal.Predicates:932: "
+{-# LINE 932 "src/Test/HMock/Internal/Predicates.hs" #-}
  DocTest.example
-{-# LINE 933 "src/Test/HMock/Internal/Predicates.hs" #-}
+{-# LINE 932 "src/Test/HMock/Internal/Predicates.hs" #-}
       (accept (typed @String (sizeIs (gt 5))) "foo")
   [ExpectedLine [LineChunk "False"]]
- DocTest.printPrefix "Test.HMock.Internal.Predicates:935: "
-{-# LINE 935 "src/Test/HMock/Internal/Predicates.hs" #-}
+ DocTest.printPrefix "Test.HMock.Internal.Predicates:934: "
+{-# LINE 934 "src/Test/HMock/Internal/Predicates.hs" #-}
  DocTest.example
-{-# LINE 935 "src/Test/HMock/Internal/Predicates.hs" #-}
+{-# LINE 934 "src/Test/HMock/Internal/Predicates.hs" #-}
       (accept (typed @String anything) (42 :: Int))
   [ExpectedLine [LineChunk "False"]]

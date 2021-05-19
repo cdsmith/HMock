@@ -15,8 +15,8 @@ import qualified Data.Sequences as Seq
 import Data.Typeable (Proxy (..), Typeable, cast, typeRep)
 import GHC.Exts (IsList (Item, toList))
 import GHC.Stack (HasCallStack, callStack)
-import Language.Haskell.TH (ExpQ, PatQ, Q, TExp, pprint, unType)
-import Language.Haskell.TH.Syntax (lift, liftTyped)
+import Language.Haskell.TH (ExpQ, PatQ, pprint)
+import Language.Haskell.TH.Syntax (lift)
 import Test.HMock.Internal.TH.Util (removeModNames)
 import Test.HMock.Internal.Util (choices, getSrcLoc, isSubsequenceOf, showWithLoc)
 import Text.Regex.TDFA hiding (match)
@@ -836,25 +836,25 @@ is f =
       accept = f
     }
 
--- | A Template Haskell splice that acts like 'is', but receives a quoted typed
+-- | A Template Haskell splice that acts like 'is', but receives a quoted
 -- expression at compile time and has a more helpful description for error
 -- messages.
 --
--- >>> accept $$(qIs [|| even ||]) 3
+-- >>> accept $(qIs [| even |]) 3
 -- False
--- >>> accept $$(qIs [|| even ||]) 4
+-- >>> accept $(qIs [| even |]) 4
 -- True
 --
--- >>> show $$(qIs [|| even ||])
+-- >>> show $(qIs [| even |])
 -- "even"
-qIs :: HasCallStack => Q (TExp (a -> Bool)) -> Q (TExp (Predicate a))
+qIs :: HasCallStack => ExpQ -> ExpQ
 qIs f =
-  [||
-  Predicate
-    { showPredicate = $$(liftTyped . pprint . removeModNames . unType =<< f),
-      accept = $$f
-    }
-  ||]
+  [|
+    Predicate
+      { showPredicate = $(lift . pprint . removeModNames =<< f),
+        accept = $f
+      }
+    |]
 
 -- | A combinator to lift a 'Predicate' to work on a property or computed value
 -- of the original value.
@@ -879,28 +879,27 @@ with f p =
 -- expression at compile time and has a more helpful description for error
 -- messages.
 --
--- >>> accept ($$(qWith [|| abs ||]) (gt 5)) (-6)
+-- >>> accept ($(qWith [| abs |]) (gt 5)) (-6)
 -- True
--- >>> accept ($$(qWith [|| abs ||]) (gt 5)) (-5)
+-- >>> accept ($(qWith [| abs |]) (gt 5)) (-5)
 -- False
--- >>> accept ($$(qWith [|| reverse ||]) (eq "olleh")) "hello"
+-- >>> accept ($(qWith [| reverse |]) (eq "olleh")) "hello"
 -- True
--- >>> accept ($$(qWith [|| reverse ||]) (eq "olleh")) "goodbye"
+-- >>> accept ($(qWith [| reverse |]) (eq "olleh")) "goodbye"
 -- False
 --
--- >>> show ($$(qWith [|| abs ||]) (gt 5))
+-- >>> show ($(qWith [| abs |]) (gt 5))
 -- "abs: > 5"
-qWith :: Q (TExp (a -> b)) -> Q (TExp (Predicate b -> Predicate a))
+qWith :: ExpQ -> ExpQ
 qWith f =
-  [||
-  \p ->
-  Predicate
-    { showPredicate =
-        $$(liftTyped . pprint . removeModNames . unType =<< f) ++ ": "
-          ++ show p,
-      accept = accept p . $$f
-    }
-  ||]
+  [|
+    \p ->
+      Predicate
+        { showPredicate =
+            $(lift . pprint . removeModNames =<< f) ++ ": " ++ show p,
+          accept = accept p . $f
+        }
+    |]
 
 -- | A Template Haskell splice that turns a quoted pattern into a predicate that
 -- accepts values that match the pattern.

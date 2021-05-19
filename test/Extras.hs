@@ -108,11 +108,11 @@ predicateTests = do
         show (nAn :: Predicate Double) `shouldBe` "NaN"
         show (is even :: Predicate Int)
           `shouldSatisfy` ("custom predicate at " `isPrefixOf`)
-        show ($$(qIs [||even||]) :: Predicate Int) `shouldBe` "even"
+        show ($(qIs [|even|]) :: Predicate Int) `shouldBe` "even"
         show (with length (gt 5) :: Predicate String)
           `shouldSatisfy` ("property at " `isPrefixOf`)
-        show ($$(qWith [||length @[]||]) (gt 5) :: Predicate String)
-          `shouldBe` "length @[]: > 5"
+        show ($(qWith [|length|]) (gt 5) :: Predicate String)
+          `shouldBe` "length: > 5"
 
     it "matches patterns" $
       example $ do
