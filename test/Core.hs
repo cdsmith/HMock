@@ -7,7 +7,8 @@
 
 module Core where
 
-import Control.Exception (SomeException)
+import Control.DeepSeq (rnf)
+import Control.Exception (SomeException, evaluate)
 import Control.Monad (replicateM_)
 import Control.Monad.State (execStateT, modify)
 import Control.Monad.Trans (liftIO)
@@ -309,6 +310,24 @@ coreTests = do
           readFile "foo.txt" >>= readFile
 
         result `shouldBe` "final"
+
+    it "describes expectations when asked" $
+      example . runMockT $ do
+        expectations <- describeExpectations
+
+        -- Format is unspecified.  We're forcing it here so that test coverage
+        -- doesn't flag the formatting code as untested.
+        liftIO $ evaluate (rnf expectations)
+
+    it "verifies expectations early" $
+      example $ do
+        let test = runMockT $ do
+              expect $ readFile_ "foo.txt" |-> "lorem ipsum"
+              verifyExpectations
+              _ <- readFile "foo.txt"
+              return ()
+
+        test `shouldThrow` anyException
 
 errorWith :: (String -> Bool) -> SomeException -> Bool
 errorWith p e = p (show e)

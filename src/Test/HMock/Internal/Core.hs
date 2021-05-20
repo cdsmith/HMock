@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -19,7 +20,15 @@ import Control.Monad.Cont (MonadCont)
 import Control.Monad.Except (MonadError)
 import Control.Monad.RWS (MonadRWS)
 import Control.Monad.Reader (MonadReader)
-import Control.Monad.State (MonadState, StateT, get, modify, put, runStateT)
+import Control.Monad.State
+  ( MonadState,
+    StateT,
+    evalStateT,
+    get,
+    gets,
+    modify,
+    put,
+  )
 import Control.Monad.Trans (MonadIO, MonadTrans, lift)
 import Control.Monad.Writer (MonadWriter)
 import Data.Constraint (Constraint)
@@ -306,7 +315,7 @@ inAnyOrder es = fromExpectSet (ExpectMulti AnyOrder es)
 
 -- | Monad transformer for running mocks.
 newtype MockT m a where
-  MockT :: StateT (ExpectSet m ()) m a -> MockT m a
+  MockT :: {unMockT :: StateT (ExpectSet m ()) m a} -> MockT m a
   deriving
     ( Functor,
       Applicative,
@@ -337,13 +346,31 @@ instance MonadState s m => MonadState s (MockT m) where
 
 -- | Runs a test in the 'MockT' monad, handling all of the mocks.
 runMockT :: Monad m => MockT m a -> m a
-runMockT (MockT test) = do
-  (a, leftover) <- runStateT test ExpectNothing
-  case excess leftover of
-    ExpectNothing -> return a
-    missing ->
-      error $
-        "Unmet expectations:\n" ++ formatExpectSet "  " missing
+runMockT test = flip evalStateT ExpectNothing $
+  unMockT $ do
+    a <- test
+    verifyExpectations
+    return a
+
+-- | Fetches a 'String' that describes the current set of outstanding
+-- expectations.  This is sometimes useful for debugging test code.  The exact
+-- format is not specified.
+describeExpectations :: Monad m => MockT m String
+describeExpectations = MockT $ gets (formatExpectSet "")
+
+-- | Verifies that all mock expectations are satisfied.  You normally don't need
+-- to do this, because it happens automatically at the end of your test in
+-- 'runMockT'.  However, it's occasionally useful to check expectations in the
+-- middle of a test, such as before going on to the next stage.
+--
+-- Use of 'verifyExpectations' might signify that you are doing too much in a
+-- single test.  Consider splitting large tests into a separate test for each
+-- case.
+verifyExpectations :: Monad m => MockT m ()
+verifyExpectations = MockT $ do
+  gets excess >>= \case
+    ExpectNothing -> return ()
+    missing -> error $ "Unmet expectations:\n" ++ formatExpectSet "  " missing
 
 -- | Implements a method in a 'Mockable' monad by delegating to the mock
 -- framework.  This is typically used only in generated code.

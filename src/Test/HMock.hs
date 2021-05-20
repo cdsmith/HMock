@@ -43,6 +43,8 @@ module Test.HMock
   ( -- * Core interface
     MockT,
     runMockT,
+    describeExpectations,
+    verifyExpectations,
     Rule ((:->)),
     (|->),
     Expectable,
