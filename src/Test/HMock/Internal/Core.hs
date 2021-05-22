@@ -50,6 +50,10 @@ import Test.HMock.Internal.Multiplicity
   )
 import Test.HMock.Internal.Util (Loc, getSrcLoc, showWithLoc)
 
+#if !MIN_VERSION_base(4, 13, 0)
+import Control.Monad.Fail (MonadFail)
+#endif
+
 -- | The result of matching a @'Matcher' a@ with an @'Action' b@.  Because the
 -- types should already guarantee that the methods match, all that's left is to
 -- match arguments.
