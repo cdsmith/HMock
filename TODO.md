@@ -17,6 +17,18 @@ of these effect systems.
 * `eff`
 * Maybe a `haxl` data source?
 
+## Wrappers to save responses from integration tests.
+
+One nice feature of a mock framework could be to save interactions during an
+integration test, and then automatically set up the related expectations.  The
+easy thing to do is add them all to a single inSequence, but even more
+interesting would be to offer some other heuristics or guidance.  For example,
+you could list certain actions that should be ignored or stubbed, etc.
+
+It's not clear how this would work.  I suppose you'd have a monad transformer
+sort of like MockT, but with recording and pass-through, which then serializes
+the actions into a record file.
+
 ## Mockable with Typeable polymorphic return values.
 
 ``` haskell
