@@ -18,7 +18,7 @@ import GHC.Stack (HasCallStack, callStack)
 import Language.Haskell.TH (ExpQ, PatQ, pprint)
 import Language.Haskell.TH.Syntax (lift)
 import Test.HMock.Internal.TH.Util (removeModNames)
-import Test.HMock.Internal.Util (choices, getSrcLoc, isSubsequenceOf, showWithLoc)
+import Test.HMock.Internal.Util (choices, locate, isSubsequenceOf, withLoc)
 import Text.Regex.TDFA hiding (match)
 
 -- $setup
@@ -832,7 +832,7 @@ nAn =
 is :: HasCallStack => (a -> Bool) -> Predicate a
 is f =
   Predicate
-    { showPredicate = showWithLoc (getSrcLoc callStack) "custom predicate",
+    { showPredicate = withLoc (locate callStack "custom predicate"),
       accept = f
     }
 
@@ -871,7 +871,7 @@ with :: HasCallStack => (a -> b) -> Predicate b -> Predicate a
 with f p =
   Predicate
     { showPredicate =
-        showWithLoc (getSrcLoc callStack) "property" ++ ": " ++ show p,
+        withLoc (locate callStack "property") ++ ": " ++ show p,
       accept = accept p . f
     }
 

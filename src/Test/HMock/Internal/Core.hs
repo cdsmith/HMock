@@ -48,11 +48,11 @@ import Test.HMock.Internal.Multiplicity
     exhaustable,
     once,
   )
-import Test.HMock.Internal.Util (Loc, getSrcLoc, showWithLoc)
+import Test.HMock.Internal.Util (Located(..), locate, withLoc)
 
-#if !MIN_VERSION_base(4, 13, 0)
-import Control.Monad.Fail (MonadFail)
-#endif
+
+
+
 
 -- | The result of matching a @'Matcher' a@ with an @'Action' b@.  Because the
 -- types should already guarantee that the methods match, all that's left is to
@@ -101,9 +101,9 @@ data
     (Action cls name m a -> MockT m a) ->
     Rule cls name m
 
--- | Matches an 'Action' and returns a constant response.  This is more
--- convenient than '(:->)' in the common case where you just want to return a
--- known result.
+-- | Matches an 'Action' and returns a 'Rule' with a constant response.  This is
+-- more convenient than '(:->)' in the common case where you just want to return
+-- a known result.
 (|->) :: (Mockable cls, Monad m) => Matcher cls name m a -> a -> Rule cls name m
 m |-> r = m :-> const (return r)
 
@@ -111,8 +111,7 @@ m |-> r = m :-> const (return r)
 data Step where
   Step ::
     (Mockable cls, Typeable m, KnownSymbol name) =>
-    Loc ->
-    Rule cls name m ->
+    Located (Rule cls name m) ->
     Step
 
 data Order = InOrder | AnyOrder deriving (Eq)
@@ -130,8 +129,8 @@ data ExpectSet (m :: Type -> Type) a where
 -- the given prefix (used to indent).
 formatExpectSet :: String -> ExpectSet m () -> String
 formatExpectSet prefix ExpectNothing = prefix ++ "nothing"
-formatExpectSet prefix (Expect multiplicity (Step loc (m :-> _))) =
-  prefix ++ showWithLoc loc (showMatcher Nothing m) ++ mult
+formatExpectSet prefix (Expect multiplicity (Step l@(Loc _ (m :-> _)))) =
+  prefix ++ withLoc (showMatcher Nothing m <$ l) ++ mult
   where
     mult
       | multiplicity == once = ""
@@ -208,7 +207,7 @@ makeExpect ::
   Multiplicity ->
   Rule cls name m ->
   ExpectSet m ()
-makeExpect cs mult wr = Expect mult (Step (getSrcLoc cs) wr)
+makeExpect cs mult wr = Expect mult (Step (locate cs wr))
 
 -- | Creates an expectation that an action is performed once.  This is
 -- equivalent to @'expectN' 'once'@, but shorter.
@@ -396,9 +395,9 @@ mockMethod a = withFrozenCallStack $
     tryMatch ::
       (Step, ExpectSet m ()) ->
       Either (Maybe (Int, String)) (StateT (ExpectSet m ()) m a)
-    tryMatch (Step loc step, e)
-      | Just (m :-> impl) <- cast step = case matchAction m a of
-        NoMatch n -> Left (Just (n, showWithLoc loc (showMatcher (Just a) m)))
+    tryMatch (Step rule, e)
+      | Just lrule@(Loc _ (m :-> impl)) <- cast rule = case matchAction m a of
+        NoMatch n -> Left (Just (n, withLoc (showMatcher (Just a) m <$ lrule)))
         Match Refl | MockT r <- impl a -> Right (put e >> r)
       | otherwise = Left Nothing
 

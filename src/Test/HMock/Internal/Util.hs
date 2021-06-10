@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE FlexibleContexts #-}
 
 module Test.HMock.Internal.Util where
@@ -6,16 +7,16 @@ import Data.MonoTraversable (Element)
 import qualified Data.Sequences as Seq
 import GHC.Stack (CallStack, getCallStack, prettySrcLoc)
 
-newtype Loc = Loc (Maybe String) deriving (Eq, Ord)
+data Located a = Loc (Maybe String) a deriving (Eq, Ord, Functor)
 
-getSrcLoc :: CallStack -> Loc
-getSrcLoc stack = Loc $ case map snd (getCallStack stack) of
-  (loc : _) -> Just (prettySrcLoc loc)
-  _ -> Nothing
+locate :: CallStack -> a -> Located a
+locate stack = case map snd (getCallStack stack) of
+  (loc : _) -> Loc (Just (prettySrcLoc loc))
+  _ -> Loc Nothing
 
-showWithLoc :: Loc -> String -> String
-showWithLoc (Loc Nothing) s = s
-showWithLoc (Loc (Just loc)) s = s ++ " at " ++ loc
+withLoc :: Located String -> String
+withLoc (Loc Nothing s) = s
+withLoc (Loc (Just loc) s) = s ++ " at " ++ loc
 
 choices :: [a] -> [(a, [a])]
 choices [] = []
