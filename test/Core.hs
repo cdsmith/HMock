@@ -329,8 +329,8 @@ coreTests = do
       example . runMockT $ do
         expectations <- describeExpectations
 
-        -- Format is unspecified.  We're forcing it here so that test coverage
-        -- doesn't flag the formatting code as untested.
+        -- Format is deliberately unspecified.  We're forcing it here so that
+        -- test coverage doesn't flag the formatting code as untested.
         liftIO $ evaluate (rnf expectations)
 
     it "verifies expectations early" $
