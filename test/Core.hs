@@ -17,10 +17,15 @@ import Test.HMock
 import Test.HMock.TH (makeMockable)
 import Test.Hspec
 import Prelude hiding (readFile, writeFile)
+import qualified Prelude
 
 class Monad m => MonadFilesystem m where
   readFile :: FilePath -> m String
   writeFile :: FilePath -> String -> m ()
+
+instance MonadFilesystem IO where
+  readFile = Prelude.readFile
+  writeFile = Prelude.writeFile
 
 makeMockable ''MonadFilesystem
 
@@ -38,22 +43,23 @@ coreTests = do
         let copyFile :: MonadFilesystem m => FilePath -> FilePath -> m ()
             copyFile a b = readFile a >>= writeFile b
 
-            badCopyFile :: MonadFilesystem m => FilePath -> FilePath -> m ()
+        runMockT $ do
+          expect $ readFile_ "foo.txt" |-> "lorem ipsum"
+          expect $ writeFile_ "bar.txt" "lorem ipsum" |-> ()
+
+          copyFile "foo.txt" "bar.txt"
+
+    it "rejects an incorrect file copy" $
+      example $ do
+        let badCopyFile :: MonadFilesystem m => FilePath -> FilePath -> m ()
             badCopyFile a b = readFile b >>= writeFile a
 
-            setExpectations = do
+            failure = runMockT $ do
               expect $ readFile_ "foo.txt" |-> "lorem ipsum"
               expect $ writeFile_ "bar.txt" "lorem ipsum" |-> ()
 
-            success = runMockT $ do
-              setExpectations
-              copyFile "foo.txt" "bar.txt"
-
-            failure = runMockT $ do
-              setExpectations
               badCopyFile "foo.txt" "bar.txt"
 
-        success
         failure `shouldThrow` anyException
 
     it "tracks expectations across multiple classes" $
@@ -88,8 +94,14 @@ coreTests = do
           `shouldThrow` errorWith ("Unexpected action: storeDB" `isInfixOf`)
 
     it "catches unmet expectations" $
-      example $
-        runMockT (expect $ writeFile_ "bar.txt" "bar" |-> ())
+      example $ do
+        let test = runMockT $ do
+              expect $ writeFile_ "bar.txt" "bar" |-> ()
+
+              -- Don't write the file.
+              return ()
+
+        test
           `shouldThrow` errorWith
             (("Unmet expectations" `isInfixOf`) <&&> ("Core.hs:" `isInfixOf`))
 
@@ -100,6 +112,7 @@ coreTests = do
               expect $ writeFile_ "bar.txt" "bar" |-> ()
 
               writeFile "foo.txt" "foo"
+
         test `shouldThrow` errorWith ("Unmet expectations" `isInfixOf`)
 
     it "catches partially unmet sequences" $
@@ -112,6 +125,7 @@ coreTests = do
                 ]
 
               writeFile "foo.txt" "foo"
+
         test `shouldThrow` errorWith ("Unmet expectations" `isInfixOf`)
 
     it "catches unexpected actions" $
