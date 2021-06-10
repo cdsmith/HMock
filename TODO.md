@@ -20,14 +20,28 @@ of these effect systems.
 ## Wrappers to save responses from integration tests.
 
 One nice feature of a mock framework could be to save interactions during an
-integration test, and then automatically set up the related expectations.  The
-easy thing to do is add them all to a single inSequence, but even more
-interesting would be to offer some other heuristics or guidance.  For example,
-you could list certain actions that should be ignored or stubbed, etc.
+integration test, and then automatically set up the related expectations.
 
-It's not clear how this would work.  I suppose you'd have a monad transformer
-sort of like MockT, but with recording and pass-through, which then serializes
-the actions into a record file.
+Open questions:
+
+1. How would one run a test in record mode?  You'd need to set up the same
+   environment as production, but insert a proxy monad that intercepts all
+   mockable calls.  Making this easy to integrate could be tricky.
+2. How does one record the arguments and return values?  If all of the arguments
+   have the right instances to be serializable and comparable for equality, then
+   this works.  In practice, one probably hopes for support for more than just
+   this.  For example, suppose a call takes a function as an argument.  We might
+   want to accept any function?  We might want to somehow wrap the function with
+   a proxy that records its arguments and results and verifies that those match?
+   Or should this not be recordable at all?  And what happens if the record sees
+   a method that can't be recorded because of lacking serialization, etc.?  I
+   suppose it has to be a runtime error at record time.
+3. How do you handle ordering constraints?  The easy thing to do is add them all
+   to a single inSequence, but even more interesting would be to offer some
+   other heuristics or guidance.  For example, you could list certain actions
+   that should be ignored or stubbed, etc.  Some kind of interactive experience
+   to work from a method call log and make these ordering choices would be
+   awesome.
 
 ## Mockable with Typeable polymorphic return values.
 
