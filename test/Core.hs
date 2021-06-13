@@ -31,12 +31,6 @@ instance MonadFilesystem IO where
 
 makeMockable ''MonadFilesystem
 
-class Monad m => MonadDB a m where
-  storeDB :: String -> a -> m ()
-  lookupDB :: String -> m a
-
-makeMockable ''MonadDB
-
 newtype SocketHandle = Handle Int deriving (Eq, Show)
 
 class Monad m => MonadSocket m where
@@ -76,32 +70,32 @@ coreTests = do
       example $ do
         let setExpectations =
               inSequence
-                [ expect $ readFile_ "key.txt" |-> "alpha",
-                  expect $ lookupDB_ "alpha" |-> "beta",
-                  expect $ writeFile_ "key.txt" "beta" |-> (),
-                  expect $ storeDB_ "alpha" "newVal" |-> ()
+                [ expect $ readFile_ "code.txt" |-> "alpha",
+                  expect $ openSocket_ 80 |-> Handle 80,
+                  expect $ writeFile_ "code.txt" "alpha+" |-> (),
+                  expect $ closeSocket_ (Handle 80) |-> ()
                 ]
 
             success = runMockT $ do
               setExpectations
 
-              key <- readFile "key.txt"
-              val <- lookupDB key
-              writeFile "key.txt" val
-              storeDB key "newVal"
+              code <- readFile "code.txt"
+              h <- openSocket 80
+              writeFile "code.txt" (code ++ "+")
+              closeSocket h
 
             failure = runMockT $ do
               setExpectations
 
-              key <- readFile "key.txt"
-              val <- lookupDB key
-              storeDB key "newVal"
-              writeFile "key.txt" val
+              h <- openSocket 80
+              code <- readFile "code.txt"
+              closeSocket h
+              writeFile "code.txt" (code ++ "+")
 
         success
 
         failure
-          `shouldThrow` errorWith ("Unexpected action: storeDB" `isInfixOf`)
+          `shouldThrow` errorWith ("Unexpected action: openSocket" `isInfixOf`)
 
     it "catches unmet expectations" $
       example $ do
