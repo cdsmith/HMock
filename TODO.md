@@ -3,49 +3,55 @@
 I'm trying to write a compelling demo to advocate for HMock's role in testing.
 That's the Demo module in the test directory.  I need to finish this.
 
-## Use the Default class for derived default responses.
+## Catch up on test coverage
+
+Need lots of tests of various cases for missing responses.
+
+## Use the Default class for derived default responses
 
 If a return type has a `Default` instance from `Data.Default`, I can define a
 default implementation when the `mockLax` option is enabled.  I should think
 about that.  I'm not sure, though, as it might be better to just make people
 write their own `MockT` instances to be more explicit about the right defaults.
 
-## Fall-through responses
+## `whenever` should override default responses
 
-When a method has a default response (either because it's set by the `MockT`
-instance or because `whenever` has been used), the user shouldn't need to
-specify a response when expecting a call.
+Currently `whenever` is treated as an expectation with unspecified multiplicity.
+But really, I want it to change the *default* behavior.  This distinction
+matters when expectations don't include responses.
 
-The UX here is an interesting question.  I'd like to be able to write either:
+Maybe `whenever` should still override existing expects?  This is actually
+unclear to me.  This is essentially the same question as gMock's
+`ON_CALL(...).WillByDefault(...)` versus `EXPECT_CALL(...).WillManyTimes(...)`.
+gMock has both behaviors.  I could make the same choice by re-adding `expectAny`
+which is a real expectation that masks earlier ones, while `whenever` is just a
+default that is overridden by any expectation even if it's pre-existing.
+
+## Multiple responses
+
+It's now possible to write:
 
 ``` haskell
-expect $ someMethod_ "param" |-> result
+expect $ ReadFile "foo.txt"
+  |-> "a"
+  |-> "b"
+  |-> "c"
 ```
 
-or
+What does this mean?  Currently, it means that reading `foo.txt` will return
+`"c"`, overriding the earlier responses.  But it would be consistent with other
+mock frameworks if it meant that `readFile` will be called three times, and that
+it will return each response in sequence.
 
-``` haskell
-expect $ someMethod_ "param"
-```
+The details here:
 
-This means that the argument to `expect` should be either a `Rule` or a
-`Matcher`.  Then there should be a type class `Expectable`, which describes
-either.  A side benefit of the new `Expectable` class is that I can define
-`Expectable` instances for `Action` as well, eliminating those ugly exact
-matchers!
-
-At the same time, I should add `mockMethodWith`, which sets a default response
-just like `mockLaxMethodWith`, but still fails on unexpected calls.  The TH
-generator should always use `mockMethodWith` in exactly the same cases that it
-is capable of generating lax methods.
-
-If the user has added an `expect` or `expectN` with non-trivial multiplicity
-bounds, should this be treated as a default response for response-less
-expectations?  If so, should it also satisfy that multiplicity in addition to
-the new one?  My initial sense is no, anything with multiplicity bounds should
-be ignored, effectively making `whenever` something special (a "default" as
-opposed to an "expectation").  However, `whenever` should probably still either
-override existing expects, or else throw an error if there are existing expects.
+* `expect` is no longer equivalent to `expectN once`.  Instead, it means: expect
+  exactly one call per response.  If you mean `expectN once`, you should say so.
+* `expectN` should now check that the given multiplicity allows at least as many
+  calls as the number of responses, and throw an exception otherwise.
+* If multiple responses are given for `expectN` or `whenever`, and more calls
+  occur than responses in the list, the last response gets repeated for the
+  extra calls.
 
 ## Better predicate descriptions
 

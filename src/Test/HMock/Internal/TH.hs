@@ -30,7 +30,7 @@ import Data.Either (partitionEithers)
 import qualified Data.Kind
 import Data.List (foldl', (\\))
 import Data.Maybe (catMaybes)
-import Data.Typeable (Typeable, type (:~:) (Refl))
+import Data.Typeable (Typeable)
 import GHC.Stack (HasCallStack)
 import GHC.TypeLits (Symbol)
 import Language.Haskell.TH hiding (Match, match)
@@ -328,7 +328,8 @@ isKnownType method ty = null tyVars && null cx
 
 deriveMockableImpl :: MockableOptions -> Q Type -> Q [Dec]
 deriveMockableImpl options qt = do
-  checkExts [GADTs, TypeFamilies, DataKinds]
+  checkExts
+    [GADTs, TypeFamilies, DataKinds, FlexibleInstances, MultiParamTypeClasses]
 
   inst <- getInstance options =<< qt
 
@@ -349,7 +350,7 @@ deriveMockableImpl options qt = do
             defineMatchAction options (instMethods inst)
           ]
       ]
-    <*> defineExactMatchers options inst
+    <*> defineExpectableActions options inst
 
 defineActionType :: MockableOptions -> Instance -> DecQ
 defineActionType options inst = do
@@ -543,7 +544,7 @@ matchActionClause options method = do
       conP (getActionName options method) (varP . snd <$> argVars)
     ]
     ( guardedB
-        [ (,) <$> normalG [|$(varE mmVar) == 0|] <*> [|Match Refl|],
+        [ (,) <$> normalG [|$(varE mmVar) == 0|] <*> [|Match|],
           (,) <$> normalG [|otherwise|] <*> [|NoMatch $(varE mmVar)|]
         ]
     )
@@ -555,50 +556,45 @@ matchActionClause options method = do
   where
     mkAccept (p, a) = [|accept $(return (VarE p)) $(return (VarE a))|]
 
-defineExactMatchers :: MockableOptions -> Instance -> Q [Dec]
-defineExactMatchers options inst =
-  concatMapM (defineExactMatcher options inst) (instMethods inst)
+defineExpectableActions :: MockableOptions -> Instance -> Q [Dec]
+defineExpectableActions options inst =
+  concatMapM (defineExpectableAction options inst) (instMethods inst)
 
-getExactMatcherName :: MockableOptions -> Method -> Name
-getExactMatcherName options name =
-  mkName (nameBase (methodName name) ++ mockSuffix options ++ "_")
-
-defineExactMatcher :: MockableOptions -> Instance -> Method -> Q [Dec]
-defineExactMatcher options inst method = do
+defineExpectableAction :: MockableOptions -> Instance -> Method -> Q [Dec]
+defineExpectableAction options inst method = do
   maybeCxt <- wholeCxt (methodArgs method)
+  argVars <- replicateM (length (methodArgs method)) (newName "a")
   case maybeCxt of
     Just cx -> do
-      argVars <- replicateM (length (methodArgs method)) (newName "a")
       sequence
-        [ sigD
-            (getExactMatcherName options method)
-            ( forallT
-                []
-                (pure (methodCxt method ++ cx))
-                ( foldr
-                    (\argTy ty -> [t|$(pure argTy) -> $ty|])
-                    [t|
-                      Matcher
-                        $(pure (instType inst))
-                        $(litT (strTyLit (nameBase (methodName method))))
-                        $(varT (instMonadVar inst))
-                        $(pure (methodResult method))
-                      |]
-                    (methodArgs method)
+        [ instanceD
+            (pure (methodCxt method ++ cx))
+            ( appT
+                ( appT
+                    (appT (conT ''Expectable) (pure (instType inst)))
+                    nameSymbol
                 )
-            ),
-          funD
-            (getExactMatcherName options method)
-            [ clause
-                [varP v | v <- argVars]
-                ( normalB
-                    (makeBody argVars (conE (getMatcherName options method)))
+                ( appT
+                    (appT (conT ''Action) (pure (instType inst)))
+                    nameSymbol
                 )
-                []
+            )
+            [ funD
+                'toRule
+                [ clause
+                    [conP (getActionName options method) (map varP argVars)]
+                    ( normalB $
+                        let matcherCon = conE (getMatcherName options method)
+                         in appE (varE 'toRule) (makeBody argVars matcherCon)
+                    )
+                    []
+                ]
             ]
         ]
     _ -> pure []
   where
+    nameSymbol = litT $ strTyLit $ nameBase $ methodName method
+
     makeBody [] e = e
     makeBody (v : vs) e = makeBody vs [|$e (eq $(varE v))|]
 
@@ -665,15 +661,22 @@ mockMethodImpl options method = do
 
     body argVars = do
       let defaultResponse = case methodResult method of
-            TupleT 0 -> Just [|()|]
+            TupleT 0 -> Just [|return ()|]
             _ -> Nothing
       case defaultResponse of
-        Just expr | mockLax options ->
-          [|
-            mockLaxMethodWith
-              $expr
-              $(actionExp argVars (conE (getActionName options method)))
-            |]
+        Just expr
+          | mockLax options ->
+            [|
+              mockLaxMethod
+                $expr
+                $(actionExp argVars (conE (getActionName options method)))
+              |]
+          | otherwise ->
+            [|
+              mockMethodWithDefault
+                $expr
+                $(actionExp argVars (conE (getActionName options method)))
+              |]
         _ ->
           [|
             mockMethod

@@ -1,6 +1,7 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
@@ -21,23 +22,21 @@ import Control.Monad.Except (MonadError)
 import Control.Monad.RWS (MonadRWS)
 import Control.Monad.Reader (MonadReader)
 import Control.Monad.State
-  ( MonadState,
-    StateT,
+  ( MonadIO,
+    MonadState (get, put),
+    MonadTrans (..),
+    StateT (StateT),
     evalStateT,
-    get,
     gets,
     modify,
-    put,
   )
-import Control.Monad.Trans (MonadIO, MonadTrans, lift)
 import Control.Monad.Writer (MonadWriter)
 import Data.Constraint (Constraint)
 import Data.Either (partitionEithers)
 import Data.Function (on)
 import Data.Kind (Type)
 import Data.List (intercalate, sortBy)
-import Data.Maybe (catMaybes)
-import Data.Type.Equality (type (:~:) (..))
+import Data.Maybe (catMaybes, listToMaybe)
 import Data.Typeable (Typeable, cast)
 import GHC.Stack (CallStack, HasCallStack, callStack, withFrozenCallStack)
 import GHC.TypeLits (KnownSymbol, Symbol)
@@ -53,11 +52,11 @@ import Test.HMock.Internal.Util (Located (..), locate, withLoc)
 -- | The result of matching a @'Matcher' a@ with an @'Action' b@.  Because the
 -- types should already guarantee that the methods match, all that's left is to
 -- match arguments.
-data MatchResult a b where
+data MatchResult where
   -- | No match.  The int is the number of arguments that don't match.
-  NoMatch :: Int -> MatchResult a b
+  NoMatch :: Int -> MatchResult
   -- | Match. Stores a witness to the equality of return types.
-  Match :: a :~: b -> MatchResult a b
+  Match :: MatchResult
 
 -- | A class for 'Monad' subclasses whose methods can be mocked.  You usually
 -- want to generate this instance using 'Test.HMock.TH.makeMockable' or
@@ -78,7 +77,10 @@ class Typeable cls => Mockable (cls :: (Type -> Type) -> Constraint) where
   showMatcher :: Maybe (Action cls name m a) -> Matcher cls name m b -> String
 
   -- | Attempts to match an 'Action' with a 'Matcher'.
-  matchAction :: Matcher cls name m a -> Action cls name m b -> MatchResult a b
+  matchAction :: Matcher cls name m a -> Action cls name m a -> MatchResult
+
+class Expectable cls name e | e -> cls name where
+  toRule :: e m r -> Rule cls name m r
 
 -- | A pair of a 'Matcher' and a response for when it matches.  The matching
 -- 'Action' is passed to the response, and is guaranteed to be a match, so it's
@@ -88,26 +90,46 @@ data
     (cls :: (Type -> Type) -> Constraint)
     (name :: Symbol)
     (m :: Type -> Type)
+    (r :: Type)
   where
-  -- | Matches an 'Action' and performs a response in the 'MockT' monad.  This
-  -- is a very flexible response, which can look at arguments, do things in the
-  -- base monad, set up more expectations, etc.
-  (:->) ::
-    Matcher cls name m a ->
-    (Action cls name m a -> MockT m a) ->
-    Rule cls name m
+  (:=>) ::
+    Matcher cls name m r ->
+    [Action cls name m r -> MockT m r] ->
+    Rule cls name m r
+
+-- | Matches an 'Action' and performs a response in the 'MockT' monad.  This
+-- is a very flexible response, which can look at arguments, do things in the
+-- base monad, set up more expectations, etc.
+(|=>) ::
+  Expectable cls name expectable =>
+  expectable m r ->
+  (Action cls name m r -> MockT m r) ->
+  Rule cls name m r
+e |=> r = m :=> (r : rs)
+  where
+    m :=> rs = toRule e
 
 -- | Matches an 'Action' and returns a 'Rule' with a constant response.  This is
 -- more convenient than '(:->)' in the common case where you just want to return
 -- a known result.
-(|->) :: (Mockable cls, Monad m) => Matcher cls name m a -> a -> Rule cls name m
-m |-> r = m :-> const (return r)
+(|->) ::
+  (Monad m, Expectable cls name expectable) =>
+  expectable m r ->
+  r ->
+  Rule cls name m r
+m |-> r = m |=> const (return r)
+
+instance Expectable cls name (Rule cls name) where
+  toRule = id
+
+instance Expectable cls name (Matcher cls name) where
+  toRule m = m :=> []
 
 -- | A single step of an expectation.
 data Step where
   Step ::
-    (Mockable cls, Typeable m, KnownSymbol name) =>
-    Located (Rule cls name m) ->
+    (Mockable cls, Typeable m, KnownSymbol name, Typeable r) =>
+    Located (Rule cls name m r) ->
     Step
 
 data Order = InOrder | AnyOrder deriving (Eq)
@@ -125,7 +147,7 @@ data ExpectSet (m :: Type -> Type) a where
 -- the given prefix (used to indent).
 formatExpectSet :: String -> ExpectSet m () -> String
 formatExpectSet prefix ExpectNothing = prefix ++ "nothing"
-formatExpectSet prefix (Expect multiplicity (Step l@(Loc _ (m :-> _)))) =
+formatExpectSet prefix (Expect multiplicity (Step l@(Loc _ (m :=> _)))) =
   prefix ++ withLoc (showMatcher Nothing m <$ l) ++ mult
   where
     mult
@@ -198,12 +220,17 @@ instance ExpectContext ExpectSet where
   fromExpectSet = id
 
 makeExpect ::
-  (Mockable cls, Typeable m, KnownSymbol name) =>
+  ( Expectable cls name expectable,
+    Mockable cls,
+    Typeable m,
+    KnownSymbol name,
+    Typeable r
+  ) =>
   CallStack ->
   Multiplicity ->
-  Rule cls name m ->
+  expectable m r ->
   ExpectSet m ()
-makeExpect cs mult wr = Expect mult (Step (locate cs wr))
+makeExpect cs mult e = Expect mult (Step (locate cs (toRule e)))
 
 -- | Creates an expectation that an action is performed once.  This is
 -- equivalent to @'expectN' 'once'@, but shorter.
@@ -219,10 +246,12 @@ expect ::
     Typeable m,
     Monad m,
     KnownSymbol name,
-    ExpectContext t
+    Typeable r,
+    Expectable cls name expectable,
+    ExpectContext ctx
   ) =>
-  Rule cls name m ->
-  t m ()
+  expectable m r ->
+  ctx m ()
 expect = fromExpectSet . makeExpect callStack once
 
 -- | Creates an expectation that an action is performed some number of times.
@@ -241,13 +270,15 @@ expectN ::
     Typeable m,
     Monad m,
     KnownSymbol name,
-    ExpectContext t
+    Typeable r,
+    Expectable cls name expectable,
+    ExpectContext ctx
   ) =>
   -- | The number of times the action should be performed.
   Multiplicity ->
   -- | The action and its response.
-  Rule cls name m ->
-  t m ()
+  expectable m r ->
+  ctx m ()
 expectN = (fromExpectSet .) . makeExpect callStack
 
 -- | Specifies a response if a matching action is performed, but doesn't expect
@@ -269,10 +300,12 @@ whenever ::
     Typeable m,
     Monad m,
     KnownSymbol name,
-    ExpectContext t
+    Typeable r,
+    Expectable cls name expectable,
+    ExpectContext ctx
   ) =>
-  Rule cls name m ->
-  t m ()
+  expectable m r ->
+  ctx m ()
 whenever = fromExpectSet . makeExpect callStack anyMultiplicity
 
 -- | Creates a sequential expectation.  Other actions can still happen during
@@ -291,9 +324,9 @@ whenever = fromExpectSet . makeExpect callStack anyMultiplicity
 -- purpose of the test, consider adding several independent expectations,
 -- instead.  This avoids over-asserting, and keeps your tests less brittle.
 inSequence ::
-  (Monad m, ExpectContext t) =>
-  (forall u. ExpectContext u => [u m ()]) ->
-  t m ()
+  (Monad m, ExpectContext ctx) =>
+  (forall ctx'. ExpectContext ctx' => [ctx' m ()]) ->
+  ctx m ()
 inSequence es = fromExpectSet (ExpectMulti InOrder es)
 
 -- | Combines multiple expectations, which can occur in any order.  Most of the
@@ -311,9 +344,9 @@ inSequence es = fromExpectSet (ExpectMulti InOrder es)
 --     ]
 -- @
 inAnyOrder ::
-  (Monad m, ExpectContext t) =>
-  (forall u. ExpectContext u => [u m ()]) ->
-  t m ()
+  (Monad m, ExpectContext ctx) =>
+  (forall ctx'. ExpectContext ctx' => [ctx' m ()]) ->
+  ctx m ()
 inAnyOrder es = fromExpectSet (ExpectMulti AnyOrder es)
 
 -- | Monad transformer for running mocks.
@@ -376,53 +409,93 @@ verifyExpectations = MockT $ do
     missing -> error $ "Unmet expectations:\n" ++ formatExpectSet "  " missing
 
 mockMethodWithMaybe ::
-  forall cls name m a.
-  (HasCallStack, Mockable cls, KnownSymbol name, Monad m, Typeable m) =>
-  Maybe a ->
-  Action cls name m a ->
-  MockT m a
-mockMethodWithMaybe surrogate action = withFrozenCallStack $
+  forall cls name m r.
+  ( HasCallStack,
+    Mockable cls,
+    KnownSymbol name,
+    Monad m,
+    Typeable m,
+    Typeable r
+  ) =>
+  Bool ->
+  Maybe (MockT m r) ->
+  Action cls name m r ->
+  MockT m r
+mockMethodWithMaybe lax surrogate action = withFrozenCallStack $
   MockT $ do
     expected <- get
     let (partials, fulls) = partitionEithers (tryMatch <$> liveSteps expected)
     let orderedPartials = snd <$> sortBy (compare `on` fst) (catMaybes partials)
     case (fulls, surrogate, orderedPartials) of
-      (response : _, _, _) -> response
-      ([], Just r, _) -> return r
-      ([], Nothing, []) -> noMatchError action
-      ([], Nothing, _) -> partialMatchError action orderedPartials
+      ((e, Just (MockT response)) : _, _, _) -> put e >> response
+      ((e, Nothing) : _, Just (MockT response), _) -> put e >> response
+      ((_, Nothing) : _, Nothing, _) -> noResponseError action
+      ([], Just (MockT response), _) | lax -> response
+      ([], _, []) -> noMatchError action
+      ([], _, _) -> partialMatchError action orderedPartials
   where
     tryMatch ::
       (Step, ExpectSet m ()) ->
-      Either (Maybe (Int, String)) (StateT (ExpectSet m ()) m a)
-    tryMatch (Step rule, e)
-      | Just lrule@(Loc _ (m :-> impl)) <-
-          cast rule = case matchAction m action of
-        NoMatch n -> Left (Just (n, withLoc (showMatcher (Just action) m <$ lrule)))
-        Match Refl | MockT r <- impl action -> Right (put e >> r)
+      Either (Maybe (Int, String)) (ExpectSet m (), Maybe (MockT m r))
+    tryMatch (Step expected, e)
+      | Just lrule@(Loc _ (m :=> impls)) <- cast expected =
+        case matchAction m action of
+          NoMatch n ->
+            Left (Just (n, withLoc (showMatcher (Just action) m <$ lrule)))
+          Match ->
+            Right (e, listToMaybe impls <*> Just action)
       | otherwise = Left Nothing
 
 -- | Implements a method in a 'Mockable' monad by delegating to the mock
--- framework.  If the method is called unexpectedly, an exception will be
--- thrown.  This is sometimes referred to as a "strict" mock.
+-- framework.  If the method is called unexpectedly *or* a response is not
+-- specified, an exception will be thrown.
 mockMethod ::
-  forall cls name m a.
-  (HasCallStack, Mockable cls, KnownSymbol name, Monad m, Typeable m) =>
-  Action cls name m a ->
-  MockT m a
-mockMethod = mockMethodWithMaybe Nothing
+  forall cls name m r.
+  ( HasCallStack,
+    Mockable cls,
+    KnownSymbol name,
+    Monad m,
+    Typeable m,
+    Typeable r
+  ) =>
+  Action cls name m r ->
+  MockT m r
+mockMethod = mockMethodWithMaybe False Nothing
 
 -- | Implements a method in a 'Mockable' monad by delegating to the mock
--- framework.  If the method is used unexpectedly, it will be ignored and the
--- given value will be returned.  This is sometimes referred to as a "lax" or
--- "nice" mock.
-mockLaxMethodWith ::
-  forall cls name m a.
-  (HasCallStack, Mockable cls, KnownSymbol name, Monad m, Typeable m) =>
-  a ->
-  Action cls name m a ->
-  MockT m a
-mockLaxMethodWith r = mockMethodWithMaybe (Just r)
+-- framework.  If the method is called unexpectedly, an exception will be
+-- thrown.  However, an expected invocation without a specified response will
+-- perform the given default action.
+mockMethodWithDefault ::
+  forall cls name m r.
+  ( HasCallStack,
+    Mockable cls,
+    KnownSymbol name,
+    Monad m,
+    Typeable m,
+    Typeable r
+  ) =>
+  MockT m r ->
+  Action cls name m r ->
+  MockT m r
+mockMethodWithDefault def = mockMethodWithMaybe False (Just def)
+
+-- | Implements a method in a 'Mockable' monad by delegating to the mock
+-- framework.  If the method is used unexpectedly, the given default response
+-- will be performed.  This is called a lax mock.
+mockLaxMethod ::
+  forall cls name m r.
+  ( HasCallStack,
+    Mockable cls,
+    KnownSymbol name,
+    Monad m,
+    Typeable m,
+    Typeable r
+  ) =>
+  MockT m r ->
+  Action cls name m r ->
+  MockT m r
+mockLaxMethod def = mockMethodWithMaybe True (Just def)
 
 -- An error for an action that matches no expectations at all.
 noMatchError ::
@@ -431,9 +504,16 @@ noMatchError ::
   Action cls name m a ->
   StateT (ExpectSet m ()) m a
 noMatchError a =
-  error $
-    "Unexpected action: "
-      ++ showAction a
+  error $ "Unexpected action: " ++ showAction a
+
+-- An error for an action that matches no expectations at all.
+noResponseError ::
+  (HasCallStack, Mockable cls) =>
+  -- | The action that was received.
+  Action cls name m a ->
+  StateT (ExpectSet m ()) m a
+noResponseError a =
+  error $ "Action lacks a response and has no default: " ++ showAction a
 
 -- An error for an action that doesn't match the argument predicates for any
 -- of the method's expectations.

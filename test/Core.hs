@@ -48,8 +48,8 @@ coreTests = do
             copyFile a b = readFile a >>= writeFile b
 
         runMockT $ do
-          expect $ readFile_ "foo.txt" |-> "lorem ipsum"
-          expect $ writeFile_ "bar.txt" "lorem ipsum" |-> ()
+          expect $ ReadFile "foo.txt" |-> "lorem ipsum"
+          expect $ WriteFile "bar.txt" "lorem ipsum"
 
           copyFile "foo.txt" "bar.txt"
 
@@ -59,8 +59,8 @@ coreTests = do
             badCopyFile a b = readFile b >>= writeFile a
 
             failure = runMockT $ do
-              expect $ readFile_ "foo.txt" |-> "lorem ipsum"
-              expect $ writeFile_ "bar.txt" "lorem ipsum" |-> ()
+              expect $ ReadFile "foo.txt" |-> "lorem ipsum"
+              expect $ WriteFile "bar.txt" "lorem ipsum"
 
               badCopyFile "foo.txt" "bar.txt"
 
@@ -70,10 +70,10 @@ coreTests = do
       example $ do
         let setExpectations =
               inSequence
-                [ expect $ readFile_ "code.txt" |-> "alpha",
-                  expect $ openSocket_ 80 |-> Handle 80,
-                  expect $ writeFile_ "code.txt" "alpha+" |-> (),
-                  expect $ closeSocket_ (Handle 80) |-> ()
+                [ expect $ ReadFile "code.txt" |-> "alpha",
+                  expect $ OpenSocket 80 |-> Handle 80,
+                  expect $ WriteFile "code.txt" "alpha+",
+                  expect $ CloseSocket (Handle 80)
                 ]
 
             success = runMockT $ do
@@ -100,7 +100,7 @@ coreTests = do
     it "catches unmet expectations" $
       example $ do
         let test = runMockT $ do
-              expect $ writeFile_ "bar.txt" "bar" |-> ()
+              expect $ WriteFile "bar.txt" "bar"
 
               -- Don't write the file.
               return ()
@@ -112,8 +112,8 @@ coreTests = do
     it "catches partially unmet expectations" $
       example $ do
         let test = runMockT $ do
-              expect $ writeFile_ "foo.txt" "foo" |-> ()
-              expect $ writeFile_ "bar.txt" "bar" |-> ()
+              expect $ WriteFile "foo.txt" "foo"
+              expect $ WriteFile "bar.txt" "bar"
 
               writeFile "foo.txt" "foo"
 
@@ -123,9 +123,9 @@ coreTests = do
       example $ do
         let test = runMockT $ do
               inSequence
-                [ expect $ writeFile_ "foo.txt" "foo" |-> (),
-                  expect $ writeFile_ "bar.txt" "bar" |-> (),
-                  expect $ writeFile_ "baz.txt" "baz" |-> ()
+                [ expect $ WriteFile "foo.txt" "foo",
+                  expect $ WriteFile "bar.txt" "bar",
+                  expect $ WriteFile "baz.txt" "baz"
                 ]
 
               writeFile "foo.txt" "foo"
@@ -140,7 +140,7 @@ coreTests = do
     it "catches incorrect arguments" $
       example $ do
         let test = runMockT $ do
-              expect $ writeFile_ "bar.txt" "bar" |-> ()
+              expect $ WriteFile "bar.txt" "bar"
               writeFile "bar.txt" "incorrect"
 
         test
@@ -149,7 +149,7 @@ coreTests = do
 
     it "matches with imprecise predicates" $
       example . runMockT $ do
-        expect $ WriteFile_ (hasSubstr "bar") anything |-> ()
+        expect $ WriteFile_ (hasSubstr "bar") anything
         writeFile "bar.txt" "unknown contents"
 
     it "stores source location in suchThat predicate" $
@@ -162,10 +162,10 @@ coreTests = do
 
     it "prefers most recent method match" $
       example . runMockT $ do
-        whenever $ readFile_ "foo.txt" |-> "a"
-        whenever $ readFile_ "foo.txt" |-> "b"
-        expect $ readFile_ "foo.txt" |-> "c"
-        expect $ readFile_ "foo.txt" |-> "d"
+        whenever $ ReadFile "foo.txt" |-> "a"
+        whenever $ ReadFile "foo.txt" |-> "b"
+        expect $ ReadFile "foo.txt" |-> "c"
+        expect $ ReadFile "foo.txt" |-> "d"
 
         r1 <- readFile "foo.txt"
         r2 <- readFile "foo.txt"
@@ -180,9 +180,9 @@ coreTests = do
     it "matches flexible multiplicity" $
       example $ do
         let setExpectations = do
-              expectN (atLeast 3) $ readFile_ "foo.txt" |-> "foo"
-              expectN (atMost 2) $ readFile_ "bar.txt" |-> "bar"
-              whenever $ readFile_ "baz.txt" |-> "baz"
+              expectN (atLeast 3) $ ReadFile "foo.txt" |-> "foo"
+              expectN (atMost 2) $ ReadFile "bar.txt" |-> "bar"
+              whenever $ ReadFile "baz.txt" |-> "baz"
 
             success1 = runMockT $ do
               setExpectations
@@ -224,10 +224,10 @@ coreTests = do
         let setExpectations =
               inSequence
                 [ inAnyOrder
-                    [ expect $ readFile_ "1.txt" |-> "1",
-                      expect $ readFile_ "2.txt" |-> "2"
+                    [ expect $ ReadFile "1.txt" |-> "1",
+                      expect $ ReadFile "2.txt" |-> "2"
                     ],
-                  expect $ readFile_ "3.txt" |-> "3"
+                  expect $ ReadFile "3.txt" |-> "3"
                 ]
 
             success1 = runMockT $ do
@@ -259,10 +259,10 @@ coreTests = do
       example . runMockT $ do
         inSequence
           [ inSequence
-              [ expect $ readFile_ "a" |-> "a",
-                expect $ readFile_ "b" |-> "b"
+              [ expect $ ReadFile "a" |-> "a",
+                expect $ ReadFile "b" |-> "b"
               ],
-            expect $ readFile_ "c" |-> "c"
+            expect $ ReadFile "c" |-> "c"
           ]
 
         _ <- readFile "a"
@@ -274,8 +274,8 @@ coreTests = do
       example $ do
         let setExpectations =
               inSequence
-                [ whenever $ writeFile_ "foo.txt" "foo" |-> (),
-                  whenever $ writeFile_ "foo.txt" "bar" |-> ()
+                [ whenever $ WriteFile "foo.txt" "foo",
+                  whenever $ WriteFile "foo.txt" "bar"
                 ]
 
             success = runMockT $ do
@@ -297,7 +297,7 @@ coreTests = do
         let test = runMockT $ do
               expect $
                 ReadFile_ anything
-                  :-> \(ReadFile f) -> return ("contents of " ++ f)
+                  |=> \(ReadFile f) -> return ("contents of " ++ f)
 
               readFile "foo.txt"
 
@@ -309,7 +309,7 @@ coreTests = do
           runMockT $ do
             whenever $
               ReadFile_ anything
-                :-> \_ -> modify (+ 1) >> return ""
+                |=> \_ -> modify (+ 1) >> return ""
 
             _ <- readFile "foo.txt"
             _ <- readFile "bar.txt"
@@ -321,8 +321,8 @@ coreTests = do
       example $ do
         let setExpectations = do
               whenever $
-                OpenSocket_ anything :-> \(OpenSocket n) -> do
-                  expect $ closeSocket_ (Handle n) |-> ()
+                OpenSocket_ anything |=> \(OpenSocket n) -> do
+                  expect $ CloseSocket (Handle n)
                   return (Handle n)
 
             success = runMockT $ do
@@ -351,7 +351,7 @@ coreTests = do
     it "verifies expectations early" $
       example $ do
         let test = runMockT $ do
-              expect $ readFile_ "foo.txt" |-> "lorem ipsum"
+              expect $ ReadFile "foo.txt" |-> "lorem ipsum"
               verifyExpectations
               _ <- readFile "foo.txt"
               return ()

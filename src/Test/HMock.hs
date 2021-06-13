@@ -45,7 +45,9 @@ module Test.HMock
     runMockT,
     describeExpectations,
     verifyExpectations,
-    Rule ((:->)),
+    Expectable,
+    Rule,
+    (|=>),
     (|->),
     ExpectContext,
     expect,
@@ -120,7 +122,8 @@ module Test.HMock
     Mockable (..),
     MatchResult (..),
     mockMethod,
-    mockLaxMethodWith,
+    mockMethodWithDefault,
+    mockLaxMethod,
   )
 where
 
