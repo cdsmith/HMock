@@ -1,8 +1,35 @@
 ## Finish Demo
 
-I'm trying to write a compelling demo to advocate for HMock in testing.  That's
-the Demo module in the test directory.  I need to finish this code, and try to
-make a case that mocks are useful in testing.
+I'm trying to write a compelling demo to advocate for HMock's role in testing.
+That's the Demo module in the test directory.  I need to finish this.
+
+## Default and fall-through responses
+
+When a method returns `()`, the user shouldn't need to specify a response.  In
+fact, optionally, they may not even want to have to add expectations in the
+first place.  Also, when adding an expectation, if there's already a default
+response, OR an explicit `whenever`, the user shouldn't have to repeat the
+response if they want an existing one.  They should be able to just fall through
+to the default behavior.
+
+I can imagine adding `mockMethodWith`, which acts like `mockMethod` but also
+includes a default of ignoring calls and returning a given fixed value.  There
+could also be a `mockLaxMethodWith` (but, notice, not `mockLaxMethod`, since a
+lax method must always have a default!) which allows calls to the method to not
+be expected.  Then I would have the TH generator always use `mockMethodWith` for
+methods returning `()`, and also add a lax option to `MockOptions` that causes
+TH to generate `mockLaxMethodWith` for methods that return `()`.  Perhaps it
+could also check for a `Default` instance for the return type?  But I think
+that's more controversial.  Users who want non-`()` lax methods may just have to
+write their own `MockT` instances.
+
+If the user has added an `expect` or `expectN` with non-trivial multiplicity
+bounds, should this be treated as a default response?  If so, should it also
+satisfy that expectation in addition to the new one?  My initial sense is no,
+anything with multiplicity bounds should be ignored, effectively making
+`whenever` something special (a "default" as opposed to an "expectation").
+However, `whenever` should probably still either override existing expects,
+or else throw an error if there are existing expects.
 
 ## Better predicate descriptions
 
