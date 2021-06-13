@@ -3,12 +3,12 @@
 I'm trying to write a compelling demo to advocate for HMock's role in testing.
 That's the Demo module in the test directory.  I need to finish this.
 
-## Deriving lax methods
+## Use the Default class for derived default responses.
 
-Add a lax option to `MockOptions` that causes TH to generate `mockLaxMethodWith`
-for methods that return `()`.  Perhaps it could also check for a `Default`
-instance for the return type?  But I think that's more controversial.  Users who
-want non-`()` lax methods may just have to write their own `MockT` instances.
+If a return type has a `Default` instance from `Data.Default`, I can define a
+default implementation when the `mockLax` option is enabled.  I should think
+about that.  I'm not sure, though, as it might be better to just make people
+write their own `MockT` instances to be more explicit about the right defaults.
 
 ## Fall-through responses
 
@@ -32,7 +32,9 @@ This means that the argument to `expect` should be either a `Rule` or a
 `Matcher`.  Then there should be a type class, ideally called `Expectable`,
 which describes either.  Unfortunately, `Expectable` is already used for the
 overloading of the `expect` result.  I should rename that existing type class to
-something like `Expected`.
+something like `Expected`.  (A side benefit of the new `Expectable` class is
+that I can define `Expectable` instances for `Action` as well, eliminating those
+ugly exact matchers!)
 
 At the same time, I should add `mockMethodWith`, which sets a default response
 just like `mockLaxMethodWith`, but still fails on unexpected calls.  The TH

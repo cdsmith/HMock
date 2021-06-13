@@ -22,6 +22,7 @@ import Control.Exception (evaluate)
 import Control.Monad.Trans (MonadIO, liftIO)
 import Data.Default (Default (def))
 import Data.Dynamic (Typeable)
+import Data.IORef (newIORef, readIORef, writeIORef)
 import Language.Haskell.TH.Syntax
 import QuasiMock
 import THUtil (deriveRecursive)
@@ -29,16 +30,8 @@ import Test.HMock
 import Test.HMock.TH
 import Test.Hspec
 
-
-
-
-
-
-
 -- Pre-define low-level instance to prevent deriveRecursive from trying.
 instance NFData Bytes where rnf = undefined
-
-
 
 deriveRecursive (Just AnyclassStrategy) ''NFData ''Dec
 
@@ -373,14 +366,14 @@ fdMixedTests :: SpecWith ()
 fdMixedTests = describe "MonadFDMixed" $ do
   it "generates mock impl" $
     example . runMockT $ do
-        setupQuasi
-        whenever $ qReify_ ''MonadFDMixed |-> $(reifyStatic ''MonadFDMixed)
+      setupQuasi
+      whenever $ qReify_ ''MonadFDMixed |-> $(reifyStatic ''MonadFDMixed)
 
-        decs1 <- runQ (deriveMockableType [t|MonadFDMixed String Int|])
-        decs2 <-
-          runQ (deriveTypeForMockT [t|MonadFDMixed String Int String Int|])
-        _ <- liftIO $ evaluate (rnf (decs1 ++ decs2))
-        return ()
+      decs1 <- runQ (deriveMockableType [t|MonadFDMixed String Int|])
+      decs2 <-
+        runQ (deriveTypeForMockT [t|MonadFDMixed String Int String Int|])
+      _ <- liftIO $ evaluate (rnf (decs1 ++ decs2))
+      return ()
 
   it "is mockable" $
     example $ do
@@ -644,39 +637,73 @@ rankNTests = describe "MonadRankN" $ do
       failure `shouldThrow` anyException
 
 class MonadLax m where
+  returnsUnit :: m ()
+  doesntReturnUnit :: m Int
+
+makeMockableWithOptions def {mockLax = True} ''MonadLax
+
+class MonadLax2 m where
   strictMethod :: m ()
   laxMethod :: Int -> m Int
 
-deriveMockable ''MonadLax
+deriveMockable ''MonadLax2
 
-instance (Typeable m, Monad m) => MonadLax (MockT m) where
+instance (Typeable m, Monad m) => MonadLax2 (MockT m) where
   strictMethod = mockMethod StrictMethod
   laxMethod i = mockLaxMethodWith 42 (LaxMethod i)
 
 laxTests :: SpecWith ()
-laxTests = describe "MonadLax" $ do
-  it "generates mock impl" $
-    example $ do
-      decs <- runMockT $ do
-        setupQuasi
-        whenever $ qReify_ ''MonadLax |-> $(reifyStatic ''MonadLax)
+laxTests = do
+  describe "MonadLax" $ do
+    it "generates mock impl" $
+      example $ do
+        decs <- runMockT $ do
+          setupQuasi
+          whenever $ qReify_ ''MonadLax |-> $(reifyStatic ''MonadLax)
 
-        runQ (deriveMockable ''MonadLax)
-      evaluate (rnf decs)
+          runQ (deriveMockable ''MonadLax)
+        evaluate (rnf decs)
 
-  it "fails on unexpected strict method" $
-    example $ runMockT strictMethod `shouldThrow` anyException
+    it "fails on unexpected strict method" $
+      example $ runMockT doesntReturnUnit `shouldThrow` anyException
 
-  it "falls back to default on unexpected lax method" $
-    example $ runMockT (laxMethod 1) `shouldReturn` 42
+    it "falls back to default on unexpected lax method" $
+      example $ runMockT returnsUnit `shouldReturn` ()
 
-  it "allows lax method to be overridden" $
-    example $ do
-      results <- runMockT $ do
-        whenever $ laxMethod_ 12 |-> 13
-        (,) <$> laxMethod 12 <*> laxMethod 13
+    it "allows lax method to be overridden" $
+      example $ do
+        overrideCalled <- newIORef False
+        runMockT $ do
+          whenever $
+            returnsUnit_
+              :-> const
+                (liftIO $ writeIORef overrideCalled True)
+          returnsUnit
+        readIORef overrideCalled `shouldReturn` True
 
-      results `shouldBe` (13, 42)
+  describe "MonadLax2" $ do
+    it "generates mock impl" $
+      example $ do
+        decs <- runMockT $ do
+          setupQuasi
+          whenever $ qReify_ ''MonadLax2 |-> $(reifyStatic ''MonadLax2)
+
+          runQ (deriveMockable ''MonadLax2)
+        evaluate (rnf decs)
+
+    it "fails on unexpected strict method" $
+      example $ runMockT strictMethod `shouldThrow` anyException
+
+    it "falls back to default on unexpected lax method" $
+      example $ runMockT (laxMethod 1) `shouldReturn` 42
+
+    it "allows lax method to be overridden" $
+      example $ do
+        results <- runMockT $ do
+          whenever $ laxMethod_ 12 |-> 13
+          (,) <$> laxMethod 12 <*> laxMethod 13
+
+        results `shouldBe` (13, 42)
 
 class ClassWithNoParams
 

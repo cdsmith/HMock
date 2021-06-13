@@ -44,6 +44,13 @@ import Test.HMock.Internal.Util
 data MockableOptions = MockableOptions
   { -- | Suffix to add to 'Action' and 'Matcher' names.  Defaults to @""@.
     mockSuffix :: String,
+    -- | Whether to derive a lax 'MockT' instance.  When a lax instance is
+    -- derived, methods that return () may be called at any time without adding
+    -- expectations.  If you want only some methods to be lax, or if you want
+    -- methods that do not return () to be lax, then you must derive your own
+    -- 'MockT' instance, calling either 'mockMethod' or 'mockLaxMethodWith' as
+    -- desired in each case.
+    mockLax :: Bool,
     -- | Whether to warn about limitations of the generated mocks.  This is
     -- mostly useful temporarily for finding out why generated code doesn't
     -- match your expectations.  Defaults to @'False'@.
@@ -51,7 +58,7 @@ data MockableOptions = MockableOptions
   }
 
 instance Default MockableOptions where
-  def = MockableOptions {mockSuffix = "", mockVerbose = False}
+  def = MockableOptions {mockSuffix = "", mockLax = False, mockVerbose = False}
 
 -- | Define all instances necessary to use HMock with the given class.
 -- Equivalent to both 'deriveMockable' and 'deriveForMockT'.
@@ -651,22 +658,27 @@ mockMethodImpl options method = do
   argVars <- replicateM (length (methodArgs method)) (newName "a")
   funD
     (methodName method)
-    [ clause
-        (varP <$> argVars)
-        ( normalB
-            [|
-              mockMethod
-                $( actionExp
-                     argVars
-                     (conE (getActionName options method))
-                 )
-              |]
-        )
-        []
-    ]
+    [clause (varP <$> argVars) (normalB (body argVars)) []]
   where
     actionExp [] e = e
     actionExp (v : vs) e = actionExp vs [|$e $(varE v)|]
+
+    body argVars = do
+      let defaultResponse = case methodResult method of
+            TupleT 0 -> Just [|()|]
+            _ -> Nothing
+      case defaultResponse of
+        Just expr | mockLax options ->
+          [|
+            mockLaxMethodWith
+              $expr
+              $(actionExp argVars (conE (getActionName options method)))
+            |]
+        _ ->
+          [|
+            mockMethod
+              $(actionExp argVars (conE (getActionName options method)))
+            |]
 
 checkExts :: [Extension] -> Q ()
 checkExts = mapM_ checkExt
