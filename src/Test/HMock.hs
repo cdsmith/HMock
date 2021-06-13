@@ -120,6 +120,7 @@ module Test.HMock
     Mockable (..),
     MatchResult (..),
     mockMethod,
+    mockLaxMethodWith,
   )
 where
 

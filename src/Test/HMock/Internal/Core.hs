@@ -48,11 +48,7 @@ import Test.HMock.Internal.Multiplicity
     exhaustable,
     once,
   )
-import Test.HMock.Internal.Util (Located(..), locate, withLoc)
-
-
-
-
+import Test.HMock.Internal.Util (Located (..), locate, withLoc)
 
 -- | The result of matching a @'Matcher' a@ with an @'Action' b@.  Because the
 -- types should already guarantee that the methods match, all that's left is to
@@ -375,31 +371,54 @@ verifyExpectations = MockT $ do
     ExpectNothing -> return ()
     missing -> error $ "Unmet expectations:\n" ++ formatExpectSet "  " missing
 
--- | Implements a method in a 'Mockable' monad by delegating to the mock
--- framework.  This is typically used only in generated code.
-mockMethod ::
+mockMethodWithMaybe ::
   forall cls name m a.
   (HasCallStack, Mockable cls, KnownSymbol name, Monad m, Typeable m) =>
+  Maybe a ->
   Action cls name m a ->
   MockT m a
-mockMethod a = withFrozenCallStack $
+mockMethodWithMaybe surrogate action = withFrozenCallStack $
   MockT $ do
     expected <- get
     let (partials, fulls) = partitionEithers (tryMatch <$> liveSteps expected)
     let orderedPartials = snd <$> sortBy (compare `on` fst) (catMaybes partials)
-    case (orderedPartials, fulls) of
-      (_, response : _) -> response
-      ([], []) -> noMatchError a
-      (_, []) -> partialMatchError a orderedPartials
+    case (fulls, surrogate, orderedPartials) of
+      (response : _, _, _) -> response
+      ([], Just r, _) -> return r
+      ([], Nothing, []) -> noMatchError action
+      ([], Nothing, _) -> partialMatchError action orderedPartials
   where
     tryMatch ::
       (Step, ExpectSet m ()) ->
       Either (Maybe (Int, String)) (StateT (ExpectSet m ()) m a)
     tryMatch (Step rule, e)
-      | Just lrule@(Loc _ (m :-> impl)) <- cast rule = case matchAction m a of
-        NoMatch n -> Left (Just (n, withLoc (showMatcher (Just a) m <$ lrule)))
-        Match Refl | MockT r <- impl a -> Right (put e >> r)
+      | Just lrule@(Loc _ (m :-> impl)) <-
+          cast rule = case matchAction m action of
+        NoMatch n -> Left (Just (n, withLoc (showMatcher (Just action) m <$ lrule)))
+        Match Refl | MockT r <- impl action -> Right (put e >> r)
       | otherwise = Left Nothing
+
+-- | Implements a method in a 'Mockable' monad by delegating to the mock
+-- framework.  If the method is called unexpectedly, an exception will be
+-- thrown.  This is sometimes referred to as a "strict" mock.
+mockMethod ::
+  forall cls name m a.
+  (HasCallStack, Mockable cls, KnownSymbol name, Monad m, Typeable m) =>
+  Action cls name m a ->
+  MockT m a
+mockMethod = mockMethodWithMaybe Nothing
+
+-- | Implements a method in a 'Mockable' monad by delegating to the mock
+-- framework.  If the method is used unexpectedly, it will be ignored and the
+-- given value will be returned.  This is sometimes referred to as a "lax" or
+-- "nice" mock.
+mockLaxMethodWith ::
+  forall cls name m a.
+  (HasCallStack, Mockable cls, KnownSymbol name, Monad m, Typeable m) =>
+  a ->
+  Action cls name m a ->
+  MockT m a
+mockLaxMethodWith r = mockMethodWithMaybe (Just r)
 
 -- An error for an action that matches no expectations at all.
 noMatchError ::

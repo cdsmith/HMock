@@ -29,16 +29,16 @@ import Test.HMock
 import Test.HMock.TH
 import Test.Hspec
 
-#if !MIN_VERSION_base(4, 13, 0)
-import Control.Monad.Fail (MonadFail)
-#endif
 
-#if MIN_VERSION_template_haskell(2, 16, 0)
+
+
+
+
 
 -- Pre-define low-level instance to prevent deriveRecursive from trying.
 instance NFData Bytes where rnf = undefined
 
-#endif
+
 
 deriveRecursive (Just AnyclassStrategy) ''NFData ''Dec
 
@@ -625,14 +625,12 @@ rankNTests = describe "MonadRankN" $ do
     example $ do
       decs <- runMockT $ do
         setupQuasi
-        whenever $
-          qReify_ ''MonadRankN
-            |-> $(reifyStatic ''MonadRankN)
+        whenever $ qReify_ ''MonadRankN |-> $(reifyStatic ''MonadRankN)
 
         runQ (deriveMockable ''MonadRankN)
       evaluate (rnf decs)
 
-  it "is mockable" $ do
+  it "is mockable" $
     example $ do
       let success = runMockT $ do
             expect $ RankN_ anything (eq True) |-> ()
@@ -644,6 +642,41 @@ rankNTests = describe "MonadRankN" $ do
 
       success
       failure `shouldThrow` anyException
+
+class MonadLax m where
+  strictMethod :: m ()
+  laxMethod :: Int -> m Int
+
+deriveMockable ''MonadLax
+
+instance (Typeable m, Monad m) => MonadLax (MockT m) where
+  strictMethod = mockMethod StrictMethod
+  laxMethod i = mockLaxMethodWith 42 (LaxMethod i)
+
+laxTests :: SpecWith ()
+laxTests = describe "MonadLax" $ do
+  it "generates mock impl" $
+    example $ do
+      decs <- runMockT $ do
+        setupQuasi
+        whenever $ qReify_ ''MonadLax |-> $(reifyStatic ''MonadLax)
+
+        runQ (deriveMockable ''MonadLax)
+      evaluate (rnf decs)
+
+  it "fails on unexpected strict method" $
+    example $ runMockT strictMethod `shouldThrow` anyException
+
+  it "falls back to default on unexpected lax method" $
+    example $ runMockT (laxMethod 1) `shouldReturn` 42
+
+  it "allows lax method to be overridden" $
+    example $ do
+      results <- runMockT $ do
+        whenever $ laxMethod_ 12 |-> 13
+        (,) <$> laxMethod 12 <*> laxMethod 13
+
+      results `shouldBe` (13, 42)
 
 class ClassWithNoParams
 
@@ -721,4 +754,5 @@ classTests = describe "makeMockable" $ do
   monadInArgTests
   extraneousMembersTests
   rankNTests
+  laxTests
   errorTests
