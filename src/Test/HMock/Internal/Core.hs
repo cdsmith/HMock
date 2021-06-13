@@ -114,8 +114,8 @@ data Order = InOrder | AnyOrder deriving (Eq)
 
 -- | A set of expected actions and their responses.  An entire test with mocks
 -- is expected to run in a single base 'Monad', which is the first type
--- parameter here.  The second parameter is just a trick with `Expectable` (see
--- below) to avoid GHC warnings about unused return values.
+-- parameter here.  The second parameter is just a trick with `ExpectContext`
+-- (see below) to avoid GHC warnings about unused return values.
 data ExpectSet (m :: Type -> Type) a where
   ExpectNothing :: ExpectSet m ()
   Expect :: Multiplicity -> Step -> ExpectSet m ()
@@ -188,13 +188,13 @@ excess = simplify . go
       | otherwise = e
     go (ExpectMulti order xs) = ExpectMulti order (map go xs)
 
--- | Type class for types that can represent expectations for mocks.  The only
--- instance you need worry about is `MockT`, which expects actions to be
--- performed during a test.
-class Expectable (t :: (Type -> Type) -> Type -> Type) where
+-- | Type class for contexts in which it makes sense to express an expectation.
+-- Notably, this includes `MockT`, which expects actions to be performed during
+-- a test.
+class ExpectContext (t :: (Type -> Type) -> Type -> Type) where
   fromExpectSet :: Monad m => ExpectSet m () -> t m ()
 
-instance Expectable ExpectSet where
+instance ExpectContext ExpectSet where
   fromExpectSet = id
 
 makeExpect ::
@@ -219,7 +219,7 @@ expect ::
     Typeable m,
     Monad m,
     KnownSymbol name,
-    Expectable t
+    ExpectContext t
   ) =>
   Rule cls name m ->
   t m ()
@@ -241,7 +241,7 @@ expectN ::
     Typeable m,
     Monad m,
     KnownSymbol name,
-    Expectable t
+    ExpectContext t
   ) =>
   -- | The number of times the action should be performed.
   Multiplicity ->
@@ -269,7 +269,7 @@ whenever ::
     Typeable m,
     Monad m,
     KnownSymbol name,
-    Expectable t
+    ExpectContext t
   ) =>
   Rule cls name m ->
   t m ()
@@ -291,7 +291,9 @@ whenever = fromExpectSet . makeExpect callStack anyMultiplicity
 -- purpose of the test, consider adding several independent expectations,
 -- instead.  This avoids over-asserting, and keeps your tests less brittle.
 inSequence ::
-  (Monad m, Expectable t) => (forall u. Expectable u => [u m ()]) -> t m ()
+  (Monad m, ExpectContext t) =>
+  (forall u. ExpectContext u => [u m ()]) ->
+  t m ()
 inSequence es = fromExpectSet (ExpectMulti InOrder es)
 
 -- | Combines multiple expectations, which can occur in any order.  Most of the
@@ -309,7 +311,9 @@ inSequence es = fromExpectSet (ExpectMulti InOrder es)
 --     ]
 -- @
 inAnyOrder ::
-  (Monad m, Expectable t) => (forall u. Expectable u => [u m ()]) -> t m ()
+  (Monad m, ExpectContext t) =>
+  (forall u. ExpectContext u => [u m ()]) ->
+  t m ()
 inAnyOrder es = fromExpectSet (ExpectMulti AnyOrder es)
 
 -- | Monad transformer for running mocks.
@@ -332,7 +336,7 @@ newtype MockT m a where
       MonadThrow
     )
 
-instance Expectable MockT where
+instance ExpectContext MockT where
   fromExpectSet e =
     MockT $ modify (\e' -> simplify (ExpectMulti AnyOrder [e, e']))
 

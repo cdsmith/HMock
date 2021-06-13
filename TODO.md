@@ -29,12 +29,10 @@ expect $ someMethod_ "param"
 ```
 
 This means that the argument to `expect` should be either a `Rule` or a
-`Matcher`.  Then there should be a type class, ideally called `Expectable`,
-which describes either.  Unfortunately, `Expectable` is already used for the
-overloading of the `expect` result.  I should rename that existing type class to
-something like `Expected`.  (A side benefit of the new `Expectable` class is
-that I can define `Expectable` instances for `Action` as well, eliminating those
-ugly exact matchers!)
+`Matcher`.  Then there should be a type class `Expectable`, which describes
+either.  A side benefit of the new `Expectable` class is that I can define
+`Expectable` instances for `Action` as well, eliminating those ugly exact
+matchers!
 
 At the same time, I should add `mockMethodWith`, which sets a default response
 just like `mockLaxMethodWith`, but still fails on unexpected calls.  The TH

@@ -47,7 +47,7 @@ module Test.HMock
     verifyExpectations,
     Rule ((:->)),
     (|->),
-    Expectable,
+    ExpectContext,
     expect,
     expectN,
     whenever,
