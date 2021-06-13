@@ -1,3 +1,9 @@
+## Finish Demo
+
+I'm trying to write a compelling demo to advocate for HMock in testing.  That's
+the Demo module in the test directory.  I need to finish this code, and try to
+make a case that mocks are useful in testing.
+
 ## Better predicate descriptions
 
 Some predicates could do a better job explaining why they succeed or fail.  For
