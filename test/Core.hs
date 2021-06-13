@@ -23,6 +23,8 @@ class Monad m => MonadFilesystem m where
   readFile :: FilePath -> m String
   writeFile :: FilePath -> String -> m ()
 
+-- | This is not used by tests.  It's just an illustration of how you'd use
+-- 'MonadFilesystem' in production.
 instance MonadFilesystem IO where
   readFile = Prelude.readFile
   writeFile = Prelude.writeFile
@@ -34,6 +36,14 @@ class Monad m => MonadDB a m where
   lookupDB :: String -> m a
 
 makeMockable ''MonadDB
+
+newtype SocketHandle = Handle Int deriving (Eq, Show)
+
+class Monad m => MonadSocket m where
+  openSocket :: Int -> m SocketHandle
+  closeSocket :: SocketHandle -> m ()
+
+makeMockable ''MonadSocket
 
 coreTests :: SpecWith ()
 coreTests = do
@@ -315,15 +325,26 @@ coreTests = do
 
     it "respects expectations added by a response" $
       example $ do
-        result <- runMockT $ do
-          whenever $
-            readFile_ "foo.txt" :-> \_ -> do
-              expect $ readFile_ "bar.txt" |-> "final"
-              return "bar.txt"
+        let setExpectations = do
+              whenever $
+                OpenSocket_ anything :-> \(OpenSocket n) -> do
+                  expect $ closeSocket_ (Handle n) |-> ()
+                  return (Handle n)
 
-          readFile "foo.txt" >>= readFile
+            success = runMockT $ do
+              setExpectations
 
-        result `shouldBe` "final"
+              h <- openSocket 80
+              closeSocket h
+
+            failure = runMockT $ do
+              setExpectations
+
+              _ <- openSocket 80
+              return ()
+
+        success
+        failure `shouldThrow` anyException
 
     it "describes expectations when asked" $
       example . runMockT $ do
