@@ -4,6 +4,13 @@ Some predicates could do a better job explaining why they succeed or fail.  For
 example, `elemsAre` or `each` could explain which elements don't match.  This
 means expanding the API to `Predicate` to include an optional explanation.
 
+## Whole-method matching
+
+Sometimes you want to be able to define matching predicates that span multiple
+arguments to a method.  There are whole-method matchers in frameworks like gMock
+to handle this.  For example, I may want to require that two arguments are equal
+to each other.  HMock should have a way to do this.
+
 ## Instances for effect systems
 
 An increasing number of people are using libraries like `eff`, `polysemy`,
