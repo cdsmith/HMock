@@ -1,13 +1,16 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneKindSignatures #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -39,6 +42,7 @@ import Data.Maybe (catMaybes, listToMaybe)
 import Data.Typeable (Typeable, cast)
 import GHC.Stack (CallStack, HasCallStack, callStack, withFrozenCallStack)
 import GHC.TypeLits (KnownSymbol, Symbol)
+import System.IO.Unsafe (unsafePerformIO)
 import Test.HMock.Internal.Multiplicity
   ( Multiplicity,
     anyMultiplicity,
@@ -48,7 +52,6 @@ import Test.HMock.Internal.Multiplicity
   )
 import Test.HMock.Internal.Util (Located (..), locate, withLoc)
 import UnliftIO (MonadUnliftIO, newMVar, putMVar, readMVar, takeMVar)
-import System.IO.Unsafe (unsafePerformIO)
 
 -- | The result of matching a @'Matcher' a@ with an @'Action' b@.  Because the
 -- types should already guarantee that the methods match, all that's left is to
@@ -80,8 +83,8 @@ class Typeable cls => Mockable (cls :: (Type -> Type) -> Constraint) where
   -- | Attempts to match an 'Action' with a 'Matcher'.
   matchAction :: Matcher cls name m a -> Action cls name m a -> MatchResult
 
-class Expectable cls name e | e -> cls name where
-  toRule :: e m r -> Rule cls name m r
+class Expectable cls name m r e | e -> cls name m r where
+  toRule :: e -> Rule cls name m r
 
 -- | A pair of a 'Matcher' and a response for when it matches.  The matching
 -- 'Action' is passed to the response, and is guaranteed to be a match, so it's
@@ -102,8 +105,8 @@ data
 -- is a very flexible response, which can look at arguments, do things in the
 -- base monad, set up more expectations, etc.
 (|=>) ::
-  Expectable cls name expectable =>
-  expectable m r ->
+  Expectable cls name m r expectable =>
+  expectable ->
   (Action cls name m r -> MockT m r) ->
   Rule cls name m r
 e |=> r = m :=> (r : rs)
@@ -114,8 +117,8 @@ e |=> r = m :=> (r : rs)
 -- more convenient than '(:->)' in the common case where you just want to return
 -- a known result.
 (|->) ::
-  (Monad m, Expectable cls name expectable) =>
-  expectable m r ->
+  (Monad m, Expectable cls name m r expectable) =>
+  expectable ->
   r ->
   Rule cls name m r
 m |-> r = m |=> const (return r)
@@ -124,10 +127,10 @@ infixl 1 |=>
 
 infixl 1 |->
 
-instance Expectable cls name (Rule cls name) where
+instance Expectable cls name m r (Rule cls name m r) where
   toRule = id
 
-instance Expectable cls name (Matcher cls name) where
+instance Expectable cls name m r (Matcher cls name m r) where
   toRule m = m :=> []
 
 -- | A single step of an expectation.
@@ -224,16 +227,17 @@ class ExpectContext (t :: (Type -> Type) -> Type -> Type) where
 instance ExpectContext ExpectSet where
   fromExpectSet = id
 
+type MockableMethod ::
+  ((* -> *) -> Constraint) -> Symbol -> (* -> *) -> * -> Constraint
+
+type MockableMethod cls name m r =
+  (Mockable cls, Typeable m, KnownSymbol name, Typeable r)
+
 makeExpect ::
-  ( Expectable cls name expectable,
-    Mockable cls,
-    Typeable m,
-    KnownSymbol name,
-    Typeable r
-  ) =>
+  (Expectable cls name m r expectable, MockableMethod cls name m r) =>
   CallStack ->
   Multiplicity ->
-  expectable m r ->
+  expectable ->
   ExpectSet m ()
 makeExpect cs mult e = Expect mult (Step (locate cs (toRule e)))
 
@@ -247,15 +251,12 @@ makeExpect cs mult e = Expect mult (Step (locate cs (toRule e)))
 -- @
 expect ::
   ( HasCallStack,
-    Mockable cls,
-    Typeable m,
     MonadIO m,
-    KnownSymbol name,
-    Typeable r,
-    Expectable cls name expectable,
+    MockableMethod cls name m r,
+    Expectable cls name m r expectable,
     ExpectContext ctx
   ) =>
-  expectable m r ->
+  expectable ->
   ctx m ()
 expect = fromExpectSet . makeExpect callStack once
 
@@ -271,18 +272,15 @@ expect = fromExpectSet . makeExpect callStack once
 -- @
 expectN ::
   ( HasCallStack,
-    Mockable cls,
-    Typeable m,
     MonadIO m,
-    KnownSymbol name,
-    Typeable r,
-    Expectable cls name expectable,
+    MockableMethod cls name m r,
+    Expectable cls name m r expectable,
     ExpectContext ctx
   ) =>
   -- | The number of times the action should be performed.
   Multiplicity ->
   -- | The action and its response.
-  expectable m r ->
+  expectable ->
   ctx m ()
 expectN = (fromExpectSet .) . makeExpect callStack
 
@@ -301,15 +299,12 @@ expectN = (fromExpectSet .) . makeExpect callStack
 -- @
 whenever ::
   ( HasCallStack,
-    Mockable cls,
-    Typeable m,
     MonadIO m,
-    KnownSymbol name,
-    Typeable r,
-    Expectable cls name expectable,
+    MockableMethod cls name m r,
+    Expectable cls name m r expectable,
     ExpectContext ctx
   ) =>
-  expectable m r ->
+  expectable ->
   ctx m ()
 whenever = fromExpectSet . makeExpect callStack anyMultiplicity
 
@@ -426,11 +421,8 @@ verifyExpectations = do
 mockMethodWithMaybe ::
   forall cls name m r.
   ( HasCallStack,
-    Mockable cls,
-    KnownSymbol name,
     Monad m,
-    Typeable m,
-    Typeable r
+    MockableMethod cls name m r
   ) =>
   Bool ->
   Maybe (MockT m r) ->
@@ -477,11 +469,8 @@ mockMethodWithMaybe lax surrogate action =
 mockMethod ::
   forall cls name m r.
   ( HasCallStack,
-    Mockable cls,
-    KnownSymbol name,
     Monad m,
-    Typeable m,
-    Typeable r
+    MockableMethod cls name m r
   ) =>
   Action cls name m r ->
   MockT m r
@@ -494,11 +483,8 @@ mockMethod = withFrozenCallStack . mockMethodWithMaybe False Nothing
 mockMethodWithDefault ::
   forall cls name m r.
   ( HasCallStack,
-    Mockable cls,
-    KnownSymbol name,
     Monad m,
-    Typeable m,
-    Typeable r
+    MockableMethod cls name m r
   ) =>
   MockT m r ->
   Action cls name m r ->
@@ -512,11 +498,8 @@ mockMethodWithDefault def =
 mockLaxMethod ::
   forall cls name m r.
   ( HasCallStack,
-    Mockable cls,
-    KnownSymbol name,
     Monad m,
-    Typeable m,
-    Typeable r
+    MockableMethod cls name m r
   ) =>
   MockT m r ->
   Action cls name m r ->

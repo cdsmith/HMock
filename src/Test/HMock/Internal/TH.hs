@@ -326,6 +326,16 @@ isKnownType method ty = null tyVars && null cx
     (tyVars, cx) =
       relevantContext ty (methodTyVars method, methodCxt method)
 
+withMethodParams :: Instance -> Method -> TypeQ -> TypeQ
+withMethodParams inst method t =
+  [t|
+    $t
+      $(pure (instType inst))
+      $(litT (strTyLit (nameBase (methodName method))))
+      $(varT (instMonadVar inst))
+      $(pure (methodResult method))
+    |]
+
 deriveMockableImpl :: MockableOptions -> Q Type -> Q [Dec]
 deriveMockableImpl options qt = do
   checkExts
@@ -372,13 +382,7 @@ actionConstructor options inst method = do
       [ return (Bang NoSourceUnpackedness NoSourceStrictness, argTy)
         | argTy <- methodArgs method
       ]
-      [t|
-        Action
-          $(pure (instType inst))
-          $(litT (strTyLit (nameBase (methodName method))))
-          $(varT (instMonadVar inst))
-          $(pure (methodResult method))
-        |]
+      (withMethodParams inst method [t| Action |])
 
 getActionName :: MockableOptions -> Method -> Name
 getActionName options method =
@@ -405,13 +409,7 @@ matcherConstructor options inst method = do
     [ (Bang NoSourceUnpackedness NoSourceStrictness,) <$> mkPredicate argTy
       | argTy <- methodArgs method
     ]
-    [t|
-      Matcher
-        $(pure (instType inst))
-        $(litT (strTyLit (nameBase (methodName method))))
-        $(varT (instMonadVar inst))
-        $(pure (methodResult method))
-      |]
+    (withMethodParams inst method [t| Matcher |])
   where
     mkPredicate argTy
       | hasPolyType argTy = do
@@ -566,35 +564,26 @@ defineExpectableAction options inst method = do
   argVars <- replicateM (length (methodArgs method)) (newName "a")
   case maybeCxt of
     Just cx -> do
-      sequence
-        [ instanceD
-            (pure (methodCxt method ++ cx))
-            ( appT
-                ( appT
-                    (appT (conT ''Expectable) (pure (instType inst)))
-                    nameSymbol
-                )
-                ( appT
-                    (appT (conT ''Action) (pure (instType inst)))
-                    nameSymbol
-                )
-            )
-            [ funD
-                'toRule
-                [ clause
-                    [conP (getActionName options method) (map varP argVars)]
-                    ( normalB $
-                        let matcherCon = conE (getMatcherName options method)
-                         in appE (varE 'toRule) (makeBody argVars matcherCon)
-                    )
-                    []
-                ]
-            ]
-        ]
+      (: [])
+        <$> instanceD
+          (pure (methodCxt method ++ cx))
+          ( appT
+              (withMethodParams inst method [t| Expectable |])
+              (withMethodParams inst method [t| Action |])
+          )
+          [ funD
+              'toRule
+              [ clause
+                  [conP (getActionName options method) (map varP argVars)]
+                  ( normalB $
+                      let matcherCon = conE (getMatcherName options method)
+                       in appE (varE 'toRule) (makeBody argVars matcherCon)
+                  )
+                  []
+              ]
+          ]
     _ -> pure []
   where
-    nameSymbol = litT $ strTyLit $ nameBase $ methodName method
-
     makeBody [] e = e
     makeBody (v : vs) e = makeBody vs [|$e (eq $(varE v))|]
 
