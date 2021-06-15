@@ -15,21 +15,20 @@
 module Test.HMock.Internal.Core where
 
 import Control.Arrow (second)
+import Control.Concurrent (MVar)
 import Control.Monad.Base (MonadBase)
 import Control.Monad.Catch (MonadCatch, MonadMask, MonadThrow)
 import Control.Monad.Cont (MonadCont)
 import Control.Monad.Except (MonadError)
 import Control.Monad.RWS (MonadRWS)
-import Control.Monad.Reader (MonadReader)
-import Control.Monad.State
-  ( MonadIO,
-    MonadState (get, put),
-    MonadTrans (..),
-    StateT (StateT),
-    evalStateT,
-    gets,
-    modify,
+import Control.Monad.Reader
+  ( MonadReader (ask, local, reader),
+    ReaderT,
+    mapReaderT,
+    runReaderT,
   )
+import Control.Monad.State (MonadState)
+import Control.Monad.Trans (MonadIO, MonadTrans, lift)
 import Control.Monad.Writer (MonadWriter)
 import Data.Constraint (Constraint)
 import Data.Either (partitionEithers)
@@ -48,6 +47,8 @@ import Test.HMock.Internal.Multiplicity
     once,
   )
 import Test.HMock.Internal.Util (Located (..), locate, withLoc)
+import UnliftIO (MonadUnliftIO, newMVar, putMVar, readMVar, takeMVar)
+import System.IO.Unsafe (unsafePerformIO)
 
 -- | The result of matching a @'Matcher' a@ with an @'Action' b@.  Because the
 -- types should already guarantee that the methods match, all that's left is to
@@ -118,6 +119,10 @@ e |=> r = m :=> (r : rs)
   r ->
   Rule cls name m r
 m |-> r = m |=> const (return r)
+
+infixl 1 |=>
+
+infixl 1 |->
 
 instance Expectable cls name (Rule cls name) where
   toRule = id
@@ -214,7 +219,7 @@ excess = simplify . go
 -- Notably, this includes `MockT`, which expects actions to be performed during
 -- a test.
 class ExpectContext (t :: (Type -> Type) -> Type -> Type) where
-  fromExpectSet :: Monad m => ExpectSet m () -> t m ()
+  fromExpectSet :: MonadIO m => ExpectSet m () -> t m ()
 
 instance ExpectContext ExpectSet where
   fromExpectSet = id
@@ -244,7 +249,7 @@ expect ::
   ( HasCallStack,
     Mockable cls,
     Typeable m,
-    Monad m,
+    MonadIO m,
     KnownSymbol name,
     Typeable r,
     Expectable cls name expectable,
@@ -268,7 +273,7 @@ expectN ::
   ( HasCallStack,
     Mockable cls,
     Typeable m,
-    Monad m,
+    MonadIO m,
     KnownSymbol name,
     Typeable r,
     Expectable cls name expectable,
@@ -298,7 +303,7 @@ whenever ::
   ( HasCallStack,
     Mockable cls,
     Typeable m,
-    Monad m,
+    MonadIO m,
     KnownSymbol name,
     Typeable r,
     Expectable cls name expectable,
@@ -324,7 +329,7 @@ whenever = fromExpectSet . makeExpect callStack anyMultiplicity
 -- purpose of the test, consider adding several independent expectations,
 -- instead.  This avoids over-asserting, and keeps your tests less brittle.
 inSequence ::
-  (Monad m, ExpectContext ctx) =>
+  (MonadIO m, ExpectContext ctx) =>
   (forall ctx'. ExpectContext ctx' => [ctx' m ()]) ->
   ctx m ()
 inSequence es = fromExpectSet (ExpectMulti InOrder es)
@@ -344,21 +349,21 @@ inSequence es = fromExpectSet (ExpectMulti InOrder es)
 --     ]
 -- @
 inAnyOrder ::
-  (Monad m, ExpectContext ctx) =>
+  (MonadIO m, ExpectContext ctx) =>
   (forall ctx'. ExpectContext ctx' => [ctx' m ()]) ->
   ctx m ()
 inAnyOrder es = fromExpectSet (ExpectMulti AnyOrder es)
 
 -- | Monad transformer for running mocks.
 newtype MockT m a where
-  MockT :: {unMockT :: StateT (ExpectSet m ()) m a} -> MockT m a
+  MockT :: {unMockT :: ReaderT (MVar (ExpectSet m ())) m a} -> MockT m a
   deriving
     ( Functor,
       Applicative,
       Monad,
       MonadFail,
       MonadIO,
-      MonadReader r,
+      MonadState s,
       MonadWriter w,
       MonadRWS r w s,
       MonadError e,
@@ -366,33 +371,42 @@ newtype MockT m a where
       MonadBase b,
       MonadCatch,
       MonadMask,
-      MonadThrow
+      MonadThrow,
+      MonadUnliftIO
     )
-
-instance ExpectContext MockT where
-  fromExpectSet e =
-    MockT $ modify (\e' -> simplify (ExpectMulti AnyOrder [e, e']))
 
 instance MonadTrans MockT where
   lift = MockT . lift
 
-instance MonadState s m => MonadState s (MockT m) where
-  get = lift get
-  put = lift . put
+mapMockT :: (m a -> m b) -> MockT m a -> MockT m b
+mapMockT f = MockT . mapReaderT f . unMockT
+
+instance MonadReader r m => MonadReader r (MockT m) where
+  ask = lift ask
+  local = mapMockT . local
+  reader = lift . reader
+
+instance ExpectContext MockT where
+  fromExpectSet e = do
+    expectVar <- MockT ask
+    expectSet <- takeMVar expectVar
+    putMVar expectVar (simplify (ExpectMulti AnyOrder [e, expectSet]))
 
 -- | Runs a test in the 'MockT' monad, handling all of the mocks.
-runMockT :: Monad m => MockT m a -> m a
-runMockT test = flip evalStateT ExpectNothing $
-  unMockT $ do
-    a <- test
-    verifyExpectations
-    return a
+runMockT :: MonadIO m => MockT m a -> m a
+runMockT test = do
+  eVar <- newMVar ExpectNothing
+  flip runReaderT eVar $
+    unMockT $ do
+      a <- test
+      verifyExpectations
+      return a
 
 -- | Fetches a 'String' that describes the current set of outstanding
 -- expectations.  This is sometimes useful for debugging test code.  The exact
 -- format is not specified.
-describeExpectations :: Monad m => MockT m String
-describeExpectations = MockT $ gets (formatExpectSet "")
+describeExpectations :: MonadIO m => MockT m String
+describeExpectations = formatExpectSet "" <$> (MockT ask >>= readMVar)
 
 -- | Verifies that all mock expectations are satisfied.  You normally don't need
 -- to do this, because it happens automatically at the end of your test in
@@ -402,9 +416,10 @@ describeExpectations = MockT $ gets (formatExpectSet "")
 -- Use of 'verifyExpectations' might signify that you are doing too much in a
 -- single test.  Consider splitting large tests into a separate test for each
 -- case.
-verifyExpectations :: Monad m => MockT m ()
-verifyExpectations = MockT $ do
-  gets excess >>= \case
+verifyExpectations :: MonadIO m => MockT m ()
+verifyExpectations = do
+  expectSet <- MockT ask >>= readMVar
+  case excess expectSet of
     ExpectNothing -> return ()
     missing -> error $ "Unmet expectations:\n" ++ formatExpectSet "  " missing
 
@@ -421,19 +436,29 @@ mockMethodWithMaybe ::
   Maybe (MockT m r) ->
   Action cls name m r ->
   MockT m r
-mockMethodWithMaybe lax surrogate action = withFrozenCallStack $
-  MockT $ do
-    expected <- get
-    let (partials, fulls) = partitionEithers (tryMatch <$> liveSteps expected)
-    let orderedPartials = snd <$> sortBy (compare `on` fst) (catMaybes partials)
-    case (fulls, surrogate, orderedPartials) of
-      ((e, Just (MockT response)) : _, _, _) -> put e >> response
-      ((e, Nothing) : _, Just (MockT response), _) -> put e >> response
-      ((_, Nothing) : _, Nothing, _) -> noResponseError action
-      ([], Just (MockT response), _) | lax -> response
-      ([], _, []) -> noMatchError action
-      ([], _, _) -> partialMatchError action orderedPartials
+mockMethodWithMaybe lax surrogate action =
+  do
+    -- We need to access the ExpectSet inside an MVar here, but don't want to
+    -- require a MonadIO constraint from the class being implemented.  Note that
+    -- runMockT has a MonadIO constraint, so we know the instance exists!  We
+    -- just don't have it available to us.  So we'll use unsafePerformIO and
+    -- rely on the evaluation order to sequence the IO actions.
+    expectVar <- MockT ask
+    expectSet <- return $! unsafePerformIO (takeMVar expectVar)
+    let (newExpectSet, response) = decideAction expectSet
+    return $! unsafePerformIO (putMVar expectVar newExpectSet)
+    response
   where
+    decideAction expectSet =
+      let (partial, full) = partitionEithers (tryMatch <$> liveSteps expectSet)
+          orderedPartial = snd <$> sortBy (compare `on` fst) (catMaybes partial)
+       in case (full, surrogate, orderedPartial) of
+            ((e, Just response) : _, _, _) -> (e, response)
+            ((e, Nothing) : _, Just response, _) -> (e, response)
+            ((_, Nothing) : _, Nothing, _) -> error $ noResponseError action
+            ([], Just response, _) | lax -> (expectSet, response)
+            ([], _, []) -> error $ noMatchError action
+            ([], _, _) -> error $ partialMatchError action orderedPartial
     tryMatch ::
       (Step, ExpectSet m ()) ->
       Either (Maybe (Int, String)) (ExpectSet m (), Maybe (MockT m r))
@@ -460,7 +485,7 @@ mockMethod ::
   ) =>
   Action cls name m r ->
   MockT m r
-mockMethod = mockMethodWithMaybe False Nothing
+mockMethod = withFrozenCallStack . mockMethodWithMaybe False Nothing
 
 -- | Implements a method in a 'Mockable' monad by delegating to the mock
 -- framework.  If the method is called unexpectedly, an exception will be
@@ -478,7 +503,8 @@ mockMethodWithDefault ::
   MockT m r ->
   Action cls name m r ->
   MockT m r
-mockMethodWithDefault def = mockMethodWithMaybe False (Just def)
+mockMethodWithDefault def =
+  withFrozenCallStack . mockMethodWithMaybe False (Just def)
 
 -- | Implements a method in a 'Mockable' monad by delegating to the mock
 -- framework.  If the method is used unexpectedly, the given default response
@@ -495,25 +521,25 @@ mockLaxMethod ::
   MockT m r ->
   Action cls name m r ->
   MockT m r
-mockLaxMethod def = mockMethodWithMaybe True (Just def)
+mockLaxMethod def = withFrozenCallStack . mockMethodWithMaybe True (Just def)
 
 -- An error for an action that matches no expectations at all.
 noMatchError ::
   (HasCallStack, Mockable cls) =>
   -- | The action that was received.
   Action cls name m a ->
-  StateT (ExpectSet m ()) m a
+  String
 noMatchError a =
-  error $ "Unexpected action: " ++ showAction a
+  "Unexpected action: " ++ showAction a
 
 -- An error for an action that matches no expectations at all.
 noResponseError ::
   (HasCallStack, Mockable cls) =>
   -- | The action that was received.
   Action cls name m a ->
-  StateT (ExpectSet m ()) m a
+  String
 noResponseError a =
-  error $ "Action lacks a response and has no default: " ++ showAction a
+  "Expectation lacks a response and has no default: " ++ showAction a
 
 -- An error for an action that doesn't match the argument predicates for any
 -- of the method's expectations.
@@ -523,10 +549,9 @@ partialMatchError ::
   Action cls name m a ->
   -- | Descriptions of the matchers that most closely matched, closest first.
   [String] ->
-  StateT (ExpectSet m ()) m a
+  String
 partialMatchError a partials =
-  error $
-    "Wrong arguments: "
-      ++ showAction a
-      ++ "\n\nClosest matches:\n - "
-      ++ intercalate "\n - " (take 5 partials)
+  "Wrong arguments: "
+    ++ showAction a
+    ++ "\n\nClosest matches:\n - "
+    ++ intercalate "\n - " (take 5 partials)
