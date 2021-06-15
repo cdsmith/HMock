@@ -42,7 +42,6 @@ import Data.Maybe (catMaybes, listToMaybe)
 import Data.Typeable (Typeable, cast)
 import GHC.Stack (CallStack, HasCallStack, callStack, withFrozenCallStack)
 import GHC.TypeLits (KnownSymbol, Symbol)
-import System.IO.Unsafe (unsafePerformIO)
 import Test.HMock.Internal.Multiplicity
   ( Multiplicity (..),
     anyMultiplicity,
@@ -96,7 +95,7 @@ class Expectable cls name m r e | e -> cls name m r where
 --
 -- The method may be matched by providing either an 'Action' to match exactly,
 -- or a 'Matcher'.  Exact matching is only available when all method arguments
--- 
+--
 --
 -- A 'Rule' may have zero or more responses, which are attached using '|->' and
 -- '|=>'.  If there are no responses for a 'Rule', then there must be a default
@@ -113,7 +112,6 @@ class Expectable cls name m r e | e -> cls name m r where
 --     '|=>' \(GetLine prompt) -> "The prompt was " ++ prompt
 --     '|->' "quit"
 -- @
-
 data
   Rule
     (cls :: (Type -> Type) -> Constraint)
@@ -270,7 +268,7 @@ makeExpect ::
 makeExpect cs mult e = Expect mult (Step (locate cs (toRule e)))
 
 -- | Creates an expectation that an action is performed once per given
--- response.
+-- response (or exactly once if there is no response).
 --
 -- @
 -- 'runMockT' '$' do
@@ -293,7 +291,7 @@ expect ::
   ) =>
   expectable ->
   ctx m ()
-expect e = fromExpectSet (makeExpect callStack (exactly (length rs)) e)
+expect e = fromExpectSet (makeExpect callStack (exactly (max 1 (length rs))) e)
   where
     (_ :=> rs) = toRule e
 
@@ -464,7 +462,7 @@ verifyExpectations = do
 mockMethodWithMaybe ::
   forall cls name m r.
   ( HasCallStack,
-    Monad m,
+    MonadIO m,
     MockableMethod cls name m r
   ) =>
   Bool ->
@@ -473,15 +471,10 @@ mockMethodWithMaybe ::
   MockT m r
 mockMethodWithMaybe lax surrogate action =
   do
-    -- We need to access the ExpectSet inside an MVar here, but don't want to
-    -- require a MonadIO constraint from the class being implemented.  Note that
-    -- runMockT has a MonadIO constraint, so we know the instance exists!  We
-    -- just don't have it available to us.  So we'll use unsafePerformIO and
-    -- rely on the evaluation order to sequence the IO actions.
     expectVar <- MockT ask
-    expectSet <- return $! unsafePerformIO (takeMVar expectVar)
+    expectSet <- takeMVar expectVar
     let (newExpectSet, response) = decideAction expectSet
-    return $! unsafePerformIO (putMVar expectVar newExpectSet)
+    putMVar expectVar newExpectSet
     response
   where
     decideAction expectSet =
@@ -512,7 +505,7 @@ mockMethodWithMaybe lax surrogate action =
 mockMethod ::
   forall cls name m r.
   ( HasCallStack,
-    Monad m,
+    MonadIO m,
     MockableMethod cls name m r
   ) =>
   Action cls name m r ->
@@ -526,7 +519,7 @@ mockMethod = withFrozenCallStack . mockMethodWithMaybe False Nothing
 mockMethodWithDefault ::
   forall cls name m r.
   ( HasCallStack,
-    Monad m,
+    MonadIO m,
     MockableMethod cls name m r
   ) =>
   MockT m r ->
@@ -541,7 +534,7 @@ mockMethodWithDefault def =
 mockLaxMethod ::
   forall cls name m r.
   ( HasCallStack,
-    Monad m,
+    MonadIO m,
     MockableMethod cls name m r
   ) =>
   MockT m r ->

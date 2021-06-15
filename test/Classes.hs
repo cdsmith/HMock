@@ -225,7 +225,10 @@ suffixTests = describe "MonadSuffix" $ do
       success
       failure `shouldThrow` anyException
 
-class (MonadIO m, Monad m, Typeable m) => MonadSuper m where
+class SuperClass (m :: * -> *)
+instance SuperClass m
+
+class (SuperClass m, Monad m, Typeable m) => MonadSuper m where
   withSuper :: m ()
 
 makeMockable ''MonadSuper
@@ -337,7 +340,7 @@ newtype MyBase m a = MyBase {runMyBase :: m a}
   deriving newtype (Functor, Applicative, Monad, MonadIO)
 
 instance
-  (Monad m, Typeable m) =>
+  (MonadIO m, Typeable m) =>
   MonadFDGeneral String (MockT (MyBase m))
   where
   fdGeneral x = mockMethod (FdGeneral x)
@@ -536,7 +539,7 @@ class MonadExtraneousMembers m where
 
 deriveMockable ''MonadExtraneousMembers
 
-instance (Typeable m, Monad m) => MonadExtraneousMembers (MockT m) where
+instance (Typeable m, MonadIO m) => MonadExtraneousMembers (MockT m) where
   data SomeDataType (MockT m) = SomeCon
   favoriteNumber SomeCon = 42
   wrongMonad _ = return 42
@@ -659,7 +662,7 @@ class MonadLax2 m where
 
 deriveMockable ''MonadLax2
 
-instance (Typeable m, Monad m) => MonadLax2 (MockT m) where
+instance (Typeable m, MonadIO m) => MonadLax2 (MockT m) where
   strictMethod = mockMethod StrictMethod
   laxMethod i = mockLaxMethod (return 42) (LaxMethod i)
 

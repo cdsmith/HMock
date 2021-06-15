@@ -23,6 +23,7 @@ where
 
 import Control.Monad (replicateM, unless, when, zipWithM)
 import Control.Monad.Extra (concatMapM, mapMaybeM)
+import Control.Monad.Trans (MonadIO)
 import Data.Bool (bool)
 import Data.Char (toUpper)
 import Data.Default (Default (..))
@@ -384,7 +385,7 @@ actionConstructor options inst method = do
       [ return (Bang NoSourceUnpackedness NoSourceStrictness, argTy)
         | argTy <- methodArgs method
       ]
-      (withMethodParams inst method [t| Action |])
+      (withMethodParams inst method [t|Action|])
 
 getActionName :: MockableOptions -> Method -> Name
 getActionName options method =
@@ -411,7 +412,7 @@ matcherConstructor options inst method = do
     [ (Bang NoSourceUnpackedness NoSourceStrictness,) <$> mkPredicate argTy
       | argTy <- methodArgs method
     ]
-    (withMethodParams inst method [t| Matcher |])
+    (withMethodParams inst method [t|Matcher|])
   where
     mkPredicate argTy
       | hasPolyType argTy = do
@@ -570,8 +571,8 @@ defineExpectableAction options inst method = do
         <$> instanceD
           (pure (methodCxt method ++ cx))
           ( appT
-              (withMethodParams inst method [t| Expectable |])
-              (withMethodParams inst method [t| Action |])
+              (withMethodParams inst method [t|Expectable|])
+              (withMethodParams inst method [t|Action|])
           )
           [ funD
               'toRule
@@ -621,7 +622,8 @@ deriveForMockTImpl options qt = do
   let cx =
         instRequiredContext inst
           \\ [ AppT (ConT ''Typeable) (VarT (instMonadVar inst)),
-               AppT (ConT ''Monad) (VarT (instMonadVar inst))
+               AppT (ConT ''Monad) (VarT (instMonadVar inst)),
+               AppT (ConT ''MonadIO) (VarT (instMonadVar inst))
              ]
   let hasMonadInContext = instMonadVar inst `elem` concatMap freeTypeVars cx
   when hasMonadInContext $ checkExts [FlexibleContexts]
@@ -634,7 +636,7 @@ deriveForMockTImpl options qt = do
           <$> sequence
             [ return cxMockT,
               constrainVars [[t|Typeable|]] (instGeneralParams inst),
-              constrainVars [[t|Typeable|], [t|Monad|]] [m]
+              constrainVars [[t|Typeable|], [t|MonadIO|]] [m]
             ]
       )
       [t|$(pure (instType inst)) (MockT $(varT m))|]
