@@ -31,10 +31,11 @@ HMock can already be used to test multithreaded code using `UnliftIO.Concurrent`
 to spawn threads from inside of `MockT`.  However, not all Haskell code uses
 `MonadUnliftIO`, which after all comes with certain limitations on the monad
 stack in use.  It would be nice to have a more manual kind of concurrency
-testing.  For instance:
+testing.  I wonder if it would be possible to do any better than MonadUnliftIO
+for this.
 
 ``` haskell
-withMockT :: (MockT m a -> m a) -> MockT m a -> m a
+withMockT :: ((MockT m a -> m a) -> MockT m a) -> m a
 
 test = withMockT $ \inMockT -> do
    expect $ ...
