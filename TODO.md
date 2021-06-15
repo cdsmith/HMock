@@ -5,7 +5,11 @@ That's the Demo module in the test directory.  I need to finish this.
 
 ## Catch up on test coverage
 
-Need lots of tests of various cases for missing responses.
+Need lots of tests:
+* Default responses
+* Lax mocks
+* Missing responses
+* Interesting cases with MonadUnliftIO
 
 ## Use the Default class for derived default responses
 
