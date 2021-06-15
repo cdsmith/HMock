@@ -26,7 +26,7 @@ matters when expectations don't include responses.
 
 Maybe `whenever` should still override existing expects?  This is actually
 unclear to me.  This is essentially the same question as gMock's
-`ON_CALL(...).WillByDefault(...)` versus `EXPECT_CALL(...).WillManyTimes(...)`.
+`ON_CALL(...).WillByDefault(...)` versus `EXPECT_CALL(...).WillRepeatedly(...)`.
 gMock has both behaviors.  I could make the same choice by re-adding `expectAny`
 which is a real expectation that masks earlier ones, while `whenever` is just a
 default that is overridden by any expectation even if it's pre-existing.
