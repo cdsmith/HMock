@@ -430,11 +430,31 @@ instance ExpectContext MockT where
 
 -- | Runs a test in the 'MockT' monad, handling all of the mocks.
 runMockT :: MonadIO m => MockT m a -> m a
-runMockT test = do
+runMockT test = withMockT (const test)
+
+-- | Runs a test in the 'MockT' monad.  The test can unlift other MockT pieces
+-- to the base monad while still acting on the same set of expectations.  This
+-- can be useful for testing concurrency or similar mechanisms.
+--
+-- @
+-- test = 'withMockT' '$' \inMockT -> do
+--    'expect' '$' ...
+-- 
+--    'liftIO' '$' 'forkIO' '$' inMockT firstThread
+--    'liftIO' '$' 'forkIO' '$' inMockT secondThread
+-- @
+--
+-- This is a low-level primitive.  Consider using the @unliftio@ package for
+-- higher level implementations of multithreading and other primitives.
+withMockT ::
+  forall m b. MonadIO m => ((forall a. MockT m a -> m a) -> MockT m b) -> m b
+withMockT test = do
   eVar <- newMVar ExpectNothing
+  let inMockT :: forall a. MockT m a -> m a
+      inMockT m = runReaderT (unMockT m) eVar
   flip runReaderT eVar $
     unMockT $ do
-      a <- test
+      a <- test inMockT
       verifyExpectations
       return a
 

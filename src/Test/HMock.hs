@@ -40,11 +40,14 @@
 -- 'runMockT' to begin a test with mocks, 'expect' to set up your expected
 -- actions and responses, and finally execute your code.
 module Test.HMock
-  ( -- * Core interface
+  ( -- * Running mocks
     MockT,
     runMockT,
+    withMockT,
     describeExpectations,
     verifyExpectations,
+
+    -- * Setting expectations
     MockableMethod,
     Expectable,
     Rule,
@@ -119,7 +122,7 @@ module Test.HMock
     atMost,
     interval,
 
-    -- * Mock implementation
+    -- * Implementing mocks
     Mockable (..),
     MatchResult (..),
     mockMethod,
