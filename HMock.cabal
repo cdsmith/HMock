@@ -3,6 +3,7 @@ name:               HMock
 version:            0.1.0.0
 synopsis:           A flexible mock framework for unit testing effectful code.
 description:        A flexible mock framework for unit testing effectful code.
+                    .
                     Tests can set up expectations about actions that can or
                     should be performed and their results, and then verify those
                     expectations when the test is complete.
@@ -20,6 +21,7 @@ maintainer:         Chris Smith <cdsmith@gmail.com>
 
 extra-source-files: CHANGELOG.md
 
+tested-with:        GHC == 8.4.4 || == 8.6.5 || == 8.8.4 || == 8.10.4 || == 9.0.1
 library
     exposed-modules:  Test.HMock,
                       Test.HMock.TH,
