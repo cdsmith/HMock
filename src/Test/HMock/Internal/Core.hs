@@ -44,9 +44,10 @@ import GHC.Stack (CallStack, HasCallStack, callStack, withFrozenCallStack)
 import GHC.TypeLits (KnownSymbol, Symbol)
 import System.IO.Unsafe (unsafePerformIO)
 import Test.HMock.Internal.Multiplicity
-  ( Multiplicity,
+  ( Multiplicity (..),
     anyMultiplicity,
     decMultiplicity,
+    exactly,
     exhaustable,
     once,
   )
@@ -109,9 +110,7 @@ data
   expectable ->
   (Action cls name m r -> MockT m r) ->
   Rule cls name m r
-e |=> r = m :=> (r : rs)
-  where
-    m :=> rs = toRule e
+e |=> r = m :=> (rs ++ [r]) where m :=> rs = toRule e
 
 -- | Matches an 'Action' and returns a 'Rule' with a constant response.  This is
 -- more convenient than '(:->)' in the common case where you just want to return
@@ -133,12 +132,15 @@ instance Expectable cls name m r (Rule cls name m r) where
 instance Expectable cls name m r (Matcher cls name m r) where
   toRule m = m :=> []
 
+type MockableMethod ::
+  ((* -> *) -> Constraint) -> Symbol -> (* -> *) -> * -> Constraint
+
+type MockableMethod cls name m r =
+  (Mockable cls, Typeable m, KnownSymbol name, Typeable r)
+
 -- | A single step of an expectation.
 data Step where
-  Step ::
-    (Mockable cls, Typeable m, KnownSymbol name, Typeable r) =>
-    Located (Rule cls name m r) ->
-    Step
+  Step :: MockableMethod cls name m r => Located (Rule cls name m r) -> Step
 
 data Order = InOrder | AnyOrder deriving (Eq)
 
@@ -173,7 +175,7 @@ liveSteps = map (second simplify) . go
     go ExpectNothing = []
     go (Expect multiplicity step) = case decMultiplicity multiplicity of
       Nothing -> [(step, ExpectNothing)]
-      Just multiplicity' -> [(step, Expect multiplicity' step)]
+      Just multiplicity' -> [(step, Expect multiplicity' (nextResponse step))]
     go (ExpectMulti order es) = fmap (ExpectMulti order) <$> nextSteps order es
 
     nextSteps _ [] = []
@@ -184,6 +186,10 @@ liveSteps = map (second simplify) . go
       where
         eOptions = fmap (: es) <$> go e
         esOptions = nextSteps order es
+
+    nextResponse (Step (Loc l (m :=> (_ : r : rs)))) =
+      Step (Loc l (m :=> (r : rs)))
+    nextResponse other = other
 
 -- | Simplifies a set of expectations.  This removes unnecessary occurrences of
 -- 'ExpectNothing' and collapses nested lists with the same ordering
@@ -227,12 +233,6 @@ class ExpectContext (t :: (Type -> Type) -> Type -> Type) where
 instance ExpectContext ExpectSet where
   fromExpectSet = id
 
-type MockableMethod ::
-  ((* -> *) -> Constraint) -> Symbol -> (* -> *) -> * -> Constraint
-
-type MockableMethod cls name m r =
-  (Mockable cls, Typeable m, KnownSymbol name, Typeable r)
-
 makeExpect ::
   (Expectable cls name m r expectable, MockableMethod cls name m r) =>
   CallStack ->
@@ -258,7 +258,9 @@ expect ::
   ) =>
   expectable ->
   ctx m ()
-expect = fromExpectSet . makeExpect callStack once
+expect e = fromExpectSet (makeExpect callStack (exactly (length rs)) e)
+  where
+    (_ :=> rs) = toRule e
 
 -- | Creates an expectation that an action is performed some number of times.
 --
@@ -282,7 +284,13 @@ expectN ::
   -- | The action and its response.
   expectable ->
   ctx m ()
-expectN = (fromExpectSet .) . makeExpect callStack
+expectN mult e
+  | Multiplicity _ (Just n) <- mult,
+    length rs > n =
+    error "Too many responses for the specified multiplicity"
+  | otherwise = fromExpectSet (makeExpect callStack mult e)
+  where
+    (_ :=> rs) = toRule e
 
 -- | Specifies a response if a matching action is performed, but doesn't expect
 -- anything.  This is equivalent to @'expectN' 'anyMultiplicity'@, but shorter.

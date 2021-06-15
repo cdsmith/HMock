@@ -10,6 +10,9 @@ Need lots of tests:
 * Lax mocks
 * Missing responses
 * Interesting cases with MonadUnliftIO
+* Multiple responses
+* `expect` with multiple responses
+* `expectN` with too many responses
 
 ## Use the Default class for derived default responses
 
@@ -30,32 +33,6 @@ unclear to me.  This is essentially the same question as gMock's
 gMock has both behaviors.  I could make the same choice by re-adding `expectAny`
 which is a real expectation that masks earlier ones, while `whenever` is just a
 default that is overridden by any expectation even if it's pre-existing.
-
-## Multiple responses
-
-It's now possible to write:
-
-``` haskell
-expect $ ReadFile "foo.txt"
-  |-> "a"
-  |-> "b"
-  |-> "c"
-```
-
-What does this mean?  Currently, it means that reading `foo.txt` will return
-`"c"`, overriding the earlier responses.  But it would be consistent with other
-mock frameworks if it meant that `readFile` will be called three times, and that
-it will return each response in sequence.
-
-The details here:
-
-* `expect` is no longer equivalent to `expectN once`.  Instead, it means: expect
-  exactly one call per response.  If you mean `expectN once`, you should say so.
-* `expectN` should now check that the given multiplicity allows at least as many
-  calls as the number of responses, and throw an exception otherwise.
-* If multiple responses are given for `expectN` or `whenever`, and more calls
-  occur than responses in the list, the last response gets repeated for the
-  extra calls.
 
 ## Better predicate descriptions
 
