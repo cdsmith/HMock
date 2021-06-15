@@ -18,6 +18,13 @@ Need lots of tests:
 * `expect` with multiple responses
 * `expectN` with too many responses
 
+## Remove uses of `unsafePerformIO`
+
+By embedding a `MonadIO` constraint in the `MockT` type using a GADT, I can save
+the need for `unsafePerformIO`.  However, this prevents using generalized
+newtype deriving, so I'll need to implement more type classes for `MockT` by
+hand.
+
 ## Multithreading without `MonadUnliftIO`
 
 HMock can already be used to test multithreaded code using `UnliftIO.Concurrent`
