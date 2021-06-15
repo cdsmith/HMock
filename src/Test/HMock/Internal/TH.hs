@@ -48,7 +48,7 @@ data MockableOptions = MockableOptions
     -- derived, methods that return () may be called at any time without adding
     -- expectations.  If you want only some methods to be lax, or if you want
     -- methods that do not return () to be lax, then you must derive your own
-    -- 'MockT' instance, calling either 'mockMethod' or 'mockLaxMethodWith' as
+    -- 'MockT' instance, calling either 'mockMethod' or 'mockLaxMethod' as
     -- desired in each case.
     mockLax :: Bool,
     -- | Whether to warn about limitations of the generated mocks.  This is
@@ -69,8 +69,9 @@ instance Default MockableOptions where
 -- * A @'Mockable' MyClass@ instance.
 -- * An associated type @'Action' MyClass@, with a constructor @MyMethod@.
 -- * An associated type @'Matcher' MyClass@, with a constructor @MyMethod_@.
--- * An exact matcher function called @myMethod_@, if and only if all of
---   @myMethod@'s arguments have 'Eq' and 'Show' instances.
+-- * An 'Expectable' instance for @'Action' MyClass@ which matches an exact set
+--   of arguments, if and only if all of @myMethod@'s arguments have 'Eq' and
+--   'Show' instances.
 -- * An instance @MyClass ('MockT' m)@ allowing the class to be used in mocks.
 makeMockable :: Name -> Q [Dec]
 makeMockable = makeMockableType . conT
@@ -108,8 +109,9 @@ makeMockableTypeWithOptions options qt =
 -- * A @'Mockable' MyClass@ instance.
 -- * An associated type @'Action' MyClass@, with a constructor @MyMethod@.
 -- * An associated type @'Matcher' MyClass@, with a constructor @MyMethod_@.
--- * An exact matcher function called @myMethod_@, if and only if all of
---   @myMethod@'s arguments have 'Eq' and 'Show' instances.
+-- * An 'Expectable' instance for @'Action' MyClass@ which matches an exact set
+--   of arguments, if and only if all of @myMethod@'s arguments have 'Eq' and
+--   'Show' instances.
 deriveMockable :: Name -> Q [Dec]
 deriveMockable = deriveMockableType . conT
 

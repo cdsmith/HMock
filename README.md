@@ -105,7 +105,8 @@ response without limiting when they are called.  Using `expectN`, you can make
 a method optional, or limit the number of times it can occur.
 
 These tools let you express more of the exact properties you intend to test, so
-that you don't fall into the over-assertion trap.
+that you don't fall into the over-assertion trap.  This also unlocks the
+opportunity to test concurrent and non-deterministic code.
 
 ### Flexible matchers
 
@@ -171,12 +172,19 @@ to specify the return value.  In that case, you can use `|->` instead to keep
 things a bit more readable.  Basically, `m |-> r` is just a shorthand for
 `m |=> const (return r)`.
 
+As a mnemonic device for remembering the distinction, you can think of:
+
+* `|->` as ASCII art for `↦`, which associates a function with a result in
+  mathematical notation.
+* *`|=>` as a relative of Haskell's `>>=`, which binds an operation to a Kleisli
+  arrow.
+
 ### What is the difference between `foo`, `Foo`, and `Foo_`?
 
 These three names have subtly different meanings:
 
-* `foo` is the method of your own class.  This is what is used in the code that
-  you are testing.
+* `foo` is the method of your own class.  This is the function used in the code
+  that you are testing.
 * `Foo` is an `Action` constructor representing a call to the method.  You will
   typically use this in three places: in an expectation when you know the exact
   expected arguments, as the argument to `mockMethod` and friends, and as a
@@ -326,6 +334,16 @@ instance
 
 Obviously, this is a lot of boilerplate, and best to avoid unless it's
 necessary.
+
+### How do I test multithreaded code?
+
+If your code uses `MonadUnliftIO` to create threads, you can test it directly
+with HMock.
+
+### How do I test code with exceptions?
+
+You can use either the `exceptions` or `unliftio` packages to throw and catch
+exceptions from code tested with `MockT`.
 
 ### How do I get better stack traces?
 

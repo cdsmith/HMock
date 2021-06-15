@@ -30,8 +30,8 @@
 -- spec = describe "copyFile" '$'
 --   it "reads a file and writes its contents to another file" '$'
 --     'runMockT' '$' do
---       'expect' '$' readFile_ "foo.txt" '|->' "contents"
---       'expect' '$' writeFile_ "bar.txt" "contents" '|->' ()
+--       'expect' '$' ReadFile "foo.txt" '|->' "contents"
+--       'expect' '$' WriteFile "bar.txt" "contents" '|->' ()
 --       copyFile "foo.txt" "bar.txt"
 -- @
 --
@@ -45,6 +45,7 @@ module Test.HMock
     runMockT,
     describeExpectations,
     verifyExpectations,
+    MockableMethod,
     Expectable,
     Rule,
     (|=>),

@@ -84,12 +84,36 @@ class Typeable cls => Mockable (cls :: (Type -> Type) -> Constraint) where
   -- | Attempts to match an 'Action' with a 'Matcher'.
   matchAction :: Matcher cls name m a -> Action cls name m a -> MatchResult
 
+-- | Something that can be expected.  This type class covers a number of cases:
+--
+--   * Expecting an exact 'Action'.
+--   * Expecting anything that matches a 'Matcher'.
+--   * Adding a return value (with '|->') or response (with '|=>').
 class Expectable cls name m r e | e -> cls name m r where
   toRule :: e -> Rule cls name m r
 
--- | A pair of a 'Matcher' and a response for when it matches.  The matching
--- 'Action' is passed to the response, and is guaranteed to be a match, so it's
--- okay to just pattern match on the correct method.
+-- | A rule for matching a method and responding to it when it matches.
+--
+-- The method may be matched by providing either an 'Action' to match exactly,
+-- or a 'Matcher'.  Exact matching is only available when all method arguments
+-- 
+--
+-- A 'Rule' may have zero or more responses, which are attached using '|->' and
+-- '|=>'.  If there are no responses for a 'Rule', then there must be a default
+-- response for that action, and it is used.  If more than one response is
+-- added, the rule will perform the responses in order, repeating the last
+-- response if there are additional matches.
+--
+-- Example:
+--
+-- @
+-- 'expect' $
+--   GetLine_ 'Test.HMock.anything'
+--     '|->' "hello"
+--     '|=>' \(GetLine prompt) -> "The prompt was " ++ prompt
+--     '|->' "quit"
+-- @
+
 data
   Rule
     (cls :: (Type -> Type) -> Constraint)
@@ -102,9 +126,11 @@ data
     [Action cls name m r -> MockT m r] ->
     Rule cls name m r
 
--- | Matches an 'Action' and performs a response in the 'MockT' monad.  This
--- is a very flexible response, which can look at arguments, do things in the
--- base monad, set up more expectations, etc.
+-- | Attaches a response to an expectation.  This is a very flexible response,
+-- which can look at arguments, do things in the base monad, set up more
+-- expectations, etc.  The matching 'Action' is passed to the response, and is
+-- guaranteed to be a match so it's fine to just pattern match on the correct
+-- method.
 (|=>) ::
   Expectable cls name m r expectable =>
   expectable ->
@@ -112,17 +138,17 @@ data
   Rule cls name m r
 e |=> r = m :=> (rs ++ [r]) where m :=> rs = toRule e
 
--- | Matches an 'Action' and returns a 'Rule' with a constant response.  This is
--- more convenient than '(:->)' in the common case where you just want to return
--- a known result.
+infixl 1 |=>
+
+-- | Attaches a return value to an expectation.  This is more convenient than
+-- '|=>' in the common case where you just want to return a known result.
+-- @e '|->' r@ means the same thing as @e '|=>' 'const' ('return' r)@.
 (|->) ::
   (Monad m, Expectable cls name m r expectable) =>
   expectable ->
   r ->
   Rule cls name m r
 m |-> r = m |=> const (return r)
-
-infixl 1 |=>
 
 infixl 1 |->
 
@@ -132,6 +158,8 @@ instance Expectable cls name m r (Rule cls name m r) where
 instance Expectable cls name m r (Matcher cls name m r) where
   toRule m = m :=> []
 
+-- | All constraints needed to mock a method with the given class, name, base
+-- monad, and return type.
 type MockableMethod ::
   ((* -> *) -> Constraint) -> Symbol -> (* -> *) -> * -> Constraint
 
@@ -241,14 +269,21 @@ makeExpect ::
   ExpectSet m ()
 makeExpect cs mult e = Expect mult (Step (locate cs (toRule e)))
 
--- | Creates an expectation that an action is performed once.  This is
--- equivalent to @'expectN' 'once'@, but shorter.
+-- | Creates an expectation that an action is performed once per given
+-- response.
 --
 -- @
---   'runMockT' '$' do
---     'expect' '$' readFile_ "foo.txt" '|->' "lorem ipsum"
---     callCodeUnderTest
+-- 'runMockT' '$' do
+--   'expect' '$'
+--     ReadFile "foo.txt"
+--       '|->' "lorem ipsum"
+--       '|->' "oops, the file changed out from under me!"
+--   callCodeUnderTest
 -- @
+--
+-- In this example, `readFile` must be called exactly twice by the tested code,
+-- and will return "lorem ipsum" the first time, but something different the
+-- second time.
 expect ::
   ( HasCallStack,
     MonadIO m,
@@ -266,9 +301,9 @@ expect e = fromExpectSet (makeExpect callStack (exactly (length rs)) e)
 --
 -- @
 --   'runMockT' '$' do
---     'expect' '$' makeList_ '|->' ()
+--     'expect' '$' MakeList '|->' ()
 --     'expectN' ('Test.HMock.atLeast' 2) '$'
---       checkList_ "Cindy Lou Who" '|->' "nice"
+--       CheckList "Cindy Lou Who" '|->' "nice"
 --
 --     callCodeUnderTest
 -- @
@@ -301,7 +336,7 @@ expectN mult e
 -- @
 --   'runMockT' '$' do
 --     'whenever' '$' ReadFile_ anything '|->' "tlhIngan maH!"
---     'whenever' '$' readFile_ "config.txt" '|->' "lang: klingon"
+--     'whenever' '$' ReadFile "config.txt" '|->' "lang: klingon"
 --
 --     callCodeUnderTest
 -- @
@@ -321,9 +356,9 @@ whenever = fromExpectSet . makeExpect callStack anyMultiplicity
 --
 -- @
 --   'inSequence'
---     [ 'expect' '$' moveForward_ '|->' (),
---       'expect' '$' turnRight_ '|->' (),
---       'expect' '$' moveForward_ '|->' ()
+--     [ 'expect' '$' MoveForward '|->' (),
+--       'expect' '$' TurnRight '|->' (),
+--       'expect' '$' MoveForward '|->' ()
 --     ]
 -- @
 --

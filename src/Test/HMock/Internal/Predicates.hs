@@ -220,7 +220,7 @@ zipP p q =
     }
 
 -- | A 'Predicate' that accepts 3-tuples whose elements satisfy the
--- corresponding child 'Predicates'.
+-- corresponding child 'Predicate's.
 --
 -- >>> accept (zip3P (eq "foo") (eq "bar") (eq "qux")) ("foo", "bar", "qux")
 -- True

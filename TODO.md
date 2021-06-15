@@ -9,10 +9,32 @@ Need lots of tests:
 * Default responses
 * Lax mocks
 * Missing responses
-* Interesting cases with MonadUnliftIO
+* Interesting cases
+   * MockT wrapping a Reader monad
+   * Multiple threads with MonadUnliftIO
+   * Exceptions with MonadUnliftIO
+   * Exceptions with MonadThrow, MonadCatch, MonadMask
 * Multiple responses
 * `expect` with multiple responses
 * `expectN` with too many responses
+
+## Multithreading without `MonadUnliftIO`
+
+HMock can already be used to test multithreaded code using `UnliftIO.Concurrent`
+to spawn threads from inside of `MockT`.  However, not all Haskell code uses
+`MonadUnliftIO`, which after all comes with certain limitations on the monad
+stack in use.  It would be nice to have a more manual kind of concurrency
+testing.  For instance:
+
+``` haskell
+withMockT :: (MockT m a -> m a) -> MockT m a -> m a
+
+test = withMockT $ \inMockT -> do
+   expect $ ...
+
+   liftIO $ forkIO $ inMockT firstThread
+   liftIO $ forkIO $ inMockT secondThread
+```
 
 ## Use the Default class for derived default responses
 
