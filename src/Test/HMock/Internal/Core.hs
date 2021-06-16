@@ -159,10 +159,10 @@ instance Expectable cls name m r (Matcher cls name m r) where
 -- | All constraints needed to mock a method with the given class, name, base
 -- monad, and return type.
 type MockableMethod
-  (cls :: (* -> *) -> Constraint)
+  (cls :: (Type -> Type) -> Constraint)
   (name :: Symbol)
-  (m :: * -> *)
-  (r :: *) =
+  (m :: Type -> Type)
+  (r :: Type) =
   (Mockable cls, Typeable m, KnownSymbol name, Typeable r)
 
 -- | A single step of an expectation.
@@ -431,7 +431,7 @@ instance ExpectContext MockT where
 
 -- | Runs a test in the 'MockT' monad, handling all of the mocks.
 runMockT :: MonadIO m => MockT m a -> m a
-runMockT test = withMockT (const test)
+runMockT test = withMockT (\_ -> test)
 
 -- | Runs a test in the 'MockT' monad.  The test can unlift other MockT pieces
 -- to the base monad while still acting on the same set of expectations.  This
@@ -532,8 +532,8 @@ mockMethod ::
   ) =>
   Action cls name m r ->
   MockT m r
-mockMethod =
-  withFrozenCallStack . mockMethodImpl False (return def)
+mockMethod action =
+  withFrozenCallStack $ mockMethodImpl False (return def) action
 
 -- | Implements a method in a 'Mockable' monad by delegating to the mock
 -- framework.  If the method is used unexpectedly, the default value will be
@@ -547,8 +547,8 @@ mockLaxMethod ::
   ) =>
   Action cls name m r ->
   MockT m r
-mockLaxMethod =
-  withFrozenCallStack . mockMethodImpl True (return def)
+mockLaxMethod action =
+  withFrozenCallStack $ mockMethodImpl True (return def) action
 
 -- | Implements a method in a 'Mockable' monad by delegating to the mock
 -- framework.  If the method is called unexpectedly, an exception will be
@@ -563,8 +563,8 @@ mockDefaultlessMethod ::
   ) =>
   Action cls name m r ->
   MockT m r
-mockDefaultlessMethod =
-  withFrozenCallStack . mockMethodImpl False (return undefined)
+mockDefaultlessMethod action =
+  withFrozenCallStack $ mockMethodImpl False (return undefined) action
 
 -- | Implements a method in a 'Mockable' monad by delegating to the mock
 -- framework.  If the method is used unexpectedly, undefined will be returned.
@@ -578,8 +578,8 @@ mockLaxDefaultlessMethod ::
   ) =>
   Action cls name m r ->
   MockT m r
-mockLaxDefaultlessMethod =
-  withFrozenCallStack . mockMethodImpl True (return undefined)
+mockLaxDefaultlessMethod action =
+  withFrozenCallStack $ mockMethodImpl True (return undefined) action
 
 -- An error for an action that matches no expectations at all.
 noMatchError ::

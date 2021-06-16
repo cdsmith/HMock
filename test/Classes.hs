@@ -22,7 +22,8 @@ import Control.Exception (evaluate)
 import Control.Monad.Trans (MonadIO, liftIO)
 import Data.Default (Default (def))
 import Data.Dynamic (Typeable)
-import Language.Haskell.TH.Syntax
+import Data.Kind (Type)
+import Language.Haskell.TH.Syntax hiding (Type)
 import QuasiMock
 import THUtil (deriveRecursive)
 import Test.HMock
@@ -233,7 +234,7 @@ suffixTests = describe "MonadSuffix" $ do
       success
       failure `shouldThrow` anyException
 
-class SuperClass (m :: * -> *)
+class SuperClass (m :: Type -> Type)
 
 instance SuperClass m
 
