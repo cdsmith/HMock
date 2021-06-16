@@ -3,6 +3,22 @@
 I'm trying to write a compelling demo to advocate for HMock's role in testing.
 That's the Demo module in the test directory.  I need to finish this.
 
+## Get it working with more GHC versions
+
+Travis says only 8.10.4 is succeeding now.
+
+## Fix resolveInstance
+
+Right now, resolveInstance sometimes fails at unification.  It just looks for
+type variables in the constraints.  But it should also check whether instances
+actually exist for fully resolved constraints.
+
+A failing test case is when the return value of a method is a tuple with an
+element that has no default.  Because there's a Default instance for the whole
+tuple, and the derived constraints contain no type variables, resolveInstance
+reports a success.  However, it should really recursively call resolveInstance
+on the derived constraints until they are plain variables.
+
 ## Test instances for MockT
 
 * MockT wrapping a Reader monad
@@ -17,7 +33,7 @@ default implementation when the `mockLax` option is enabled.  I should think
 about that.  I'm not sure, though, as it might be better to just make people
 write their own `MockT` instances to be more explicit about the right defaults.
 
-## `whenever` should override default responses
+## `byDefault` to override default responses
 
 Currently `whenever` is treated as an expectation with unspecified multiplicity.
 But really, I want it to change the *default* behavior.  This distinction
