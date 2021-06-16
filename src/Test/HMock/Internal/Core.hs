@@ -480,17 +480,17 @@ verifyExpectations = do
     ExpectNothing -> return ()
     missing -> error $ "Unmet expectations:\n" ++ formatExpectSet "  " missing
 
-mockMethodWithMaybe ::
+mockMethodImpl ::
   forall cls name m r.
   ( HasCallStack,
     MonadIO m,
     MockableMethod cls name m r
   ) =>
   Bool ->
-  Maybe (MockT m r) ->
+  MockT m r ->
   Action cls name m r ->
   MockT m r
-mockMethodWithMaybe lax surrogate action =
+mockMethodImpl lax surrogate action =
   do
     expectVar <- MockT ask
     expectSet <- takeMVar expectVar
@@ -503,9 +503,8 @@ mockMethodWithMaybe lax surrogate action =
           orderedPartial = snd <$> sortBy (compare `on` fst) (catMaybes partial)
        in case (full, surrogate, orderedPartial) of
             ((e, Just response) : _, _, _) -> (e, response)
-            ((e, Nothing) : _, Just response, _) -> (e, response)
-            ((_, Nothing) : _, Nothing, _) -> error $ noResponseError action
-            ([], Just response, _) | lax -> (expectSet, response)
+            ((e, Nothing) : _, response, _) -> (e, response)
+            ([], response, _) | lax -> (expectSet, response)
             ([], _, []) -> error $ noMatchError action
             ([], _, _) -> error $ partialMatchError action orderedPartial
     tryMatch ::
@@ -521,23 +520,10 @@ mockMethodWithMaybe lax surrogate action =
       | otherwise = Left Nothing
 
 -- | Implements a method in a 'Mockable' monad by delegating to the mock
--- framework.  If the method is called unexpectedly *or* a response is not
--- specified, an exception will be thrown.
-mockMethod ::
-  forall cls name m r.
-  ( HasCallStack,
-    MonadIO m,
-    MockableMethod cls name m r
-  ) =>
-  Action cls name m r ->
-  MockT m r
-mockMethod = withFrozenCallStack . mockMethodWithMaybe False Nothing
-
--- | Implements a method in a 'Mockable' monad by delegating to the mock
 -- framework.  If the method is called unexpectedly, an exception will be
 -- thrown.  However, an expected invocation without a specified response will
--- perform the given default action.
-mockMethodWithDefault ::
+-- return the default value.
+mockMethod ::
   forall cls name m r.
   ( HasCallStack,
     MonadIO m,
@@ -546,12 +532,12 @@ mockMethodWithDefault ::
   ) =>
   Action cls name m r ->
   MockT m r
-mockMethodWithDefault =
-  withFrozenCallStack . mockMethodWithMaybe False (Just (return def))
+mockMethod =
+  withFrozenCallStack . mockMethodImpl False ( return def)
 
 -- | Implements a method in a 'Mockable' monad by delegating to the mock
--- framework.  If the method is used unexpectedly, the given default response
--- will be performed.  This is called a lax mock.
+-- framework.  If the method is used unexpectedly, the default value will be
+-- returned.  This is called a lax mock.
 mockLaxMethod ::
   forall cls name m r.
   ( HasCallStack,
@@ -562,7 +548,38 @@ mockLaxMethod ::
   Action cls name m r ->
   MockT m r
 mockLaxMethod =
-  withFrozenCallStack . mockMethodWithMaybe True (Just (return def))
+  withFrozenCallStack . mockMethodImpl True (return def)
+
+-- | Implements a method in a 'Mockable' monad by delegating to the mock
+-- framework.  If the method is called unexpectedly, an exception will be
+-- thrown.  However, an expected invocation without a specified response will
+-- return undefined.  This can be used in place of 'mockMethod' when the return
+-- type has no default.
+mockDefaultlessMethod ::
+  forall cls name m r.
+  ( HasCallStack,
+    MonadIO m,
+    MockableMethod cls name m r
+  ) =>
+  Action cls name m r ->
+  MockT m r
+mockDefaultlessMethod =
+  withFrozenCallStack . mockMethodImpl False (return undefined)
+
+-- | Implements a method in a 'Mockable' monad by delegating to the mock
+-- framework.  If the method is used unexpectedly, undefined will be returned.
+-- This can be used in place of 'mockLaxMethod' when the return type has no
+-- default.
+mockLaxDefaultlessMethod ::
+  forall cls name m r.
+  ( HasCallStack,
+    MonadIO m,
+    MockableMethod cls name m r
+  ) =>
+  Action cls name m r ->
+  MockT m r
+mockLaxDefaultlessMethod =
+  withFrozenCallStack . mockMethodImpl True (return undefined)
 
 -- An error for an action that matches no expectations at all.
 noMatchError ::

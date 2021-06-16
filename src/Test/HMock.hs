@@ -126,11 +126,12 @@ module Test.HMock
     Mockable (..),
     MatchResult (..),
     mockMethod,
-    mockMethodWithDefault,
     mockLaxMethod,
+    mockDefaultlessMethod,
+    mockLaxDefaultlessMethod,
   )
 where
 
-import Test.HMock.Internal.Multiplicity
 import Test.HMock.Internal.Core
+import Test.HMock.Internal.Multiplicity
 import Test.HMock.Internal.Predicates

@@ -13,12 +13,13 @@
 module QuasiMock where
 
 import Control.Monad.Trans (MonadIO, liftIO)
+import Data.Default ()
 import Data.Generics (Typeable, everything, mkQ)
 import Language.Haskell.TH hiding (Match)
 import Language.Haskell.TH.Syntax hiding (Match)
 import qualified Language.Haskell.TH.Syntax
 import THUtil (deriveRecursive)
-import Test.HMock (MockT, mockMethod)
+import Test.HMock (MockT, mockDefaultlessMethod, mockMethod)
 import Test.HMock.TH (deriveMockable)
 
 #if !MIN_VERSION_base(4, 13, 0)
@@ -33,19 +34,19 @@ instance (Typeable m, MonadFail m, MonadIO m) => Quasi (MockT m) where
   -- Mocks
   qReport b s = mockMethod (QReport b s)
   qLookupName b s = mockMethod (QLookupName b s)
-  qReify n = mockMethod (QReify n)
+  qReify n = mockDefaultlessMethod (QReify n)
   qReifyFixity n = mockMethod (QReifyFixity n)
   qReifyInstances n ts = mockMethod (QReifyInstances n ts)
   qReifyRoles n = mockMethod (QReifyRoles n)
-  qReifyModule m = mockMethod (QReifyModule m)
+  qReifyModule m = mockDefaultlessMethod (QReifyModule m)
   qReifyConStrictness n = mockMethod (QReifyConStrictness n)
-  qLocation = mockMethod QLocation
+  qLocation = mockDefaultlessMethod QLocation
   qAddDependentFile f = mockMethod (QAddDependentFile f)
   qAddTopDecls ds = mockMethod (QAddTopDecls ds)
   qAddModFinalizer f = mockMethod (QAddModFinalizer f)
   qAddCorePlugin s = mockMethod (QAddCorePlugin s)
   qPutQ a = mockMethod (QPutQ a)
-  qIsExtEnabled e = mockMethod (QIsExtEnabled e)
+  qIsExtEnabled e = mockDefaultlessMethod (QIsExtEnabled e)
   qExtsEnabled = mockMethod QExtsEnabled
 
 #if MIN_VERSION_template_haskell(2, 14, 0)
@@ -56,7 +57,7 @@ instance (Typeable m, MonadFail m, MonadIO m) => Quasi (MockT m) where
 #endif
 
 #if MIN_VERSION_template_haskell(2, 16, 0)
-  qReifyType n = mockMethod (QReifyType n)
+  qReifyType n = mockDefaultlessMethod (QReifyType n)
 #endif
 
   -- Methods delegated to IO

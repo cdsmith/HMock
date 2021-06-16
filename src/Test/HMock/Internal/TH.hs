@@ -617,7 +617,7 @@ deriveForMockTImpl options qt = do
         ++ " has unmockable methods."
 
   m <- newName "m"
-  let decs = map (mockMethodImpl options) (instMethods inst)
+  let decs = map (implementMethod options) (instMethods inst)
 
   let cx =
         instRequiredContext inst
@@ -644,8 +644,8 @@ deriveForMockTImpl options qt = do
       [t|$(pure (instType inst)) (MockT $(varT m))|]
       decs
 
-mockMethodImpl :: MockableOptions -> Method -> Q Dec
-mockMethodImpl options method = do
+implementMethod :: MockableOptions -> Method -> Q Dec
+implementMethod options method = do
   argVars <- replicateM (length (methodArgs method)) (newName "a")
   funD
     (methodName method)
@@ -656,23 +656,17 @@ mockMethodImpl options method = do
 
     body argVars = do
       defaultCxt <- resolveInstance ''Default (methodResult method)
-      case defaultCxt of
-        Just []
-          | mockLax options ->
-            [|
-              mockLaxMethod
-                $(actionExp argVars (conE (getActionName options method)))
-              |]
-          | otherwise ->
-            [|
-              mockMethodWithDefault
-                $(actionExp argVars (conE (getActionName options method)))
-              |]
-        _ ->
-          [|
-            mockMethod
-              $(actionExp argVars (conE (getActionName options method)))
-            |]
+      let someMockMethod = case defaultCxt of
+            Just []
+              | mockLax options -> [|mockLaxMethod|]
+              | otherwise -> [|mockMethod|]
+            _
+              | mockLax options -> [|mockLaxDefaultlessMethod|]
+              | otherwise -> [|mockDefaultlessMethod|]
+      [|
+        $someMockMethod
+          $(actionExp argVars (conE (getActionName options method)))
+        |]
 
 checkExts :: [Extension] -> Q ()
 checkExts = mapM_ checkExt

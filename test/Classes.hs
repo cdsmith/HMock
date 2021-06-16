@@ -683,14 +683,16 @@ makeMockableWithOptions def {mockLax = True} ''MonadLax
 class MonadMixedLaxity m where
   strictMethod :: m ()
   laxMethod :: m ()
-  nonDefaultMethod :: m ()
+  defaultlessMethod :: m ()
+  laxDefaultlessMethod :: m ()
 
 deriveMockable ''MonadMixedLaxity
 
 instance (Typeable m, MonadIO m) => MonadMixedLaxity (MockT m) where
   laxMethod = mockLaxMethod LaxMethod
-  strictMethod = mockMethodWithDefault StrictMethod
-  nonDefaultMethod = mockMethod NonDefaultMethod
+  strictMethod = mockMethod StrictMethod
+  defaultlessMethod = mockDefaultlessMethod DefaultlessMethod
+  laxDefaultlessMethod = mockLaxDefaultlessMethod LaxDefaultlessMethod
 
 laxityTests :: SpecWith ()
 laxityTests = do
@@ -735,12 +737,13 @@ laxityTests = do
 
         result `shouldBe` (0, "non-default")
 
-    it "fails when response isn't given for method without default" $
+    it "returns undefined when response isn't given for defaultless method" $
       example $ do
         let test = runMockT $ do
               expect StrictNoDefault
               strictNoDefault
-        test `shouldThrow` anyException
+        _ <- test
+        (test >>= evaluate) `shouldThrow` anyException
 
   describe "MonadLax" $ do
     it "generates mock impl" $
@@ -776,34 +779,53 @@ laxityTests = do
 
     it "responds appropriately to unexpected methods" $
       example $ do
-        let success = runMockT laxMethod
-        let failure1 = runMockT strictMethod
-        let failure2 = runMockT nonDefaultMethod
+        let strict = runMockT strictMethod
+        let lax = runMockT laxMethod
+        let strictND = runMockT defaultlessMethod
+        let laxND = runMockT laxDefaultlessMethod
 
-        success
-        failure1 `shouldThrow` anyException
-        failure2 `shouldThrow` anyException
+        strict `shouldThrow` anyException
+
+        lax >>= evaluate
+
+        strictND `shouldThrow` anyException
+
+        laxND
+        (laxND >>= evaluate) `shouldThrow` anyException
+
 
     it "responds appropriately to expected methods with no response" $
       example $ do
-        let success1 = runMockT $ expect LaxMethod >> laxMethod
-        let success2 = runMockT $ expect StrictMethod >> strictMethod
-        let failure = runMockT $ expect NonDefaultMethod >> nonDefaultMethod
+        let strict = runMockT $ expect StrictMethod >> strictMethod
+        let lax = runMockT $ expect LaxMethod >> laxMethod
+        let strictND = runMockT $ expect DefaultlessMethod >> defaultlessMethod
+        let laxND = runMockT $ expect LaxDefaultlessMethod >> laxDefaultlessMethod
 
-        success1
-        success2
-        failure `shouldThrow` anyException
+        strict >>= evaluate
+
+        lax >>= evaluate
+
+        strictND
+        (strictND >>= evaluate) `shouldThrow` anyException
+
+        laxND
+        (laxND >>= evaluate) `shouldThrow` anyException
 
     it "responds appropriately to expected methods with response" $
       example $ do
-        let success1 = runMockT $ expect (LaxMethod |-> ()) >> laxMethod
-        let success2 = runMockT $ expect (StrictMethod |-> ()) >> strictMethod
-        let success3 = runMockT $
-              expect (NonDefaultMethod |-> ()) >> nonDefaultMethod
+        let strict = runMockT $ expect (StrictMethod |-> ()) >> strictMethod
+        let lax = runMockT $ expect (LaxMethod |-> ()) >> laxMethod
+        let strictND =
+              runMockT $
+                expect (DefaultlessMethod |-> ()) >> defaultlessMethod
+        let laxND =
+              runMockT $
+                expect (LaxDefaultlessMethod |-> ()) >> laxDefaultlessMethod
 
-        success1
-        success2
-        success3
+        strict >>= evaluate
+        lax >>= evaluate
+        strictND >>= evaluate
+        laxND >>= evaluate
 
 class ClassWithNoParams
 

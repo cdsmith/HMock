@@ -273,6 +273,14 @@ method.  Instead, you will need to write the instance for `MockT` on your own,
 as described in the question about partial mocks, and provide a fake
 implementation for the problematic method.
 
+### Why do I need a Default instance for `mockMethod`?
+
+`mockMethod` and `mockLaxMethod` use the `Default` class from `data-default` to
+decide what to return when no other response is given for an expectation.  If
+the method you are mocking has no `Default` instance for its return type, you
+can use `mockDefaultlessMethod` or `mockLaxDefaultlessMethod` instead.  In this
+case, if there's no response specified, the method will return `undefined`.
+
 ### How do I mock multi-parameter type classes?
 
 In order to mock a multi-parameter type class, the monad argument `m` must be
@@ -338,12 +346,22 @@ necessary.
 ### How do I test multithreaded code?
 
 If your code uses `MonadUnliftIO` to create threads, you can test it directly
-with HMock.
+with HMock.  Otherwise, you can use `withMockT` to manually inject each of your
+threads into the same `MockT` block.  Whichever way you do it, the expectations
+are shared between threads so that an expectation added in one thread can be
+fulfilled by the other.  (If you don't want this, then you can use `runMockT`
+once per thread to run each thread with its own set of expectations.)
 
 ### How do I test code with exceptions?
 
 You can use either the `exceptions` or `unliftio` packages to throw and catch
 exceptions from code tested with `MockT`.
+
+The behavior of `HMock` is unspecified if you continue testing after throwing
+asynchronous exceptions to your threads using `throwTo`.  In particular, it's
+likely you'll end up with intermittent hangs in your tests in this case, because
+the asynchronous exceptions interfere with HMock.  This concern doesn't apply to
+synchronous exceptions thrown with `throwIO` or `throwM`.
 
 ### How do I get better stack traces?
 
