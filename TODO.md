@@ -3,16 +3,6 @@
 I'm trying to write a compelling demo to advocate for HMock's role in testing.
 That's the Demo module in the test directory.  I need to finish this.
 
-# Add HasCallStack to instance context?
-
-Just an idea, but I wonder what would happen if I added HasCallStack to the
-instance context for derived MockT methods.  This might manage to sneak in a
-call stack through the back door!
-
-## Get it working with more GHC versions
-
-Travis says only 8.10.4 is succeeding now.
-
 ## Fix resolveInstance
 
 Right now, resolveInstance sometimes fails at unification.  It just looks for
@@ -32,25 +22,31 @@ on the derived constraints until they are plain variables.
 * Exceptions with MonadUnliftIO
 * Exceptions with MonadThrow, MonadCatch, MonadMask
 
-## Use the Default class for derived default responses
-
-If a return type has a `Default` instance from `Data.Default`, I can define a
-default implementation when the `mockLax` option is enabled.  I should think
-about that.  I'm not sure, though, as it might be better to just make people
-write their own `MockT` instances to be more explicit about the right defaults.
-
 ## `byDefault` to override default responses
 
-Currently `whenever` is treated as an expectation with unspecified multiplicity.
-But really, I want it to change the *default* behavior.  This distinction
-matters when expectations don't include responses.
+The built-in defaults for `mockMethod` and friends are closely tied to the
+`Default` type class.  We want people to be able to customize them.  I will add
+a `byDefault` operation, which replaces the default action for actions matching
+a `Matcher`.  The expectation must have precisely one response, and that
+response will be chosen instead of the built-in default when no response matches
+an expectation.
 
-Maybe `whenever` should still override existing expects?  This is actually
-unclear to me.  This is essentially the same question as gMock's
-`ON_CALL(...).WillByDefault(...)` versus `EXPECT_CALL(...).WillRepeatedly(...)`.
-gMock has both behaviors.  I could make the same choice by re-adding `expectAny`
-which is a real expectation that masks earlier ones, while `whenever` is just a
-default that is overridden by any expectation even if it's pre-existing.
+`byDefault` is similar to `whenever`.  The difference is that `byDefault`
+inserts a new default response *behind* existing expectations.  If an existing
+expectation matches and has a response, then the default is irrelevant.  On the
+other hand, `whenever` adds a new response *on top of* existing expectations.
+Calls that match the `whenever` will never even test the expectations behind it.
+This is essentially the same question as gMock's `ON_CALL().WillByDefault()`
+versus `EXPECT_CALL().WillRepeatedly()`.
+
+## Consider failing lax mocks on mismatched parameters
+
+gMock makes a distinction netween uninteresting and unexpected methods.  See
+https://google.github.io/googletest/gmock_cook_book.html#uninteresting-vs-unexpected.
+An uninteresting method is one that has no expectations at all.  An unexpected
+method is one that DOES have expectations, but those expectations don't match
+the arguments, cardinality constraints, etc.  HMock could easily make a similar
+distinction.  I'm not sure if it's a good idea.
 
 ## Better predicate descriptions
 
@@ -87,6 +83,12 @@ of these effect systems.
 * `polysemy`
 * `eff`
 * Maybe a `haxl` data source?
+* Global mocks.  This would let you somehow import a different module containing
+  mock implementations that refer to expectations in a global scope.  Presumably
+  you'd maybe use CPP, backpack, or some fancy module tricks to link against a
+  different implementation.  gMock has a similar feature that lets you mock
+  non-virtual methods by building your code with a different unrelated class,
+  typically using C++ templates in that case.
 
 ## Wrappers to save responses from integration tests.
 
