@@ -7,5 +7,4 @@ ghc:
   - "8.10.4"
   - "9.0.1"
 
-before_script:
-  - ./extract_doctests.sh
+install: []
