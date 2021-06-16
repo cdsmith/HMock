@@ -1,5 +1,6 @@
 import Classes (classTests)
 import Core (coreTests)
+import Demo (demoSpec)
 import qualified DocTests.All
 import Extras (multiplicityTests, predicateTests)
 import qualified Test.DocTest.Driver as DocTest
@@ -12,4 +13,5 @@ main = do
     predicateTests
     coreTests
     classTests
+    demoSpec
   DocTest.run DocTests.All.main
