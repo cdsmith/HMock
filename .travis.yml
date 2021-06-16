@@ -7,4 +7,8 @@ ghc:
   - "8.10.4"
   - "9.0.1"
 
-install: []
+install:
+  - cabal build --only-dependencies --enable-tests
+
+script:
+  - cabal test
