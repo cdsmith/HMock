@@ -176,7 +176,7 @@ As a mnemonic device for remembering the distinction, you can think of:
 
 * `|->` as ASCII art for `↦`, which associates a function with a result in
   mathematical notation.
-* *`|=>` as a relative of Haskell's `>>=`, which binds an operation to a Kleisli
+* `|=>` as a relative of Haskell's `>>=`, which binds an operation to a Kleisli
   arrow.
 
 ### What is the difference between `foo`, `Foo`, and `Foo_`?
