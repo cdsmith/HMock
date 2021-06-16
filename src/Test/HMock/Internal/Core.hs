@@ -434,8 +434,10 @@ instance ExpectContext MockT where
     putMVar expectVar (simplify (ExpectMulti AnyOrder [e, expectSet]))
 
 -- | Runs a test in the 'MockT' monad, handling all of the mocks.
-runMockT :: MonadIO m => MockT m a -> m a
-runMockT test = withMockT (\_ -> test)
+runMockT :: forall m a. MonadIO m => MockT m a -> m a
+runMockT test = withMockT constTest
+  where constTest :: (forall b. MockT m b -> m b) -> MockT m a
+        constTest _inMockT = test
 
 -- | Runs a test in the 'MockT' monad.  The test can unlift other MockT pieces
 -- to the base monad while still acting on the same set of expectations.  This
