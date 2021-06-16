@@ -1,0 +1,10 @@
+language: haskell
+ghc:
+  - "8.4.4"
+  - "8.6.5"
+  - "8.8.4"
+  - "8.10.4"
+  - "9.0.1"
+
+before_script:
+  - ./extract_doctests.sh
