@@ -42,7 +42,7 @@ to Mockito for Java, GoogleMock for C++, and other mainstream languages.
     test_copyFile :: IO ()
     test_copyFile = runMockT $ do
       expect $ ReadFile "foo.txt" |-> "contents"
-      expect $ WriteFile "bar.txt" "contents" |-> ()
+      expect $ WriteFile "bar.txt" "contents"
 
       copyFile "foo.txt" "bar.txt"
     ```
@@ -51,7 +51,9 @@ to Mockito for Java, GoogleMock for C++, and other mainstream languages.
     * `expect` expects a method to be called exactly once.
     * `ReadFile` and `WriteFile` match the function calls.  They are defined
       by `makeMockable`.
-    * `|->` separates the method call from its result.
+    * `|->` separates the method call from its result.  If it's left out, the
+      method will return a default value (see `Data.Default`), so there's no
+      need to specify `()` as a return value.
 
 ## Why mocks?
 
@@ -448,22 +450,26 @@ runMockT $ do
 
 Now that your test has been migrated without changing its behavior, you may
 begin to remove assertions that `monad-mock` forced you to write even though you
-didn't intend to test them.  For example, `inSequence` is overkill here, since
-the sequence is just a consequence of data dependencies.  (Think of it this way:
-if it were magically possible for `writeFile` to be called with the right
-arguments but without waiting on the `readFile`, it would be correct to do so!
-So the order is a consequence of the implementation, not the specification.) 
-You can remove the `inSequence` and replace it with two independent expectations
-like this.
+didn't intend to test them.  For example:
+
+* You don't really care about the return value for `writeFile`.  HMock will
+  return a default value for you if you leave out the `|->` operator.
+
+* `inSequence` is overkill here, since the sequence is just a consequence of
+  data dependencies.  (Think of it this way: if it were magically possible for
+  `writeFile` to be called with the right arguments but without waiting on the
+  `readFile`, it would be correct to do so!  The order is a consequence of the
+  implementation, not the specification.)
+
+Applying these two simplifications, you have a final test:
 
 ``` haskell
 runMockT $ do
     expect $ ReadFile "foo.txt" |-> "contents"
-    expect $ WriteFile "bar.txt" "contents" |-> ()
+    expect $ WriteFile "bar.txt" "contents"
+
     copyFile "foo.txt" "bar.txt"
 ```
-
-Now you're done.
 
 ### Which GHC versions are supported?
 
