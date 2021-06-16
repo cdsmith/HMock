@@ -3,6 +3,12 @@
 I'm trying to write a compelling demo to advocate for HMock's role in testing.
 That's the Demo module in the test directory.  I need to finish this.
 
+# Add HasCallStack to instance context?
+
+Just an idea, but I wonder what would happen if I added HasCallStack to the
+instance context for derived MockT methods.  This might manage to sneak in a
+call stack through the back door!
+
 ## Get it working with more GHC versions
 
 Travis says only 8.10.4 is succeeding now.
