@@ -69,10 +69,8 @@ instance (Typeable m, MonadFail m, MonadIO m) => Quasi (MockT m) where
   qReifyAnnotations = error "qReifyAnnotations"
 
 #if MIN_VERSION_template_haskell(2, 16, 0)
-
 -- Pre-define low-level instance to prevent deriveRecursive from trying.
 instance Lift Bytes where lift = undefined; liftTyped = undefined
-
 #endif
 
 deriveRecursive Nothing ''Lift ''Info

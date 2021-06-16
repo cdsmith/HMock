@@ -30,8 +30,15 @@ import Test.HMock
 import Test.HMock.TH
 import Test.Hspec
 
+
+#if !MIN_VERSION_base(4, 13, 0)
+import Control.Monad.Fail (MonadFail)
+#endif
+
+#if MIN_VERSION_template_haskell(2, 16, 0)
 -- Pre-define low-level instance to prevent deriveRecursive from trying.
 instance NFData Bytes where rnf = undefined
+#endif
 
 deriveRecursive (Just AnyclassStrategy) ''NFData ''Dec
 
