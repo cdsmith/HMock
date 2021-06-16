@@ -1,6 +1,7 @@
 # HMock - A Flexible Mock Framework for Haskell
 
 ![](https://travis-ci.com/cdsmith/HMock.svg?branch=main)
+![](https://img.shields.io/hackage/v/HMock)
 
 HMock provides a flexible mock framework for Haskell, with similar functionality
 to Mockito for Java, GoogleMock for C++, and other mainstream languages.
