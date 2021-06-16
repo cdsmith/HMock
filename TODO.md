@@ -3,21 +3,12 @@
 I'm trying to write a compelling demo to advocate for HMock's role in testing.
 That's the Demo module in the test directory.  I need to finish this.
 
-## Catch up on test coverage
+## Test instances for MockT
 
-Need lots of tests:
-* Default responses
-* Lax mocks
-* Missing responses
-* Interesting cases
-   * MockT wrapping a Reader monad
-   * Multiple threads with MonadUnliftIO
-   * Exceptions with MonadUnliftIO
-   * Exceptions with MonadThrow, MonadCatch, MonadMask
-* Multiple responses
-* `expect` with multiple responses
-* `expectN` with too many responses
-* `withMockT`
+* MockT wrapping a Reader monad
+* Multiple threads with MonadUnliftIO
+* Exceptions with MonadUnliftIO
+* Exceptions with MonadThrow, MonadCatch, MonadMask
 
 ## Use the Default class for derived default responses
 

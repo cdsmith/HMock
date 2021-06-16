@@ -663,7 +663,7 @@ class MonadLax2 m where
 deriveMockable ''MonadLax2
 
 instance (Typeable m, MonadIO m) => MonadLax2 (MockT m) where
-  strictMethod = mockMethod StrictMethod
+  strictMethod = mockMethodWithDefault (return ()) StrictMethod
   laxMethod i = mockLaxMethod (return 42) (LaxMethod i)
 
 laxTests :: SpecWith ()
@@ -683,6 +683,22 @@ laxTests = do
 
     it "falls back to default on unexpected lax method" $
       example $ runMockT returnsUnit `shouldReturn` ()
+
+    it "fails for unspecified non-() response" $
+      example $ do
+        let test = runMockT $ do
+              expect DoesntReturnUnit
+              doesntReturnUnit
+
+        test `shouldThrow` anyException
+
+    it "uses default for unspecified lax response" $
+      example $ do
+        let test = runMockT $ do
+              expect ReturnsUnit
+              returnsUnit
+
+        test `shouldReturn` ()
 
     it "allows lax method to be overridden" $
       example $ do
@@ -707,6 +723,14 @@ laxTests = do
 
     it "fails on unexpected strict method" $
       example $ runMockT strictMethod `shouldThrow` anyException
+
+    it "falls back to default on unexpected lax method" $
+      example $ runMockT (laxMethod 1) `shouldReturn` 42
+
+    it "falls back to default on defaultable method" $
+      example $ runMockT $ do
+        expect StrictMethod
+        strictMethod
 
     it "falls back to default on unexpected lax method" $
       example $ runMockT (laxMethod 1) `shouldReturn` 42

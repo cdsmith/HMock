@@ -7,6 +7,7 @@
 
 module Core where
 
+import Control.Concurrent (forkIO, newEmptyMVar, putMVar, takeMVar)
 import Control.DeepSeq (rnf)
 import Control.Exception (SomeException, evaluate)
 import Control.Monad (replicateM_)
@@ -66,6 +67,34 @@ coreTests = do
 
         failure `shouldThrow` anyException
 
+    it "uses default response for methods returning ()" $
+      example $
+        runMockT $ do
+          expect $ WriteFile "file.txt" "contents"
+          writeFile "file.txt" "contents"
+
+    it "fails when response isn't given for non-() method" $
+      example $ do
+        let test = runMockT $ do
+              expect $ ReadFile "file.txt"
+              readFile "file.txt"
+
+        test
+          `shouldThrow` errorWith ("Expectation lacks a response" `isInfixOf`)
+
+    it "shares expectations using withMockT" $
+      example $
+        withMockT $ \inMockT -> do
+          expect $ ReadFile "foo.txt" |-> "lorem ipsum"
+          expect $ WriteFile "bar.txt" "lorem ipsum"
+
+          var <- liftIO newEmptyMVar
+
+          _ <-
+            liftIO $
+              forkIO $ inMockT $ readFile "foo.txt" >>= liftIO . putMVar var
+          writeFile "bar.txt" =<< liftIO (takeMVar var)
+
     it "tracks expectations across multiple classes" $
       example $ do
         let setExpectations =
@@ -96,6 +125,31 @@ coreTests = do
 
         failure
           `shouldThrow` errorWith ("Unexpected action: openSocket" `isInfixOf`)
+
+    it "returns multiple responses" $
+      example $ do
+        let test = runMockT $ do
+              expect $
+                ReadFile "foo.txt"
+                  |-> "a"
+                  |-> "b"
+                  |-> "c"
+              (,,)
+                <$> readFile "foo.txt"
+                <*> readFile "foo.txt"
+                <*> readFile "foo.txt"
+
+        test `shouldReturn` ("a", "b", "c")
+
+    it "catches expectN with too many expectations" $
+      example $ do
+        let test = runMockT $ do
+              expectN once $
+                ReadFile "foo.txt"
+                  |-> "a"
+                  |-> "b"
+
+        test `shouldThrow` errorWith ("Too many responses" `isInfixOf`)
 
     it "catches unmet expectations" $
       example $ do
