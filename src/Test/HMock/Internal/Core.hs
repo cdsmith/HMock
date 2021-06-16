@@ -10,7 +10,6 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE StandaloneKindSignatures #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -159,10 +158,11 @@ instance Expectable cls name m r (Matcher cls name m r) where
 
 -- | All constraints needed to mock a method with the given class, name, base
 -- monad, and return type.
-type MockableMethod ::
-  ((* -> *) -> Constraint) -> Symbol -> (* -> *) -> * -> Constraint
-
-type MockableMethod cls name m r =
+type MockableMethod
+  (cls :: (* -> *) -> Constraint)
+  (name :: Symbol)
+  (m :: * -> *)
+  (r :: *) =
   (Mockable cls, Typeable m, KnownSymbol name, Typeable r)
 
 -- | A single step of an expectation.
@@ -533,7 +533,7 @@ mockMethod ::
   Action cls name m r ->
   MockT m r
 mockMethod =
-  withFrozenCallStack . mockMethodImpl False ( return def)
+  withFrozenCallStack . mockMethodImpl False (return def)
 
 -- | Implements a method in a 'Mockable' monad by delegating to the mock
 -- framework.  If the method is used unexpectedly, the default value will be
