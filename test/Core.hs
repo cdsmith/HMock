@@ -67,20 +67,15 @@ coreTests = do
 
         failure `shouldThrow` anyException
 
-    it "uses default response for methods returning ()" $
-      example $
-        runMockT $ do
-          expect $ WriteFile "file.txt" "contents"
-          writeFile "file.txt" "contents"
-
-    it "fails when response isn't given for non-() method" $
+    it "uses default responses when no explicit response given" $
       example $ do
         let test = runMockT $ do
+              expect $ WriteFile "file.txt" "contents"
               expect $ ReadFile "file.txt"
+              writeFile "file.txt" "contents"
               readFile "file.txt"
 
-        test
-          `shouldThrow` errorWith ("Expectation lacks a response" `isInfixOf`)
+        test `shouldReturn` ""
 
     it "shares expectations using withMockT" $
       example $

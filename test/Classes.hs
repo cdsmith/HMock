@@ -22,7 +22,6 @@ import Control.Exception (evaluate)
 import Control.Monad.Trans (MonadIO, liftIO)
 import Data.Default (Default (def))
 import Data.Dynamic (Typeable)
-import Data.IORef (newIORef, readIORef, writeIORef)
 import Language.Haskell.TH.Syntax
 import QuasiMock
 import THUtil (deriveRecursive)
@@ -63,6 +62,15 @@ setupQuasi = do
   whenever $
     QReifyInstances ''Eq [ConT ''Bool]
       |-> $(reifyInstancesStatic ''Eq [ConT ''Bool])
+  whenever $
+    QReifyInstances ''Default [TupleT 0]
+      |-> $(reifyInstancesStatic ''Default [TupleT 0])
+  whenever $
+    QReifyInstances ''Default [ConT ''String]
+      |-> $(reifyInstancesStatic ''Default [ConT ''String])
+  whenever $
+    QReifyInstances ''Default [ConT ''Int]
+      |-> $(reifyInstancesStatic ''Default [ConT ''Int])
   whenever $
     QReifyInstances_ (eq ''Show) (is functionType) |-> []
   whenever $
@@ -226,6 +234,7 @@ suffixTests = describe "MonadSuffix" $ do
       failure `shouldThrow` anyException
 
 class SuperClass (m :: * -> *)
+
 instance SuperClass m
 
 class (SuperClass m, Monad m, Typeable m) => MonadSuper m where
@@ -650,24 +659,89 @@ rankNTests = describe "MonadRankN" $ do
       success
       failure `shouldThrow` anyException
 
+-- | Type with no Default instance.
+data NoDefault = NoDefault
+
+class MonadStrict m where
+  strictUnit :: m ()
+  strictInt :: m Int
+  strictString :: m String
+  strictMaybe :: m (Maybe Bool)
+  strictNoDefault :: m NoDefault
+
+makeMockableWithOptions def {mockLax = False} ''MonadStrict
+
 class MonadLax m where
-  returnsUnit :: m ()
-  doesntReturnUnit :: m Int
+  laxUnit :: m ()
+  laxInt :: m Int
+  laxString :: m String
+  laxMaybe :: m (Maybe Bool)
+  laxNoDefault :: m NoDefault
 
 makeMockableWithOptions def {mockLax = True} ''MonadLax
 
-class MonadLax2 m where
+class MonadMixedLaxity m where
   strictMethod :: m ()
-  laxMethod :: Int -> m Int
+  laxMethod :: m ()
+  nonDefaultMethod :: m ()
 
-deriveMockable ''MonadLax2
+deriveMockable ''MonadMixedLaxity
 
-instance (Typeable m, MonadIO m) => MonadLax2 (MockT m) where
-  strictMethod = mockMethodWithDefault (return ()) StrictMethod
-  laxMethod i = mockLaxMethod (return 42) (LaxMethod i)
+instance (Typeable m, MonadIO m) => MonadMixedLaxity (MockT m) where
+  laxMethod = mockLaxMethod LaxMethod
+  strictMethod = mockMethodWithDefault StrictMethod
+  nonDefaultMethod = mockMethod NonDefaultMethod
 
-laxTests :: SpecWith ()
-laxTests = do
+laxityTests :: SpecWith ()
+laxityTests = do
+  describe "MonadStrict" $ do
+    it "generates mock impl" $
+      example $ do
+        decs <- runMockT $ do
+          setupQuasi
+          whenever $ QReify ''MonadStrict |-> $(reifyStatic ''MonadStrict)
+
+          runQ (deriveMockable ''MonadStrict)
+        evaluate (rnf decs)
+
+    it "fails when there's an unexpected method" $
+      example $ runMockT strictUnit `shouldThrow` anyException
+
+    it "succeeds when there's an expected method with default response" $
+      example $ do
+        result <- runMockT $ do
+          expect StrictUnit
+          expect StrictInt
+          expect StrictString
+          expect StrictMaybe
+
+          (,,,)
+            <$> strictUnit
+            <*> strictInt
+            <*> strictString
+            <*> strictMaybe
+
+        result `shouldBe` ((), 0, "", Nothing)
+
+    it "overrides default when response is specified" $
+      example $ do
+        result <- runMockT $ do
+          expect StrictInt
+          expect $ StrictString |-> "non-default"
+
+          (,)
+            <$> strictInt
+            <*> strictString
+
+        result `shouldBe` (0, "non-default")
+
+    it "fails when response isn't given for method without default" $
+      example $ do
+        let test = runMockT $ do
+              expect StrictNoDefault
+              strictNoDefault
+        test `shouldThrow` anyException
+
   describe "MonadLax" $ do
     it "generates mock impl" $
       example $ do
@@ -678,70 +752,58 @@ laxTests = do
           runQ (deriveMockable ''MonadLax)
         evaluate (rnf decs)
 
-    it "fails on unexpected strict method" $
-      example $ runMockT doesntReturnUnit `shouldThrow` anyException
-
-    it "falls back to default on unexpected lax method" $
-      example $ runMockT returnsUnit `shouldReturn` ()
-
-    it "fails for unspecified non-() response" $
+    it "succeeds when unexpected methods are called" $
       example $ do
-        let test = runMockT $ do
-              expect DoesntReturnUnit
-              doesntReturnUnit
+        result <- runMockT $ do
+          (,,,)
+            <$> laxUnit
+            <*> laxInt
+            <*> laxString
+            <*> laxMaybe
 
-        test `shouldThrow` anyException
+        result `shouldBe` ((), 0, "", Nothing)
 
-    it "uses default for unspecified lax response" $
-      example $ do
-        let test = runMockT $ do
-              expect ReturnsUnit
-              returnsUnit
-
-        test `shouldReturn` ()
-
-    it "allows lax method to be overridden" $
-      example $ do
-        overrideCalled <- newIORef False
-        runMockT $ do
-          whenever $
-            ReturnsUnit
-              |=> const
-                (liftIO $ writeIORef overrideCalled True)
-          returnsUnit
-        readIORef overrideCalled `shouldReturn` True
-
-  describe "MonadLax2" $ do
+  describe "MonadMixedLaxity" $ do
     it "generates mock impl" $
       example $ do
         decs <- runMockT $ do
           setupQuasi
-          whenever $ QReify ''MonadLax2 |-> $(reifyStatic ''MonadLax2)
+          whenever $
+            QReify ''MonadMixedLaxity |-> $(reifyStatic ''MonadMixedLaxity)
 
-          runQ (deriveMockable ''MonadLax2)
+          runQ (deriveMockable ''MonadMixedLaxity)
         evaluate (rnf decs)
 
-    it "fails on unexpected strict method" $
-      example $ runMockT strictMethod `shouldThrow` anyException
-
-    it "falls back to default on unexpected lax method" $
-      example $ runMockT (laxMethod 1) `shouldReturn` 42
-
-    it "falls back to default on defaultable method" $
-      example $ runMockT $ do
-        expect StrictMethod
-        strictMethod
-
-    it "falls back to default on unexpected lax method" $
-      example $ runMockT (laxMethod 1) `shouldReturn` 42
-
-    it "allows lax method to be overridden" $
+    it "responds appropriately to unexpected methods" $
       example $ do
-        results <- runMockT $ do
-          whenever $ LaxMethod 12 |-> 13
-          (,) <$> laxMethod 12 <*> laxMethod 13
+        let success = runMockT laxMethod
+        let failure1 = runMockT strictMethod
+        let failure2 = runMockT nonDefaultMethod
 
-        results `shouldBe` (13, 42)
+        success
+        failure1 `shouldThrow` anyException
+        failure2 `shouldThrow` anyException
+
+    it "responds appropriately to expected methods with no response" $
+      example $ do
+        let success1 = runMockT $ expect LaxMethod >> laxMethod
+        let success2 = runMockT $ expect StrictMethod >> strictMethod
+        let failure = runMockT $ expect NonDefaultMethod >> nonDefaultMethod
+
+        success1
+        success2
+        failure `shouldThrow` anyException
+
+    it "responds appropriately to expected methods with response" $
+      example $ do
+        let success1 = runMockT $ expect (LaxMethod |-> ()) >> laxMethod
+        let success2 = runMockT $ expect (StrictMethod |-> ()) >> strictMethod
+        let success3 = runMockT $
+              expect (NonDefaultMethod |-> ()) >> nonDefaultMethod
+
+        success1
+        success2
+        success3
 
 class ClassWithNoParams
 
@@ -819,5 +881,5 @@ classTests = describe "makeMockable" $ do
   monadInArgTests
   extraneousMembersTests
   rankNTests
-  laxTests
+  laxityTests
   errorTests

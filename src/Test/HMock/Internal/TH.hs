@@ -622,6 +622,8 @@ deriveForMockTImpl options qt = do
   let cx =
         instRequiredContext inst
           \\ [ AppT (ConT ''Typeable) (VarT (instMonadVar inst)),
+               AppT (ConT ''Functor) (VarT (instMonadVar inst)),
+               AppT (ConT ''Applicative) (VarT (instMonadVar inst)),
                AppT (ConT ''Monad) (VarT (instMonadVar inst)),
                AppT (ConT ''MonadIO) (VarT (instMonadVar inst))
              ]
@@ -653,21 +655,17 @@ mockMethodImpl options method = do
     actionExp (v : vs) e = actionExp vs [|$e $(varE v)|]
 
     body argVars = do
-      let defaultResponse = case methodResult method of
-            TupleT 0 -> Just [|return ()|]
-            _ -> Nothing
-      case defaultResponse of
-        Just expr
+      defaultCxt <- resolveInstance ''Default (methodResult method)
+      case defaultCxt of
+        Just []
           | mockLax options ->
             [|
               mockLaxMethod
-                $expr
                 $(actionExp argVars (conE (getActionName options method)))
               |]
           | otherwise ->
             [|
               mockMethodWithDefault
-                $expr
                 $(actionExp argVars (conE (getActionName options method)))
               |]
         _ ->

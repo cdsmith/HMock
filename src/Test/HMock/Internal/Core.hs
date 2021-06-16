@@ -34,6 +34,7 @@ import Control.Monad.State (MonadState)
 import Control.Monad.Trans (MonadIO, MonadTrans, lift)
 import Control.Monad.Writer (MonadWriter)
 import Data.Constraint (Constraint)
+import Data.Default (Default (def))
 import Data.Either (partitionEithers)
 import Data.Function (on)
 import Data.Kind (Type)
@@ -439,7 +440,7 @@ runMockT test = withMockT (const test)
 -- @
 -- test = 'withMockT' '$' \inMockT -> do
 --    'expect' '$' ...
--- 
+--
 --    'liftIO' '$' 'forkIO' '$' inMockT firstThread
 --    'liftIO' '$' 'forkIO' '$' inMockT secondThread
 -- @
@@ -540,13 +541,13 @@ mockMethodWithDefault ::
   forall cls name m r.
   ( HasCallStack,
     MonadIO m,
-    MockableMethod cls name m r
+    MockableMethod cls name m r,
+    Default r
   ) =>
-  MockT m r ->
   Action cls name m r ->
   MockT m r
-mockMethodWithDefault def =
-  withFrozenCallStack . mockMethodWithMaybe False (Just def)
+mockMethodWithDefault =
+  withFrozenCallStack . mockMethodWithMaybe False (Just (return def))
 
 -- | Implements a method in a 'Mockable' monad by delegating to the mock
 -- framework.  If the method is used unexpectedly, the given default response
@@ -555,12 +556,13 @@ mockLaxMethod ::
   forall cls name m r.
   ( HasCallStack,
     MonadIO m,
-    MockableMethod cls name m r
+    MockableMethod cls name m r,
+    Default r
   ) =>
-  MockT m r ->
   Action cls name m r ->
   MockT m r
-mockLaxMethod def = withFrozenCallStack . mockMethodWithMaybe True (Just def)
+mockLaxMethod =
+  withFrozenCallStack . mockMethodWithMaybe True (Just (return def))
 
 -- An error for an action that matches no expectations at all.
 noMatchError ::
