@@ -29,12 +29,25 @@ import Language.Haskell.TH
 import Language.Haskell.TH.Syntax (NameFlavour (..))
 import Test.HMock.Internal.Util (choices)
 
+#if MIN_VERSION_template_haskell(2,17,0)
+
+tvName :: TyVarBndr flag -> Name
+tvName (PlainTV name _) = name
+tvName (KindedTV name _ _) = name
+
+bindVar :: Name -> TyVarBndr Specificity
+bindVar n = PlainTV n SpecifiedSpec
+
+#else
+
 tvName :: TyVarBndr -> Name
 tvName (PlainTV name) = name
 tvName (KindedTV name _) = name
 
 bindVar :: Name -> TyVarBndr
 bindVar = PlainTV
+
+#endif
 
 unappliedName :: Type -> Maybe Name
 unappliedName (AppT a _) = unappliedName a
