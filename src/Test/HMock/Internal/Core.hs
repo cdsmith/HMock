@@ -596,15 +596,6 @@ noMatchError ::
 noMatchError a =
   "Unexpected action: " ++ showAction a
 
--- An error for an action that matches no expectations at all.
-noResponseError ::
-  (HasCallStack, Mockable cls) =>
-  -- | The action that was received.
-  Action cls name m a ->
-  String
-noResponseError a =
-  "Expectation lacks a response and has no default: " ++ showAction a
-
 -- An error for an action that doesn't match the argument predicates for any
 -- of the method's expectations.
 partialMatchError ::
