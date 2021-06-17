@@ -69,6 +69,7 @@ test-suite tests
                       directory,
                       doctest-exitcode-stdio,
                       doctest-lib,
+                      exceptions,
                       extra,
                       hspec,
                       mtl,

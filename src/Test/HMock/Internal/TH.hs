@@ -603,7 +603,7 @@ deriveForMockTImpl options qt = do
             )
             [t|$(pure (instType inst)) (MockT $(varT m))|]
             decs
-      Nothing -> internalError
+      Nothing -> fail "Missing MockT instance for a superclass."
 
 implementMethod :: MockableOptions -> Method -> Q Dec
 implementMethod options method = do

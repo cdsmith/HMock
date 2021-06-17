@@ -1,3 +1,4 @@
+{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
@@ -11,15 +12,14 @@
 
 module Demo where
 
+import Control.Exception (Exception)
 import Control.Monad (unless, when)
-import Control.Monad.Trans (MonadIO, liftIO)
+import Control.Monad.Catch (MonadMask, catch, finally, throwM)
+import Control.Monad.Trans (MonadIO)
 import Data.Char (isLetter)
-import Data.Functor ((<&>))
-import Data.IORef (modifyIORef, newIORef, readIORef)
-import qualified Data.Map as Map
 import Data.Typeable (Typeable)
 import Test.HMock
-import Test.HMock.TH
+import Test.HMock.TH (makeMockable)
 import Test.Hspec (SpecWith, describe, example, it)
 import Prelude hiding (appendFile, readFile, writeFile)
 
@@ -56,7 +56,7 @@ newtype Room = Room String deriving (Eq, Show)
 -- 2. Using the 'withLogin' action to run an action as a user.  The user will
 --    be logged out automatically when the action finishes.
 class Monad m => MonadAuth m where
-  login :: String -> String -> m User
+  login :: String -> String -> m ()
   logout :: m ()
   hasPermission :: PermLevel -> m Bool
 
@@ -74,10 +74,13 @@ class MonadAuth m => MonadChat m where
 -- | An MTL-style type class for accessing the filesystem.  It wouldn't be a
 -- good idea to write mock-style tests for all uses of the filesystem, but we
 -- can use HMock to set up a lightweight fake.
-class Monad m => MonadFilesystem m where
-  readFile :: FilePath -> m String
-  writeFile :: FilePath -> String -> m ()
-  appendFile :: FilePath -> String -> m ()
+class Monad m => MonadBugReport m where
+  reportBug :: String -> m ()
+
+-- | An exception thrown when a blocked user attempts to read chat.
+data BlockedException = BlockedException deriving (Show)
+
+instance Exception BlockedException
 
 -------------------------------------------------------------------------------
 -- PART 2: IMPLEMENTATION
@@ -85,31 +88,42 @@ class Monad m => MonadFilesystem m where
 -- We will now implement a simple chatbot, which joins a chat room and responds
 -- to messages.
 
-chatbot :: (MonadAuth m, MonadChat m, MonadFilesystem m) => m ()
-chatbot = do
-  _ <- login "HMockBot" "secretish"
-  room <- joinRoom "#haskell"
-  listenAndReply room
-  leaveRoom room
-  logout
+type MonadChatBot m = (MonadChat m, MonadBugReport m)
 
-listenAndReply :: (MonadAuth m, MonadChat m, MonadFilesystem m) => Room -> m ()
+chatbot :: (MonadMask m, MonadChatBot m) => String -> m ()
+chatbot roomName = do
+  login "HMockBot" "secretish"
+  handleRoom roomName `finally` logout
+
+handleRoom :: (MonadMask m, MonadChatBot m) => String -> m ()
+handleRoom roomName = do
+  room <- joinRoom roomName
+  listenAndReply room `finally` leaveRoom room
+
+listenAndReply :: MonadChatBot m => Room -> m ()
 listenAndReply room = do
   (user, msg) <- pollChat room
   finished <- case words msg of
     ["!leave"] -> return True
-    ("!reportbug" : ws) -> do
-      appendFile "bugs.txt" (unwords ws ++ "\n")
-      sendChat room "Thanks for the bug report!"
-      return False
-    ws | any ((== 4) . length . filter isLetter) ws -> do
-      isAdmin <- hasPermission Admin
-      when isAdmin $ do
-        ban room user
-        sendChat room "Sorry for the disturbance!"
-      return False
+    ("!bug" : ws) -> reportBug (unwords ws) >> return False
+    ws | any isFourLetterWord ws -> banIfAdmin room user >> return False
     _ -> return False
   unless finished (listenAndReply room)
+
+isFourLetterWord :: [Char] -> Bool
+isFourLetterWord = (== 4) . length . filter isLetter
+
+sendBugReport :: MonadChatBot m => Room -> String -> m ()
+sendBugReport room bug = do
+  reportBug bug
+  sendChat room "Thanks for the bug report!"
+
+banIfAdmin :: MonadChat m => Room -> User -> m ()
+banIfAdmin room user = do
+  isAdmin <- hasPermission Admin
+  when isAdmin $ do
+    ban room user
+    sendChat room "Sorry for the disturbance!"
 
 -------------------------------------------------------------------------------
 -- PART 3: MOCKS
@@ -120,37 +134,7 @@ listenAndReply room = do
 
 makeMockable ''MonadAuth
 makeMockable ''MonadChat
-makeMockable ''MonadFilesystem
-
--- This sets up a lightweight fake for the database, using the state monad.
--- This isn't really mocking in the traditional sense of the word, but using
--- HMock for lightweight fakes saves the need to define a new type and instance,
--- and allows the flexibility to easily inject failures and make assertions
--- about behavior when it's important to do so.
---
--- We could do this with a State monad, but it's actually more modular here to
--- use an IORef, so that our client doesn't need to handle setting up the state.
-fakeFS :: (Typeable m, MonadIO m) => MockT m ()
-fakeFS = do
-  fs <- liftIO $ newIORef Map.empty
-  whenever $
-    ReadFile_ anything
-      |=> \(ReadFile file) -> liftIO (readIORef fs) <&> (Map.! file)
-  whenever $
-    WriteFile_ anything anything
-      |=> \(WriteFile file string) ->
-        liftIO $ modifyIORef fs $ Map.insert file string
-  whenever $
-    AppendFile_ anything anything
-      |=> \(AppendFile file string) ->
-        liftIO $ modifyIORef fs $ Map.update (Just . (++ string)) file
-
--- Here, we set up some general expectations
-setup :: (Typeable m, MonadIO m) => MockT m ()
-setup = do
-  -- Use a fake filesystem
-  fakeFS
-  whenever $ HasPermission_ anything |-> True
+makeMockable ''MonadBugReport
 
 -------------------------------------------------------------------------------
 -- PART 4: TESTS
@@ -159,23 +143,57 @@ setup = do
 -- write a few representative tests to see how things work.  I'm using Hspec for
 -- the test framework, but you can use your favorite framework.
 
+baseExpectations :: (Typeable m, MonadIO m) => MockT m ()
+baseExpectations = do
+  -- Ensure that when the chatbot logs in with the right username and
+  -- password.
+  whenever $
+    Login "HMockBot" "secretish"
+      |=> \_ -> do
+        -- Every login should be accompanied by a logout
+        expect Logout
+
+  whenever $
+    JoinRoom_ anything
+      |=> \(JoinRoom room) -> do
+        -- The bot should leave every room it joins.
+        expect $ LeaveRoom (Room room)
+        return (Room room)
+
+  -- By default, assume that the bot has all permissions.  Individual tests
+  -- can override this assumption.
+  whenever $ HasPermission_ anything |-> True
+
 demoSpec :: SpecWith ()
 demoSpec = describe "chatbot" $ do
   it "bans users who use four-letter words" $
     example $
       runMockT $ do
-        setup
-        inSequence
-          [ expect $ Login "HMockBot" "secretish",
-            expect $ JoinRoom "#haskell" |-> Room "#haskell",
-            expect $ LeaveRoom (Room "#haskell"),
-            expect Logout
-          ]
-        expect $
+        baseExpectations
+
+        -- This test isn't concerned with responses.
+        whenever $ SendChat_ anything anything
+
+        -- Set up some chat messages to be received.
+        whenever $
           PollChat_ anything
             |-> (User "A", "I love Haskell")
             |-> (User "B", "Lovin' the ass. candies")
             |-> (User "B", "!leave")
+
+        -- User A should be banned for using a four-letter word ("love").  User
+        -- B should not be banned for using an abbreviation for "assorted."
         expect $ Ban (Room "#haskell") (User "A")
-        whenever $ SendChat_ anything anything
-        chatbot
+
+        -- Finally, run the system under test.
+        chatbot "#haskell"
+
+  it "still logs out cleanly when there are errors" $ do
+    example $
+      runMockT $ do
+        baseExpectations
+        whenever $ PollChat_ anything |=> \_ -> throwM BlockedException
+
+        -- An exception will be thrown when attempting to read chat.  The bot
+        -- should still leave the room and log out.
+        chatbot "#haskell" `catch` \BlockedException -> return ()
