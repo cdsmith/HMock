@@ -11,7 +11,8 @@
 
 module Demo where
 
-import Control.Monad.State
+import Control.Monad (unless, when)
+import Control.Monad.Trans (MonadIO, liftIO)
 import Data.Char (isLetter)
 import Data.Functor ((<&>))
 import Data.IORef (modifyIORef, newIORef, readIORef)
@@ -19,7 +20,7 @@ import qualified Data.Map as Map
 import Data.Typeable (Typeable)
 import Test.HMock
 import Test.HMock.TH
-import Test.Hspec
+import Test.Hspec (SpecWith, describe, example, it)
 import Prelude hiding (appendFile, readFile, writeFile)
 
 -- This is an in-depth example of using HMock to test a system with dependencies
