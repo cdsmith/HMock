@@ -14,7 +14,6 @@ module Demo where
 
 import Control.Monad.State
 import Data.Char (isLetter)
-import Data.Default
 import Data.Functor ((<&>))
 import Data.IORef (modifyIORef, newIORef, readIORef)
 import qualified Data.Map as Map
@@ -35,8 +34,6 @@ import Prelude hiding (appendFile, readFile, writeFile)
 
 -- | Represents a user in the system.
 newtype User = User String deriving (Eq, Show)
-
-instance Default User where def = User def
 
 -- | Represents a permission level.  The Guest level is given to users who are
 -- not logged in.  NormalUser requires being logged in.  Admin requires being

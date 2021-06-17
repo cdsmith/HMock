@@ -1,4 +1,4 @@
-module THUtil where
+module Util.TH where
 
 import Control.Monad.Extra (concatMapM)
 import Control.Monad.State

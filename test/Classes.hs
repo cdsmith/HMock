@@ -25,11 +25,10 @@ import Data.Dynamic (Typeable)
 import Data.Kind (Type)
 import Language.Haskell.TH.Syntax hiding (Type)
 import QuasiMock
-import THUtil (deriveRecursive)
 import Test.HMock
 import Test.HMock.TH
 import Test.Hspec
-
+import Util.TH (deriveRecursive)
 
 #if !MIN_VERSION_base(4, 13, 0)
 import Control.Monad.Fail (MonadFail)
@@ -48,6 +47,7 @@ setupQuasi = do
   whenever $ QIsExtEnabled_ anything |-> True
 
   whenever $ QReify ''String |-> $(reifyStatic ''String)
+  whenever $ QReify ''Char |-> $(reifyStatic ''Char)
   whenever $ QReify ''Int |-> $(reifyStatic ''Int)
   whenever $ QReify ''Bool |-> $(reifyStatic ''Bool)
   whenever $ QReify ''Enum |-> $(reifyStatic ''Enum)
@@ -57,6 +57,12 @@ setupQuasi = do
       |-> $(reifyInstancesStatic ''Show [ConT ''String])
   whenever $
     QReifyInstances ''Eq [ConT ''String]
+      |-> $(reifyInstancesStatic ''Eq [ConT ''String])
+  whenever $
+    QReifyInstances ''Show [ConT ''Char]
+      |-> $(reifyInstancesStatic ''Show [ConT ''String])
+  whenever $
+    QReifyInstances ''Eq [ConT ''Char]
       |-> $(reifyInstancesStatic ''Eq [ConT ''String])
   whenever $
     QReifyInstances ''Show [ConT ''Int]
@@ -79,6 +85,9 @@ setupQuasi = do
   whenever $
     QReifyInstances ''Default [ConT ''Int]
       |-> $(reifyInstancesStatic ''Default [ConT ''Int])
+  whenever $
+    QReifyInstances ''Default [AppT (ConT ''Maybe) (ConT ''Bool)]
+      |-> $(reifyInstancesStatic ''Default [AppT (ConT ''Maybe) (ConT ''Bool)])
   whenever $
     QReifyInstances_ (eq ''Show) (is functionType) |-> []
   whenever $
@@ -710,8 +719,11 @@ laxityTests = do
         decs <- runMockT $ do
           setupQuasi
           whenever $ QReify ''MonadStrict |-> $(reifyStatic ''MonadStrict)
+          whenever $
+            QReifyInstances ''Default [ConT ''NoDefault]
+              |-> $(reifyInstancesStatic ''Default [ConT ''NoDefault])
 
-          runQ (deriveMockable ''MonadStrict)
+          runQ (makeMockableWithOptions def {mockLax = False} ''MonadStrict)
         evaluate (rnf decs)
 
     it "fails when there's an unexpected method" $
@@ -759,8 +771,11 @@ laxityTests = do
         decs <- runMockT $ do
           setupQuasi
           whenever $ QReify ''MonadLax |-> $(reifyStatic ''MonadLax)
+          whenever $
+            QReifyInstances ''Default [ConT ''NoDefault]
+              |-> $(reifyInstancesStatic ''Default [ConT ''NoDefault])
 
-          runQ (deriveMockable ''MonadLax)
+          runQ (makeMockableWithOptions def {mockLax = True} ''MonadLax)
         evaluate (rnf decs)
 
     it "succeeds when unexpected methods are called" $
@@ -801,7 +816,6 @@ laxityTests = do
         laxND
         (laxND >>= evaluate) `shouldThrow` anyException
 
-
     it "responds appropriately to expected methods with no response" $
       example $ do
         let strict = runMockT $ expect StrictMethod >> strictMethod
@@ -835,9 +849,37 @@ laxityTests = do
         strictND >>= evaluate
         laxND >>= evaluate
 
+class MonadNestedNoDef m where
+  nestedNoDef :: m (NoDefault, String)
+
+$(return []) -- Hack to get types into the TH environment.
+
+nestedNoDefTests :: SpecWith ()
+nestedNoDefTests = describe "MonadNestedNoDef" $ do
+  it "generates mock impl" $
+    example $ do
+      decs <- runMockT $ do
+        setupQuasi
+        whenever $
+          QReify ''MonadNestedNoDef |-> $(reifyStatic ''MonadNestedNoDef)
+        whenever $
+          QReifyInstances
+            ''Default
+            [AppT (AppT (TupleT 2) (ConT ''NoDefault)) (ConT ''String)]
+            |-> $( reifyInstancesStatic
+                     ''Default
+                     [AppT (AppT (TupleT 2) (ConT ''NoDefault)) (ConT ''String)]
+                 )
+        whenever $
+          QReifyInstances ''Default [ConT ''NoDefault]
+            |-> $(reifyInstancesStatic ''Default [ConT ''NoDefault])
+
+        runQ (makeMockable ''MonadNestedNoDef)
+      evaluate (rnf decs)
+
 class ClassWithNoParams
 
-$(return []) -- Hack to get the error classes into the TH environment.
+$(return []) -- Hack to get types into the TH environment.
 
 errorTests :: SpecWith ()
 errorTests = describe "errors" $ do
@@ -912,4 +954,5 @@ classTests = describe "makeMockable" $ do
   extraneousMembersTests
   rankNTests
   laxityTests
+  nestedNoDefTests
   errorTests

@@ -18,7 +18,7 @@ import Data.Generics (Typeable, everything, mkQ)
 import Language.Haskell.TH hiding (Match)
 import Language.Haskell.TH.Syntax hiding (Match)
 import qualified Language.Haskell.TH.Syntax
-import THUtil (deriveRecursive)
+import Util.TH (deriveRecursive)
 import Test.HMock (MockT, mockDefaultlessMethod, mockMethod)
 import Test.HMock.TH (deriveMockable)
 

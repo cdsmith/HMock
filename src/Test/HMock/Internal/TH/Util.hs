@@ -29,25 +29,12 @@ import Language.Haskell.TH
 import Language.Haskell.TH.Syntax (NameFlavour (..))
 import Test.HMock.Internal.Util (choices)
 
-#if MIN_VERSION_template_haskell(2,17,0)
-
-tvName :: TyVarBndr flag -> Name
-tvName (PlainTV name _) = name
-tvName (KindedTV name _ _) = name
-
-bindVar :: Name -> TyVarBndr Specificity
-bindVar n = PlainTV n SpecifiedSpec
-
-#else
-
 tvName :: TyVarBndr -> Name
 tvName (PlainTV name) = name
 tvName (KindedTV name _) = name
 
 bindVar :: Name -> TyVarBndr
 bindVar = PlainTV
-
-#endif
 
 unappliedName :: Type -> Maybe Name
 unappliedName (AppT a _) = unappliedName a
@@ -151,6 +138,7 @@ hasPolyType = everything (||) (mkQ False isPolyType)
     isPolyType _ = False
 
 resolveInstance :: Name -> Type -> Q (Maybe Cxt)
+resolveInstance cls t@(VarT _) = return (Just [AppT (ConT cls) t])
 resolveInstance cls t = do
   decs <- reifyInstances cls [t]
   result <- traverse (tryInstance t) decs
@@ -159,11 +147,18 @@ resolveInstance cls t = do
     _ -> return Nothing
   where
     tryInstance :: Type -> InstanceDec -> Q (Maybe Cxt)
-    tryInstance actualTy (InstanceD _ cx (AppT _ genTy) _) =
-      unifyTypes genTy actualTy >>= \case
-        Just tbl -> return (Just (substTypeVars tbl <$> cx))
-        Nothing -> return Nothing
+    tryInstance actualTy (InstanceD _ cx (AppT (ConT cls') genTy) _)
+      | cls' == cls =
+        unifyTypes genTy actualTy >>= \case
+          Just tbl ->
+            let cx' = substTypeVars tbl <$> cx
+             in fmap concat . sequence <$> mapM resolveInstanceType cx'
+          Nothing -> return Nothing
     tryInstance _ _ = return Nothing
+
+    resolveInstanceType :: Type -> Q (Maybe Cxt)
+    resolveInstanceType (AppT (ConT cls') t') = resolveInstance cls' t'
+    resolveInstanceType _ = return Nothing
 
 -- | Remove instance context from a method.
 --

@@ -59,7 +59,8 @@ test-suite tests
                       DocTests.Test.HMock.Internal.Predicates,
                       Extras,
                       QuasiMock,
-                      THUtil
+                      TH,
+                      Util.TH
     build-depends:    HMock,
                       base,
                       containers,
