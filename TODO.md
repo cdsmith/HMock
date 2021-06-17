@@ -1,8 +1,3 @@
-## Finish Demo
-
-I'm trying to write a compelling demo to advocate for HMock's role in testing.
-That's the Demo module in the test directory.  I need to finish this.
-
 ## Default setup per class
 
 In many cases, there's a sort of natural default set of behaviors for mocks of a

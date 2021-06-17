@@ -164,15 +164,16 @@ baseExpectations = do
   -- can override this assumption.
   whenever $ HasPermission_ anything |-> True
 
+  -- Our tests aren't generally concerned with what the bot says.  Individual
+  -- tests can add ex
+  whenever $ SendChat_ anything anything
+
 demoSpec :: SpecWith ()
 demoSpec = describe "chatbot" $ do
   it "bans users who use four-letter words" $
     example $
       runMockT $ do
         baseExpectations
-
-        -- This test isn't concerned with responses.
-        whenever $ SendChat_ anything anything
 
         -- Set up some chat messages to be received.
         whenever $
@@ -197,3 +198,15 @@ demoSpec = describe "chatbot" $ do
         -- An exception will be thrown when attempting to read chat.  The bot
         -- should still leave the room and log out.
         chatbot "#haskell" `catch` \BlockedException -> return ()
+
+  it "doesn't ban people for using four-letter words in big reports" $ do
+    example $
+      runMockT $ do
+        baseExpectations
+        whenever $
+          PollChat_ anything
+            |-> (User "A", "!bug Fix the damn website!")
+            |-> (User "A", "!leave")
+        expect $ ReportBug "Fix the damn website!"
+
+        chatbot "#haskell"
