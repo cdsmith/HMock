@@ -587,22 +587,23 @@ deriveForMockTImpl options qt = do
                AppT (ConT ''Monad) (VarT (instMonadVar inst)),
                AppT (ConT ''MonadIO) (VarT (instMonadVar inst))
              ]
-  let hasMonadInContext = instMonadVar inst `elem` concatMap freeTypeVars cx
-  when hasMonadInContext $ checkExt FlexibleContexts
-  let cxMockT =
-        substTypeVar (instMonadVar inst) (AppT (ConT ''MockT) (VarT m)) <$> cx
 
-  (: [])
-    <$> instanceD
-      ( concat
-          <$> sequence
-            [ return cxMockT,
-              constrainVars [[t|Typeable|]] (instGeneralParams inst),
-              constrainVars [[t|Typeable|], [t|MonadIO|]] [m]
-            ]
-      )
-      [t|$(pure (instType inst)) (MockT $(varT m))|]
-      decs
+  simplifyContext
+    (substTypeVar (instMonadVar inst) (AppT (ConT ''MockT) (VarT m)) <$> cx)
+    >>= \case
+      Just cxMockT ->
+        (: [])
+          <$> instanceD
+            ( concat
+                <$> sequence
+                  [ return cxMockT,
+                    constrainVars [[t|Typeable|]] (instGeneralParams inst),
+                    constrainVars [[t|Typeable|], [t|MonadIO|]] [m]
+                  ]
+            )
+            [t|$(pure (instType inst)) (MockT $(varT m))|]
+            decs
+      Nothing -> internalError
 
 implementMethod :: MockableOptions -> Method -> Q Dec
 implementMethod options method = do

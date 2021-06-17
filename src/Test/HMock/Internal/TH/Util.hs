@@ -17,6 +17,7 @@ module Test.HMock.Internal.TH.Util
     hasPolyType,
     hasNestedPolyType,
     resolveInstance,
+    simplifyContext,
     localizeMember,
   )
 where
@@ -172,6 +173,13 @@ resolveInstance cls t = do
     resolveInstanceType :: Type -> Q (Maybe Cxt)
     resolveInstanceType (AppT (ConT cls') t') = resolveInstance cls' t'
     resolveInstanceType _ = return Nothing
+
+simplifyContext :: Cxt -> Q (Maybe Cxt)
+simplifyContext (AppT (ConT cls) t : preds) = resolveInstance cls t >>= \case
+  Just cxt' -> fmap (cxt' ++) <$> simplifyContext preds
+  Nothing -> return Nothing
+simplifyContext (otherPred : preds) = fmap (otherPred :) <$> simplifyContext preds
+simplifyContext [] = return (Just [])
 
 -- | Remove instance context from a method.
 --

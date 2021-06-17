@@ -2,7 +2,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DerivingStrategies #-}
-{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GADTs #-}
@@ -266,23 +265,19 @@ superTests = describe "MonadSuper" $ do
       decs <- runMockT $ do
         setupQuasi
         whenever $ QReify ''MonadSuper |-> $(reifyStatic ''MonadSuper)
+        whenever $
+          QReifyInstances_
+            (eq ''SuperClass)
+            $(qMatch [p|[AppT (ConT (Name (OccName "MockT") _)) (VarT _)]|])
+            |-> $( do
+                     v <- runQ (newName "m")
+                     reifyInstancesStatic
+                       ''SuperClass
+                       [AppT (ConT ''MockT) (VarT v)]
+                 )
 
         runQ (makeMockable ''MonadSuper)
       evaluate (rnf decs)
-
-  it "fails when FlexibleContexts is disabled" $ do
-    let missingFlexibleContexts = runMockT $ do
-          setupQuasi
-          whenever $ QIsExtEnabled FlexibleContexts |-> False
-          whenever $ QReify ''MonadSuper |-> $(reifyStatic ''MonadSuper)
-          expect $
-            QReport_ anything (hasSubstr "Please enable FlexibleContexts")
-              |-> ()
-
-          _ <- runQ (makeMockable ''MonadSuper)
-          return ()
-
-    missingFlexibleContexts `shouldThrow` anyIOException
 
   it "is mockable" $
     example $ do
