@@ -3,6 +3,24 @@
 I'm trying to write a compelling demo to advocate for HMock's role in testing.
 That's the Demo module in the test directory.  I need to finish this.
 
+## Default setup per class
+
+In many cases, there's a sort of natural default set of behaviors for mocks of a
+class.  One might hope for a way to write these alongside `makeMockable`, so
+that you don't have to separately export a `setup` action for each mockable
+class.
+
+A design might look something like this:
+
+``` haskell
+class MockSetup cls => Mockable cls where { ... }
+class Mockable cls => MockSetup cls where
+  setupMock :: MockT m ()
+```
+
+The contract would be that setupMock is called exactly once before the first
+expectation is added *or* mocked method is resolved for a given class.
+
 ## Fix resolveInstance
 
 Right now, resolveInstance sometimes fails at unification.  It just looks for
@@ -32,12 +50,22 @@ response will be chosen instead of the built-in default when no response matches
 an expectation.
 
 `byDefault` is similar to `whenever`.  The difference is that `byDefault`
-inserts a new default response *behind* existing expectations.  If an existing
-expectation matches and has a response, then the default is irrelevant.  On the
+inserts a new default response for *existing* expectations.  If an existing
+expectation matches and has a response, then that default is irrelevant.  On the
 other hand, `whenever` adds a new response *on top of* existing expectations.
 Calls that match the `whenever` will never even test the expectations behind it.
 This is essentially the same question as gMock's `ON_CALL().WillByDefault()`
 versus `EXPECT_CALL().WillRepeatedly()`.
+
+## Consider more flexible semantics
+
+https://link.springer.com/content/pdf/10.1007/978-3-642-54804-8_27.pdf makes a
+case for a more compositional and orthogonal semantics for mocks, which includes
+ambiguity checking.  We have no interest in (nor can we even implement) static
+ambiguity checking, since our matchers are more flexible.  However, we can
+(and previously did) implement dynamic ambiguity checking.  Perhaps this is a
+good idea.  The article also makes a case for arbitrary choice and repetition
+operators, which HMock doesn't implement.
 
 ## Consider failing lax mocks on mismatched parameters
 
