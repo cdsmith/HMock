@@ -1,3 +1,15 @@
+## Fix resolveInstance
+
+Right now, resolveInstance sometimes fails at unification.  It just looks for
+type variables in the constraints.  But it should also check whether instances
+actually exist for fully resolved constraints.
+
+A failing test case is when the return value of a method is a tuple with an
+element that has no default.  Because there's a Default instance for the whole
+tuple, and the derived constraints contain no type variables, resolveInstance
+reports a success.  However, it should really recursively call resolveInstance
+on the derived constraints until they are plain variables.
+
 ## Finish Demo
 
 I'm trying to write a compelling demo to advocate for HMock's role in testing.
@@ -20,18 +32,6 @@ class Mockable cls => MockSetup cls where
 
 The contract would be that setupMock is called exactly once before the first
 expectation is added *or* mocked method is resolved for a given class.
-
-## Fix resolveInstance
-
-Right now, resolveInstance sometimes fails at unification.  It just looks for
-type variables in the constraints.  But it should also check whether instances
-actually exist for fully resolved constraints.
-
-A failing test case is when the return value of a method is a tuple with an
-element that has no default.  Because there's a Default instance for the whole
-tuple, and the derived constraints contain no type variables, resolveInstance
-reports a success.  However, it should really recursively call resolveInstance
-on the derived constraints until they are plain variables.
 
 ## Test instances for MockT
 

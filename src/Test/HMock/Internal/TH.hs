@@ -22,7 +22,7 @@ module Test.HMock.Internal.TH
 where
 
 import Control.Monad (replicateM, unless, when, zipWithM)
-import Control.Monad.Extra (concatMapM, mapMaybeM)
+import Control.Monad.Extra (concatMapM)
 import Control.Monad.Trans (MonadIO)
 import Data.Bool (bool)
 import Data.Char (toUpper)
@@ -30,7 +30,6 @@ import Data.Default (Default (..))
 import Data.Either (partitionEithers)
 import qualified Data.Kind
 import Data.List (foldl', (\\))
-import Data.Maybe (catMaybes)
 import Data.Typeable (Typeable)
 import GHC.Stack (HasCallStack)
 import GHC.TypeLits (Symbol)
@@ -39,7 +38,6 @@ import Language.Haskell.TH.Syntax (Lift (lift))
 import Test.HMock.Internal.Core
 import Test.HMock.Internal.Predicates (Predicate (accept), eq)
 import Test.HMock.Internal.TH.Util
-import Test.HMock.Internal.Util
 
 -- | Custom options for deriving a 'Mockable' class.
 data MockableOptions = MockableOptions
@@ -223,7 +221,7 @@ getInstance options ty = withClass ty go
         matchVars (AppT _ _) _ [_] =
           fail $ pprint ty ++ " is applied to too many arguments."
         matchVars (AppT a b) ts (_ : ps) =
-          checkExts [FlexibleInstances] >> matchVars a (b : ts) ps
+          checkExt FlexibleInstances >> matchVars a (b : ts) ps
         matchVars _ ts ps = do
           let t = foldl' (\t' v -> AppT t' (VarT v)) ty (init ps)
           let tbl = zip (tvName <$> params) ts
@@ -259,32 +257,6 @@ makeInstance options ty cx tbl ps m members = do
       when (mockVerbose options) $ reportWarning warning
       return (Left dec)
     memberOrMethod _ (Right method) = return (Right method)
-
--- | Remove instance context from a method.
---
--- Some GHC versions report class members including the instance context (for
--- example, @show :: Show a => a -> String@, instead of @show :: a -> String@).
--- This looks for the instance context, and substitutes if needed to eliminate
--- it.
-localizeMember :: Type -> Name -> Type -> Q Type
-localizeMember instTy m t@(ForallT tvs cx ty) = do
-  let fullConstraint = AppT instTy (VarT m)
-  let unifyLeft (c, cs) = fmap (,cs) <$> unifyTypes c fullConstraint
-  results <- mapMaybeM unifyLeft (choices cx)
-  case results of
-    ((tbl, remainingCx) : _) -> do
-      let cx' = substTypeVars tbl <$> remainingCx
-          ty' = substTypeVars tbl ty
-          (tvs', cx'') =
-            relevantContext
-              ty'
-              ((tvName <$> tvs) \\ (fst <$> tbl), cx')
-          t'
-            | null tvs' && null cx'' = ty'
-            | otherwise = ForallT (bindVar <$> tvs') cx'' ty'
-      return t'
-    _ -> return t
-localizeMember _ _ t = return t
 
 getMethod :: Type -> Name -> [(Name, Type)] -> Dec -> Q (Either String Method)
 getMethod instTy m tbl (SigD name ty) = do
@@ -341,8 +313,11 @@ withMethodParams inst method t =
 
 deriveMockableImpl :: MockableOptions -> Q Type -> Q [Dec]
 deriveMockableImpl options qt = do
-  checkExts
-    [GADTs, TypeFamilies, DataKinds, FlexibleInstances, MultiParamTypeClasses]
+  checkExt DataKinds
+  checkExt FlexibleInstances
+  checkExt GADTs
+  checkExt MultiParamTypeClasses
+  checkExt TypeFamilies
 
   inst <- getInstance options =<< qt
 
@@ -416,12 +391,12 @@ matcherConstructor options inst method = do
   where
     mkPredicate argTy
       | hasPolyType argTy = do
-        checkExts [RankNTypes]
+        checkExt RankNTypes
         v <- newName "t"
         forallT [bindVar v] (pure []) [t|Predicate $(varT v)|]
       | null tyVars && null cx = [t|Predicate $(pure argTy)|]
       | otherwise = do
-        checkExts [RankNTypes]
+        checkExt RankNTypes
         forallT (bindVar <$> tyVars) (pure cx) [t|Predicate $(pure argTy)|]
       where
         (tyVars, cx) =
@@ -436,21 +411,6 @@ getMatcherName options method =
 defineShowAction :: MockableOptions -> [Method] -> Q Dec
 defineShowAction options methods =
   funD 'showAction (showActionClause options <$> methods)
-
-resolveInstance :: Name -> Type -> Q (Maybe Cxt)
-resolveInstance cls t = do
-  decs <- reifyInstances cls [t]
-  result <- traverse (tryInstance t) decs
-  case catMaybes result of
-    [cx] -> return (Just (filter (not . null . freeTypeVars) cx))
-    _ -> return Nothing
-  where
-    tryInstance :: Type -> InstanceDec -> Q (Maybe Cxt)
-    tryInstance actualTy (InstanceD _ cx (AppT _ genTy) _) =
-      unifyTypes genTy actualTy >>= \case
-        Just tbl -> return (Just (substTypeVars tbl <$> cx))
-        Nothing -> return Nothing
-    tryInstance _ _ = return Nothing
 
 showActionClause :: MockableOptions -> Method -> Q Clause
 showActionClause options method = do
@@ -512,7 +472,7 @@ showMatcherClauses options method = do
   where
     actionArg t ty
       | isKnownType method ty = wildP
-      | otherwise = checkExts [ScopedTypeVariables] >> sigP wildP (varT t)
+      | otherwise = checkExt ScopedTypeVariables >> sigP wildP (varT t)
 
     matcherArg p ty
       | isKnownType method ty = varP p
@@ -628,7 +588,7 @@ deriveForMockTImpl options qt = do
                AppT (ConT ''MonadIO) (VarT (instMonadVar inst))
              ]
   let hasMonadInContext = instMonadVar inst `elem` concatMap freeTypeVars cx
-  when hasMonadInContext $ checkExts [FlexibleContexts]
+  when hasMonadInContext $ checkExt FlexibleContexts
   let cxMockT =
         substTypeVar (instMonadVar inst) (AppT (ConT ''MockT) (VarT m)) <$> cx
 
@@ -668,13 +628,11 @@ implementMethod options method = do
           $(actionExp argVars (conE (getActionName options method)))
         |]
 
-checkExts :: [Extension] -> Q ()
-checkExts = mapM_ checkExt
-  where
-    checkExt e = do
-      enabled <- isExtEnabled e
-      unless enabled $
-        fail $ "Please enable " ++ show e ++ " to generate this mock."
+checkExt :: Extension -> Q ()
+checkExt e = do
+  enabled <- isExtEnabled e
+  unless enabled $
+    fail $ "Please enable " ++ show e ++ " to generate this mock."
 
 internalError :: HasCallStack => Q a
 internalError = error "Internal error in HMock.  Please report this as a bug."

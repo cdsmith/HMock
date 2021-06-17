@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TupleSections #-}
 
 module Test.HMock.Internal.TH.Util
@@ -15,13 +16,18 @@ module Test.HMock.Internal.TH.Util
     removeModNames,
     hasPolyType,
     hasNestedPolyType,
+    resolveInstance,
+    localizeMember,
   )
 where
 
+import Control.Monad.Extra (mapMaybeM)
 import Data.Generics
-import Data.Maybe (fromMaybe)
+import Data.List ((\\))
+import Data.Maybe (catMaybes, fromMaybe)
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax (NameFlavour (..))
+import Test.HMock.Internal.Util (choices)
 
 #if MIN_VERSION_template_haskell(2,17,0)
 
@@ -143,3 +149,44 @@ hasPolyType = everything (||) (mkQ False isPolyType)
   where
     isPolyType (ForallT tvs _ _) = not (null tvs)
     isPolyType _ = False
+
+resolveInstance :: Name -> Type -> Q (Maybe Cxt)
+resolveInstance cls t = do
+  decs <- reifyInstances cls [t]
+  result <- traverse (tryInstance t) decs
+  case catMaybes result of
+    [cx] -> return (Just (filter (not . null . freeTypeVars) cx))
+    _ -> return Nothing
+  where
+    tryInstance :: Type -> InstanceDec -> Q (Maybe Cxt)
+    tryInstance actualTy (InstanceD _ cx (AppT _ genTy) _) =
+      unifyTypes genTy actualTy >>= \case
+        Just tbl -> return (Just (substTypeVars tbl <$> cx))
+        Nothing -> return Nothing
+    tryInstance _ _ = return Nothing
+
+-- | Remove instance context from a method.
+--
+-- Some GHC versions report class members including the instance context (for
+-- example, @show :: Show a => a -> String@, instead of @show :: a -> String@).
+-- This looks for the instance context, and substitutes if needed to eliminate
+-- it.
+localizeMember :: Type -> Name -> Type -> Q Type
+localizeMember instTy m t@(ForallT tvs cx ty) = do
+  let fullConstraint = AppT instTy (VarT m)
+  let unifyLeft (c, cs) = fmap (,cs) <$> unifyTypes c fullConstraint
+  results <- mapMaybeM unifyLeft (choices cx)
+  case results of
+    ((tbl, remainingCx) : _) -> do
+      let cx' = substTypeVars tbl <$> remainingCx
+          ty' = substTypeVars tbl ty
+          (tvs', cx'') =
+            relevantContext
+              ty'
+              ((tvName <$> tvs) \\ (fst <$> tbl), cx')
+          t'
+            | null tvs' && null cx'' = ty'
+            | otherwise = ForallT (bindVar <$> tvs') cx'' ty'
+      return t'
+    _ -> return t
+localizeMember _ _ t = return t
