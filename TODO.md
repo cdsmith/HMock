@@ -4,6 +4,17 @@ https://link.springer.com/content/pdf/10.1007/978-3-642-54804-8_27.pdf makes a
 case for a more compositional and orthogonal semantics for mocks, which includes
 ambiguity checking.
 
+The basic idea:
+
+* `P . Q` means "P, then Q".  This is `inSequence`.
+* `P || Q` means "P, interleaved with Q".  This is `inAnyOrder`.
+* `P + Q` means "P or Q".  HMock doesn't currently implement this at all.
+* `P*` means "P, zero or more times".  HMock currently implements this only as
+  multiplicity constraints on single steps.
+* `empty` is a special plan that contains no elements.  This is `ExpectNothing`
+  in HMock's internal language, or `inAnyOrder []` or `inSequence []` in the
+  public API.
+
 Open questions:
 
 1. Can this be made ergonomic?  I'm not interested in this at all if it makes it
@@ -19,8 +30,8 @@ Open questions:
    and the other is `x* = empty + (x || x*)`.  The paper linked above proposes
    only the first, but I'm not happy with this bias toward sequential
    expectations (which I believe should be the exception, not the rule).  On the
-   other hand, the interleave rule is much more susceptible to ambiguity.  Maybe
-   both should be offered.
+   other hand, the interleave rule is inherently ambiguous, so it's useless if
+   ambiguity is rejected.  Maybe both should be offered.
 5. Is there also a use case for an intersection operator?  Since responses are
    optional in HMock, it's possible we could add yet another operator, which
    requires that *two* execution plans match simultaneously.  It would be an
