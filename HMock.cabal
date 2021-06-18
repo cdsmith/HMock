@@ -75,6 +75,7 @@ test-suite tests
                       mtl,
                       syb,
                       template-haskell,
+                      unliftio
     hs-source-dirs:   test
     default-language: Haskell2010
     ghc-options:      -threaded -Wall -Wincomplete-uni-patterns -Wno-orphans

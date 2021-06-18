@@ -16,13 +16,6 @@ class Mockable cls => MockSetup cls where
 The contract would be that setupMock is called exactly once before the first
 expectation is added *or* mocked method is resolved for a given class.
 
-## Test instances for MockT
-
-* MockT wrapping a Reader monad
-* Multiple threads with MonadUnliftIO
-* Exceptions with MonadUnliftIO
-* Exceptions with MonadThrow, MonadCatch, MonadMask
-
 ## `byDefault` to override default responses
 
 The built-in defaults for `mockMethod` and friends are closely tied to the

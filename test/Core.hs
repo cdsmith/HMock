@@ -13,12 +13,15 @@ import Control.Exception (SomeException, evaluate)
 import Control.Monad (replicateM_)
 import Control.Monad.State (execStateT, modify)
 import Control.Monad.Trans (liftIO)
+import Data.IORef (newIORef, readIORef, writeIORef)
 import Data.List (isInfixOf, isPrefixOf)
 import Test.HMock
 import Test.HMock.TH (makeMockable)
 import Test.Hspec
 import Prelude hiding (readFile, writeFile)
 import qualified Prelude
+import Control.Monad.Reader (runReaderT, ask, MonadReader (local))
+import qualified UnliftIO.Concurrent as UnliftIO
 
 class Monad m => MonadFilesystem m where
   readFile :: FilePath -> m String
@@ -89,6 +92,15 @@ coreTests = do
             liftIO $
               forkIO $ inMockT $ readFile "foo.txt" >>= liftIO . putMVar var
           writeFile "bar.txt" =<< liftIO (takeMVar var)
+
+    it "shares expectations across threads using MonadUnliftIO" $
+      example $ runMockT $ do
+        expect $ ReadFile "foo.txt" |-> "lorem ipsum"
+        expect $ WriteFile "bar.txt" "lorem ipsum"
+
+        var <- liftIO newEmptyMVar
+        _ <- UnliftIO.forkIO $ readFile "foo.txt" >>= liftIO . putMVar var
+        writeFile "bar.txt" =<< liftIO (takeMVar var)
 
     it "tracks expectations across multiple classes" $
       example $ do
@@ -354,17 +366,13 @@ coreTests = do
 
     it "allows responses to run in the underlying monad" $
       example $ do
-        filesRead <- flip execStateT (0 :: Int) $
-          runMockT $ do
-            whenever $
-              ReadFile_ anything
-                |=> \_ -> modify (+ 1) >> return ""
-
-            _ <- readFile "foo.txt"
-            _ <- readFile "bar.txt"
-            return ()
-
-        filesRead `shouldBe` 2
+        ref <- newIORef ""
+        runMockT $ do
+          whenever $
+            WriteFile_ (eq "foo.txt") anything
+              |=> \(WriteFile _ c) -> liftIO (writeIORef ref c)
+          writeFile "foo.txt" "open sesame"
+        readIORef ref `shouldReturn` "open sesame"
 
     it "respects expectations added by a response" $
       example $ do
@@ -388,6 +396,33 @@ coreTests = do
 
         success
         failure `shouldThrow` anyException
+
+    it "has a correct implementation of MonadReader" $
+      example $ do
+        flip runReaderT "read me" $
+          runMockT $ do
+            whenever $ ReadFile_ anything |=> const ask
+
+            a <- readFile ""
+            liftIO (a `shouldBe` "read me")
+
+            local (++ " too") $ do
+              b <- readFile ""
+              liftIO (b `shouldBe` "read me too")
+
+    it "has a correct implementation of MonadState" $
+      example $ do
+        filesRead <- flip execStateT (0 :: Int) $
+          runMockT $ do
+            whenever $
+              ReadFile_ anything
+                |=> \_ -> modify (+ 1) >> return ""
+
+            _ <- readFile "foo.txt"
+            _ <- readFile "bar.txt"
+            return ()
+
+        filesRead `shouldBe` 2
 
     it "describes expectations when asked" $
       example . runMockT $ do
