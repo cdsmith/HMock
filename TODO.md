@@ -18,8 +18,11 @@ Open questions:
 4. Is there also a use case for an intersection operator?  Since responses are
    optional in HMock, it's possible we could add yet another operator, which
    requires that *two* execution plans match simultaneously.  The reason this is
-   compelling to me is that it lets you isolate certain properties, like "this
-   action is never called", and enforce them on the side.
+   compelling to me is that it lets you isolate certain properties of the call
+   sequence, and enforce them "on the side" without worrying about how they
+   modify your main expectations.  Example: I want to be able to say "if you
+   open a file, you must close it", and I want to say that independent of
+   whether I assert that you should open a specific filename.
 
 ## Consider failing lax mocks on mismatched parameters or multiplicity
 
@@ -80,6 +83,21 @@ Open questions:
 
 1. Should `byDefault` make the expectation lax?  I think no, as this is rather
    ad hoc.
+
+## Side effects?
+
+Sometimes I want to add behavior (such as logging, new expectations, whatever)
+to an action, but without preventing that action from satisfying additional
+expectations.  What I want is effectively a side effect.  It's kind of like a
+response, but it:
+
+1. Is only run if the action is accepted without it.
+2. Doesn't have a return value.
+3. Doesn't fulfill the expectation.
+
+The `whenever` name is perfect for this, so if this is implemented, I'd probably
+first rename the existing `whenever` to `expectAny`, and then add this as
+`whenever`.
 
 ## Better predicate descriptions
 
