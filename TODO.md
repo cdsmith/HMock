@@ -6,13 +6,13 @@ ambiguity checking.
 
 The basic idea:
 
-* `P . Q` means "P, then Q".  This is `inSequence`.
-* `P || Q` means "P, interleaved with Q".  This is `inAnyOrder`.
+* `P . Q` means "P, then Q".  This is `inSequence` in HMock.
+* `P || Q` means "P, interleaved with Q".  This is `inAnyOrder` in HMock.
 * `P + Q` means "P or Q".  HMock doesn't currently implement this at all.
 * `P*` means "P, zero or more times".  HMock currently implements this only as
   multiplicity constraints on single steps.
 * `empty` is a special plan that contains no elements.  This is `ExpectNothing`
-  in HMock's internal language, or `inAnyOrder []` or `inSequence []` in the
+  in HMock's internal structure, or `inAnyOrder []` / `inSequence []` in the
   public API.
 
 Open questions:
@@ -22,7 +22,7 @@ Open questions:
 2. Should we restore ambiguity checking?  The article makes a strong case for
    it.  Earlier versions of HMock did check (dynamically) for ambiguous
    expectations, and could do so again.  (I have no interest in, nor can I even
-   implement) static ambiguity checking, since HMock matchers are more flexible
+   implement, static ambiguity checking, since HMock matchers are more flexible
    than those in the article.)
 3. Is there a use case for arbitrary choice and repetition operators?  Probably
    so.

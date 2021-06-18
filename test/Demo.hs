@@ -18,7 +18,7 @@ import Control.Monad.Catch (MonadMask, catch, finally, throwM)
 import Control.Monad.Trans (MonadIO)
 import Data.Char (isLetter)
 import Data.Typeable (Typeable)
-import Test.HMock
+import Test.HMock (MockT, anything, expect, runMockT, whenever, (|->), (|=>))
 import Test.HMock.TH (makeMockable)
 import Test.Hspec (SpecWith, describe, example, it)
 import Prelude hiding (appendFile, readFile, writeFile)
