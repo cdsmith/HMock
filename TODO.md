@@ -69,6 +69,38 @@ user.  I don't really understand overlapping instances all that well, but I'm
 tempted to say there should be an overlappable default instance for `MockSetup`
 that does nothing at all.
 
+## Local contexts
+
+The idea behind this is that sometimes you want to define expectations to be
+used in only a single part of your test.  They should get pushed onto the
+stack, but tagged with the part of the test.  Then, when that part of the test
+is done, they can be checked and removed immediately.
+
+The risk this solves is that you add an expectation intending for it to happen
+in one part of the test, but then it gets missed and later satisfied by accident
+elsewhere.  Also, you may want to ignore certain calls in a part of the test,
+which you could accomplish by pushing a `whenever` rule and then popping it
+when you're done.
+
+Proposed API:
+
+``` haskell
+nestMockT :: MockT m a -> MockT m a
+
+test = do
+  expect $ DoSomething
+
+  nestMockT $ do
+    -- doSomething should be ignored in this part of the test.
+    whenever $ DoSomething
+    doSomething
+    doSomething
+
+  -- Now doSomething is no longer ignored, and the first expectation can be
+  -- satisfied.
+  doSomething
+```
+
 ## `byDefault` to override default responses
 
 The built-in defaults for `mockMethod` and friends are closely tied to the
