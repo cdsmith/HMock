@@ -15,9 +15,16 @@ Open questions:
    than those in the article.)
 3. Is there a use case for arbitrary choice and repetition operators?  Probably
    so.
-4. Is there also a use case for an intersection operator?  Since responses are
+4. There seem to be two meanings to repetition.  One is `x* = empty + (x . x*)`,
+   and the other is `x* = empty + (x || x*)`.  The paper linked above proposes
+   only the first, but I'm not happy with this bias toward sequential
+   expectations (which I believe should be the exception, not the rule).  On the
+   other hand, the interleave rule is much more susceptible to ambiguity.  Maybe
+   both should be offered.
+5. Is there also a use case for an intersection operator?  Since responses are
    optional in HMock, it's possible we could add yet another operator, which
-   requires that *two* execution plans match simultaneously.  The reason this is
+   requires that *two* execution plans match simultaneously.  It would be an
+   error if both gave responses for the same action.  The reason this is
    compelling to me is that it lets you isolate certain properties of the call
    sequence, and enforce them "on the side" without worrying about how they
    modify your main expectations.  Example: I want to be able to say "if you
