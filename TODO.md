@@ -82,7 +82,8 @@ to the distinction between gMock's `ON_CALL().WillByDefault()` versus
 Open questions:
 
 1. Should `byDefault` make the expectation lax?  I think no, as this is rather
-   ad hoc.
+   ad hoc.  You can use `whenever` to accomplish this, but only if there are
+   no interesting matchers already added.
 
 ## Side effects?
 
