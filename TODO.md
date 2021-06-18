@@ -1,3 +1,40 @@
+## Consider more flexible semantics
+
+https://link.springer.com/content/pdf/10.1007/978-3-642-54804-8_27.pdf makes a
+case for a more compositional and orthogonal semantics for mocks, which includes
+ambiguity checking.
+
+Open questions:
+
+1. Can this be made ergonomic?  I'm not interested in this at all if it makes it
+   harder to do the simple cases.
+2. Should we restore ambiguity checking?  The article makes a strong case for
+   it.  Earlier versions of HMock did check (dynamically) for ambiguous
+   expectations, and could do so again.  (I have no interest in, nor can I even
+   implement) static ambiguity checking, since HMock matchers are more flexible
+   than those in the article.)
+3. Is there a use case for arbitrary choice and repetition operators?  Probably
+   so.
+4. Is there also a use case for an intersection operator?  Since responses are
+   optional in HMock, it's possible we could add yet another operator, which
+   requires that *two* execution plans match simultaneously.  The reason this is
+   compelling to me is that it lets you isolate certain properties, like "this
+   action is never called", and enforce them on the side.
+
+## Consider failing lax mocks on mismatched parameters or multiplicity
+
+gMock makes a distinction netween uninteresting and unexpected methods.  See
+https://google.github.io/googletest/gmock_cook_book.html#uninteresting-vs-unexpected.
+An uninteresting method is one that has no expectations at all.  An unexpected
+method is one that DOES have expectations, but those expectations don't match
+the arguments, multiplicity constraints, etc.  HMock could easily make a similar
+distinction.  I'm not sure if it's a good idea.
+
+One interesting use case is that in gMock, you can explicitly say "this should
+never happen".  Since gMock is lax by default for uninteresting methods, this
+converts a method from "uninteresting" (thus, accepted) to "unexpected" (thus,
+rejected).
+
 ## Default setup per class
 
 In many cases, there's a sort of natural default set of behaviors for mocks of a
@@ -10,11 +47,17 @@ A design might look something like this:
 ``` haskell
 class MockSetup cls => Mockable cls where { ... }
 class Mockable cls => MockSetup cls where
-  setupMock :: MockT m ()
+  setupMock :: Proxy cls -> MockT m ()
 ```
 
 The contract would be that setupMock is called exactly once before the first
 expectation is added *or* mocked method is resolved for a given class.
+
+The reason for separating `MockSetup` from `Mockable` is that `Mockable` is
+usually defined in Template Haskell, while `MockSetup` should be defined by the
+user.  I don't really understand overlapping instances all that well, but I'm
+tempted to say there should be an overlappable default instance for `MockSetup`
+that does nothing at all.
 
 ## `byDefault` to override default responses
 
@@ -26,31 +69,17 @@ response will be chosen instead of the built-in default when no response matches
 an expectation.
 
 `byDefault` is similar to `whenever`.  The difference is that `byDefault`
-inserts a new default response for *existing* expectations.  If an existing
-expectation matches and has a response, then that default is irrelevant.  On the
-other hand, `whenever` adds a new response *on top of* existing expectations.
-Calls that match the `whenever` will never even test the expectations behind it.
-This is essentially the same question as gMock's `ON_CALL().WillByDefault()`
-versus `EXPECT_CALL().WillRepeatedly()`.
+inserts a new default response for *other* expectations (include pre-existing
+ones) that have no response.  On the other hand, `whenever` adds a new
+expectation *on top of* the existing expectations.  Calls that match the
+`whenever` will never even see the expectations masked by it.  This is similar
+to the distinction between gMock's `ON_CALL().WillByDefault()` versus
+`EXPECT_CALL().WillRepeatedly()`.
 
-## Consider more flexible semantics
+Open questions:
 
-https://link.springer.com/content/pdf/10.1007/978-3-642-54804-8_27.pdf makes a
-case for a more compositional and orthogonal semantics for mocks, which includes
-ambiguity checking.  We have no interest in (nor can we even implement) static
-ambiguity checking, since our matchers are more flexible.  However, we can
-(and previously did) implement dynamic ambiguity checking.  Perhaps this is a
-good idea.  The article also makes a case for arbitrary choice and repetition
-operators, which HMock doesn't implement.
-
-## Consider failing lax mocks on mismatched parameters
-
-gMock makes a distinction netween uninteresting and unexpected methods.  See
-https://google.github.io/googletest/gmock_cook_book.html#uninteresting-vs-unexpected.
-An uninteresting method is one that has no expectations at all.  An unexpected
-method is one that DOES have expectations, but those expectations don't match
-the arguments, cardinality constraints, etc.  HMock could easily make a similar
-distinction.  I'm not sure if it's a good idea.
+1. Should `byDefault` make the expectation lax?  I think no, as this is rather
+   ad hoc.
 
 ## Better predicate descriptions
 
