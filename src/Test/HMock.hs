@@ -46,6 +46,7 @@ module Test.HMock
     withMockT,
     describeExpectations,
     verifyExpectations,
+    byDefault,
 
     -- * Setting expectations
     MockableMethod,

@@ -38,7 +38,7 @@ import Data.Either (partitionEithers)
 import Data.Function (on)
 import Data.Kind (Type)
 import Data.List (intercalate, sortBy)
-import Data.Maybe (catMaybes, listToMaybe)
+import Data.Maybe (catMaybes, fromMaybe, listToMaybe)
 import Data.Typeable (Typeable, cast)
 import GHC.Stack (CallStack, HasCallStack, callStack, withFrozenCallStack)
 import GHC.TypeLits (KnownSymbol, Symbol)
@@ -395,9 +395,21 @@ inAnyOrder ::
   ctx m ()
 inAnyOrder es = fromExpectSet (ExpectMulti AnyOrder es)
 
+data MockState m = MockState
+  { mockExpectSet :: ExpectSet m (),
+    mockDefaults :: [Step m]
+  }
+
+initMockState :: MockState m
+initMockState =
+  MockState
+    { mockExpectSet = ExpectNothing,
+      mockDefaults = []
+    }
+
 -- | Monad transformer for running mocks.
 newtype MockT m a where
-  MockT :: {unMockT :: ReaderT (MVar (ExpectSet m ())) m a} -> MockT m a
+  MockT :: {unMockT :: ReaderT (MVar (MockState m)) m a} -> MockT m a
   deriving
     ( Functor,
       Applicative,
@@ -429,15 +441,17 @@ instance MonadReader r m => MonadReader r (MockT m) where
 
 instance ExpectContext MockT where
   fromExpectSet e = do
-    expectVar <- MockT ask
-    expectSet <- takeMVar expectVar
-    putMVar expectVar (simplify (ExpectMulti AnyOrder [e, expectSet]))
+    stateVar <- MockT ask
+    mockState <- takeMVar stateVar
+    let newExpectSet = simplify (ExpectMulti AnyOrder [e, mockExpectSet mockState])
+    putMVar stateVar (mockState {mockExpectSet = newExpectSet})
 
 -- | Runs a test in the 'MockT' monad, handling all of the mocks.
 runMockT :: forall m a. MonadIO m => MockT m a -> m a
 runMockT test = withMockT constTest
-  where constTest :: (forall b. MockT m b -> m b) -> MockT m a
-        constTest _inMockT = test
+  where
+    constTest :: (forall b. MockT m b -> m b) -> MockT m a
+    constTest _inMockT = test
 
 -- | Runs a test in the 'MockT' monad.  The test can unlift other MockT pieces
 -- to the base monad while still acting on the same set of expectations.  This
@@ -456,10 +470,10 @@ runMockT test = withMockT constTest
 withMockT ::
   forall m b. MonadIO m => ((forall a. MockT m a -> m a) -> MockT m b) -> m b
 withMockT test = do
-  eVar <- newMVar ExpectNothing
+  stateVar <- newMVar initMockState
   let inMockT :: forall a. MockT m a -> m a
-      inMockT m = runReaderT (unMockT m) eVar
-  flip runReaderT eVar $
+      inMockT m = runReaderT (unMockT m) stateVar
+  flip runReaderT stateVar $
     unMockT $ do
       a <- test inMockT
       verifyExpectations
@@ -469,7 +483,8 @@ withMockT test = do
 -- expectations.  This is sometimes useful for debugging test code.  The exact
 -- format is not specified.
 describeExpectations :: MonadIO m => MockT m String
-describeExpectations = formatExpectSet "" <$> (MockT ask >>= readMVar)
+describeExpectations =
+  formatExpectSet "" <$> (MockT ask >>= fmap mockExpectSet . readMVar)
 
 -- | Verifies that all mock expectations are satisfied.  You normally don't need
 -- to do this, because it happens automatically at the end of your test in
@@ -481,10 +496,26 @@ describeExpectations = formatExpectSet "" <$> (MockT ask >>= readMVar)
 -- case.
 verifyExpectations :: MonadIO m => MockT m ()
 verifyExpectations = do
-  expectSet <- MockT ask >>= readMVar
+  expectSet <- MockT ask >>= fmap mockExpectSet . readMVar
   case excess expectSet of
     ExpectNothing -> return ()
     missing -> error $ "Unmet expectations:\n" ++ formatExpectSet "  " missing
+
+-- | Changes the default response for matching actions.
+--
+-- Without 'byDefault', actions with no explicit response will return the
+-- 'Default' value for the type, or 'undefined' if the return type isn't an
+-- instance of 'Default'.  'byDefault' replaces that with a new default
+-- response, also overriding any previous defaults. The rule passed in must have
+-- exactly one response.
+byDefault ::
+  (MonadIO m, MockableMethod cls name m r) => Rule cls name m r -> MockT m ()
+byDefault r@(_ :=> [_]) = do
+  stateVar <- MockT ask
+  mockState <- takeMVar stateVar
+  let newDefaults = Step (locate callStack r) : mockDefaults mockState
+  putMVar stateVar (mockState {mockDefaults = newDefaults})
+byDefault _ = error "Defaults must have exactly one response."
 
 mockMethodImpl ::
   forall cls name m r.
@@ -498,21 +529,22 @@ mockMethodImpl ::
   MockT m r
 mockMethodImpl lax surrogate action =
   do
-    expectVar <- MockT ask
-    expectSet <- takeMVar expectVar
-    let (newExpectSet, response) = decideAction expectSet
-    putMVar expectVar newExpectSet
+    stateVar <- MockT ask
+    mockState <- takeMVar stateVar
+    let (newExpectSet, response) =
+          decideAction (mockExpectSet mockState) (mockDefaults mockState)
+    putMVar stateVar mockState {mockExpectSet = newExpectSet}
     response
   where
-    decideAction expectSet =
+    decideAction expectSet defaults =
       let (partial, full) = partitionEithers (tryMatch <$> liveSteps expectSet)
           orderedPartial = snd <$> sortBy (compare `on` fst) (catMaybes partial)
-       in case (full, surrogate, orderedPartial) of
-            ((e, Just response) : _, _, _) -> (e, response)
-            ((e, Nothing) : _, response, _) -> (e, return response)
-            ([], response, _) | lax -> (expectSet, return response)
-            ([], _, []) -> error $ noMatchError action
-            ([], _, _) -> error $ partialMatchError action orderedPartial
+       in case (full, findDefault defaults, surrogate, orderedPartial) of
+            ((e, Just response) : _, _, _, _) -> (e, response)
+            ((e, Nothing) : _, d, s, _) -> (e, fromMaybe (return s) d)
+            ([], d, s, _) | lax -> (expectSet, fromMaybe (return s) d)
+            ([], _, _, []) -> error $ noMatchError action
+            ([], _, _, _) -> error $ partialMatchError action orderedPartial
     tryMatch ::
       (Step m, ExpectSet m ()) ->
       Either (Maybe (Int, String)) (ExpectSet m (), Maybe (MockT m r))
@@ -524,6 +556,14 @@ mockMethodImpl lax surrogate action =
           Match ->
             Right (e, listToMaybe impls <*> Just action)
       | otherwise = Left Nothing
+
+    findDefault :: [Step m] -> Maybe (MockT m r)
+    findDefault [] = Nothing
+    findDefault (Step expected : _)
+      | Just (Loc _ (m :=> [r])) <- cast expected,
+        Match <- matchAction m action =
+        Just (r action)
+    findDefault (_ : steps) = findDefault steps
 
 -- | Implements a method in a 'Mockable' monad by delegating to the mock
 -- framework.  If the method is called unexpectedly, an exception will be

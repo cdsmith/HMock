@@ -426,6 +426,7 @@ coreTests = do
 
     it "describes expectations when asked" $
       example . runMockT $ do
+        whenever $ ReadFile_ anything
         expectations <- describeExpectations
 
         -- Format is deliberately unspecified.  We're forcing it here so that
@@ -441,6 +442,20 @@ coreTests = do
               return ()
 
         test `shouldThrow` anyException
+
+    it "allows the user to override a default" $
+      example $ runMockT $ do
+        whenever $ ReadFile_ anything
+
+        r1 <- readFile "foo.txt"
+
+        byDefault $ ReadFile "foo.txt" |-> "foo"
+        r2 <- readFile "foo.txt"
+        r3 <- readFile "bar.txt"
+
+        liftIO (r1 `shouldBe` "")
+        liftIO (r2 `shouldBe` "foo")
+        liftIO (r3 `shouldBe` "")
 
 errorWith :: (String -> Bool) -> SomeException -> Bool
 errorWith p e = p (show e)

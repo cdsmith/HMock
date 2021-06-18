@@ -112,29 +112,6 @@ test = do
   doSomething
 ```
 
-## `byDefault` to override default responses
-
-The built-in defaults for `mockMethod` and friends are closely tied to the
-`Default` type class.  We want people to be able to customize them.  I will add
-a `byDefault` operation, which replaces the default action for actions matching
-a `Matcher`.  The expectation must have precisely one response, and that
-response will be chosen instead of the built-in default when no response matches
-an expectation.
-
-`byDefault` is similar to `whenever`.  The difference is that `byDefault`
-inserts a new default response for *other* expectations (include pre-existing
-ones) that have no response.  On the other hand, `whenever` adds a new
-expectation *on top of* the existing expectations.  Calls that match the
-`whenever` will never even see the expectations masked by it.  This is similar
-to the distinction between gMock's `ON_CALL().WillByDefault()` versus
-`EXPECT_CALL().WillRepeatedly()`.
-
-Open questions:
-
-1. Should `byDefault` make the expectation lax?  I think no, as this is rather
-   ad hoc.  You can use `whenever` to accomplish this, but only if there are
-   no interesting matchers already added.
-
 ## Side effects?
 
 Sometimes I want to add behavior (such as logging, new expectations, whatever)
