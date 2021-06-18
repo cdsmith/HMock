@@ -77,10 +77,10 @@ class MonadAuth m => MonadChat m where
 class Monad m => MonadBugReport m where
   reportBug :: String -> m ()
 
--- | An exception thrown when a blocked user attempts to read chat.
-data BlockedException = BlockedException deriving (Show)
+-- | An exception thrown when a banned user attempts to join a room.
+data BannedException = BannedException deriving (Show)
 
-instance Exception BlockedException
+instance Exception BannedException
 
 -------------------------------------------------------------------------------
 -- PART 2: IMPLEMENTATION
@@ -165,7 +165,7 @@ baseExpectations = do
   whenever $ HasPermission_ anything |-> True
 
   -- Our tests aren't generally concerned with what the bot says.  Individual
-  -- tests can add ex
+  -- tests can add expectations to check for specific messages.
   whenever $ SendChat_ anything anything
 
 demoSpec :: SpecWith ()
@@ -193,16 +193,34 @@ demoSpec = describe "chatbot" $ do
     example $
       runMockT $ do
         baseExpectations
-        whenever $ PollChat_ anything |=> \_ -> throwM BlockedException
+        whenever $ JoinRoom "#haskell" |=> \_ -> throwM BannedException
 
         -- An exception will be thrown when attempting to read chat.  The bot
-        -- should still leave the room and log out.
-        chatbot "#haskell" `catch` \BlockedException -> return ()
+        -- is still expected to log out.
+        chatbot "#haskell" `catch` \BannedException -> return ()
+
+  it "doesn't ban if it doesn't have permission" $ do
+    example $
+      runMockT $ do
+        baseExpectations
+
+        -- Override the earlier default behavior, returning False for the Admin
+        -- permission level.
+        whenever $ HasPermission Admin |-> False
+        whenever $
+          PollChat_ anything
+            |-> (User "A", "I love Haskell")
+            |-> (User "A", "!leave")
+
+        chatbot "#haskell"
 
   it "doesn't ban people for using four-letter words in big reports" $ do
     example $
       runMockT $ do
         baseExpectations
+        -- A four letter word is used in a bug report.  This is understandable,
+        -- so the user shouldn't be banned.  The bug should be reported,
+        -- instead.
         whenever $
           PollChat_ anything
             |-> (User "A", "!bug Fix the damn website!")
