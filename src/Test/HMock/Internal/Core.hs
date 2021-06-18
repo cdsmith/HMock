@@ -170,8 +170,8 @@ type MockableMethod
   (Mockable cls, Typeable m, KnownSymbol name, Typeable r)
 
 -- | A single step of an expectation.
-data Step where
-  Step :: MockableMethod cls name m r => Located (Rule cls name m r) -> Step
+data Step m where
+  Step :: MockableMethod cls name m r => Located (Rule cls name m r) -> Step m
 
 data Order = InOrder | AnyOrder deriving (Eq)
 
@@ -181,7 +181,7 @@ data Order = InOrder | AnyOrder deriving (Eq)
 -- (see below) to avoid GHC warnings about unused return values.
 data ExpectSet (m :: Type -> Type) a where
   ExpectNothing :: ExpectSet m ()
-  Expect :: Multiplicity -> Step -> ExpectSet m ()
+  Expect :: Multiplicity -> Step m -> ExpectSet m ()
   ExpectMulti :: Order -> [ExpectSet m ()] -> ExpectSet m ()
 
 -- | Converts a set of expectations into a string that summarizes them, with
@@ -200,7 +200,7 @@ formatExpectSet prefix (ExpectMulti order xs) =
 
 -- | Get a list of steps that can match actions right now, together with the
 -- remaining expectations if each one were to match.
-liveSteps :: ExpectSet m () -> [(Step, ExpectSet m ())]
+liveSteps :: ExpectSet m () -> [(Step m, ExpectSet m ())]
 liveSteps = map (second simplify) . go
   where
     go ExpectNothing = []
@@ -514,7 +514,7 @@ mockMethodImpl lax surrogate action =
             ([], _, []) -> error $ noMatchError action
             ([], _, _) -> error $ partialMatchError action orderedPartial
     tryMatch ::
-      (Step, ExpectSet m ()) ->
+      (Step m, ExpectSet m ()) ->
       Either (Maybe (Int, String)) (ExpectSet m (), Maybe (MockT m r))
     tryMatch (Step expected, e)
       | Just lrule@(Loc _ (m :=> impls)) <- cast expected =
