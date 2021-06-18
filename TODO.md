@@ -90,7 +90,7 @@ is done, they can be checked and removed immediately.
 The risk this solves is that you add an expectation intending for it to happen
 in one part of the test, but then it gets missed and later satisfied by accident
 elsewhere.  Also, you may want to ignore certain calls in a part of the test,
-which you could accomplish by pushing a `whenever` rule and then popping it
+which you could accomplish by pushing a `expectAny` rule and then popping it
 when you're done.
 
 Proposed API:
@@ -103,7 +103,7 @@ test = do
 
   nestMockT $ do
     -- doSomething should be ignored in this part of the test.
-    whenever $ DoSomething
+    expectAny $ DoSomething
     doSomething
     doSomething
 
@@ -123,9 +123,7 @@ response, but it:
 2. Doesn't have a return value.
 3. Doesn't fulfill the expectation.
 
-The `whenever` name is perfect for this, so if this is implemented, I'd probably
-first rename the existing `whenever` to `expectAny`, and then add this as
-`whenever`.
+The perfect name for this operation is `whenever`.
 
 ## Better predicate descriptions
 
@@ -220,7 +218,7 @@ constraint, so we should be able to check this at runtime instead!  That is, one
 should be able to write something like:
 
 ``` haskell
-whenever $ Foo_ (typed @Bool anything) |-> True
+expectAny $ Foo_ (typed @Bool anything) |-> True
 ```
 
 Unifying the return types requires a `cast` in `matchAction`, but we should have
@@ -242,7 +240,7 @@ expectation, like this:
 
 ``` haskell
 -- Matches foo applied to any type of argument.
-whenever $ Foo_ anything :-> \(Foo x) -> return x
+expectAny $ Foo_ anything :-> \(Foo x) -> return x
 ```
 
 However, `(:->)` has an ambiguous type here.  My instinct is to try to promote

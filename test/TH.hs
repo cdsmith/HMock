@@ -19,24 +19,24 @@ $(pure [])
 
 setup :: (Typeable m, MonadIO m) => MockT m ()
 setup = do
-  whenever $ QReify ''Bool |-> $(reifyStatic ''Bool)
-  whenever $ QReify ''Int |-> $(reifyStatic ''Int)
-  whenever $ QReify ''String |-> $(reifyStatic ''String)
-  whenever $ QReify ''NotShowable |-> $(reifyStatic ''NotShowable)
+  expectAny $ QReify ''Bool |-> $(reifyStatic ''Bool)
+  expectAny $ QReify ''Int |-> $(reifyStatic ''Int)
+  expectAny $ QReify ''String |-> $(reifyStatic ''String)
+  expectAny $ QReify ''NotShowable |-> $(reifyStatic ''NotShowable)
 
-  whenever $
+  expectAny $
     QReifyInstances ''Show [ConT ''String]
       |-> $(reifyInstancesStatic ''Show [ConT ''String])
-  whenever $
+  expectAny $
     QReifyInstances ''Show [ConT ''Char]
       |-> $(reifyInstancesStatic ''Show [ConT ''Char])
-  whenever $
+  expectAny $
     QReifyInstances ''Show [ConT ''Int]
       |-> $(reifyInstancesStatic ''Show [ConT ''Int])
-  whenever $
+  expectAny $
     QReifyInstances ''Show [ConT ''NotShowable]
       |-> $(reifyInstancesStatic ''Show [ConT ''NotShowable])
-  whenever $
+  expectAny $
     QReifyInstances_
       (eq ''Show)
       (elemsAre [$(qMatch [p|AppT ListT (VarT _)|])])
@@ -44,7 +44,7 @@ setup = do
                ''Show
                [AppT ListT (VarT (Name (OccName "v") NameS))]
            )
-  whenever $
+  expectAny $
     QReifyInstances
       ''Show
       [AppT (AppT (TupleT 2) (ConT ''Int)) (ConT ''NotShowable)]

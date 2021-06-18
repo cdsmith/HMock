@@ -57,7 +57,7 @@ module Test.HMock
     ExpectContext,
     expect,
     expectN,
-    whenever,
+    expectAny,
     inSequence,
     inAnyOrder,
 

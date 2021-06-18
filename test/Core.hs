@@ -223,8 +223,8 @@ coreTests = do
 
     it "prefers most recent method match" $
       example . runMockT $ do
-        whenever $ ReadFile "foo.txt" |-> "a"
-        whenever $ ReadFile "foo.txt" |-> "b"
+        expectAny $ ReadFile "foo.txt" |-> "a"
+        expectAny $ ReadFile "foo.txt" |-> "b"
         expect $ ReadFile "foo.txt" |-> "c"
         expect $ ReadFile "foo.txt" |-> "d"
 
@@ -243,7 +243,7 @@ coreTests = do
         let setExpectations = do
               expectN (atLeast 3) $ ReadFile "foo.txt" |-> "foo"
               expectN (atMost 2) $ ReadFile "bar.txt" |-> "bar"
-              whenever $ ReadFile "baz.txt" |-> "baz"
+              expectAny $ ReadFile "baz.txt" |-> "baz"
 
             success1 = runMockT $ do
               setExpectations
@@ -335,8 +335,8 @@ coreTests = do
       example $ do
         let setExpectations =
               inSequence
-                [ whenever $ WriteFile "foo.txt" "foo",
-                  whenever $ WriteFile "foo.txt" "bar"
+                [ expectAny $ WriteFile "foo.txt" "foo",
+                  expectAny $ WriteFile "foo.txt" "bar"
                 ]
 
             success = runMockT $ do
@@ -368,7 +368,7 @@ coreTests = do
       example $ do
         ref <- newIORef ""
         runMockT $ do
-          whenever $
+          expectAny $
             WriteFile_ (eq "foo.txt") anything
               |=> \(WriteFile _ c) -> liftIO (writeIORef ref c)
           writeFile "foo.txt" "open sesame"
@@ -377,7 +377,7 @@ coreTests = do
     it "respects expectations added by a response" $
       example $ do
         let setExpectations = do
-              whenever $
+              expectAny $
                 OpenSocket_ anything |=> \(OpenSocket n) -> do
                   expect $ CloseSocket (Handle n)
                   return (Handle n)
@@ -401,7 +401,7 @@ coreTests = do
       example $ do
         flip runReaderT "read me" $
           runMockT $ do
-            whenever $ ReadFile_ anything |=> const ask
+            expectAny $ ReadFile_ anything |=> const ask
 
             a <- readFile ""
             liftIO (a `shouldBe` "read me")
@@ -414,7 +414,7 @@ coreTests = do
       example $ do
         filesRead <- flip execStateT (0 :: Int) $
           runMockT $ do
-            whenever $
+            expectAny $
               ReadFile_ anything
                 |=> \_ -> modify (+ 1) >> return ""
 
@@ -426,7 +426,7 @@ coreTests = do
 
     it "describes expectations when asked" $
       example . runMockT $ do
-        whenever $ ReadFile_ anything
+        expectAny $ ReadFile_ anything
         expectations <- describeExpectations
 
         -- Format is deliberately unspecified.  We're forcing it here so that
@@ -445,7 +445,7 @@ coreTests = do
 
     it "allows the user to override a default" $
       example $ runMockT $ do
-        whenever $ ReadFile_ anything
+        expectAny $ ReadFile_ anything
 
         r1 <- readFile "foo.txt"
 

@@ -18,7 +18,7 @@ import Control.Monad.Catch (MonadMask, catch, finally, throwM)
 import Control.Monad.Trans (MonadIO)
 import Data.Char (isLetter)
 import Data.Typeable (Typeable)
-import Test.HMock (MockT, anything, expect, runMockT, whenever, (|->), (|=>))
+import Test.HMock (MockT, anything, expect, runMockT, expectAny, (|->), (|=>))
 import Test.HMock.TH (makeMockable)
 import Test.Hspec (SpecWith, describe, example, it)
 import Prelude hiding (appendFile, readFile, writeFile)
@@ -147,13 +147,13 @@ baseExpectations :: (Typeable m, MonadIO m) => MockT m ()
 baseExpectations = do
   -- Ensure that when the chatbot logs in with the right username and
   -- password.
-  whenever $
+  expectAny $
     Login "HMockBot" "secretish"
       |=> \_ -> do
         -- Every login should be accompanied by a logout
         expect Logout
 
-  whenever $
+  expectAny $
     JoinRoom_ anything
       |=> \(JoinRoom room) -> do
         -- The bot should leave every room it joins.
@@ -162,11 +162,11 @@ baseExpectations = do
 
   -- By default, assume that the bot has all permissions.  Individual tests
   -- can override this assumption.
-  whenever $ HasPermission_ anything |-> True
+  expectAny $ HasPermission_ anything |-> True
 
   -- Our tests aren't generally concerned with what the bot says.  Individual
   -- tests can add expectations to check for specific messages.
-  whenever $ SendChat_ anything anything
+  expectAny $ SendChat_ anything anything
 
 demoSpec :: SpecWith ()
 demoSpec = describe "chatbot" $ do
@@ -176,7 +176,7 @@ demoSpec = describe "chatbot" $ do
         baseExpectations
 
         -- Set up some chat messages to be received.
-        whenever $
+        expectAny $
           PollChat_ anything
             |-> (User "A", "I love Haskell")
             |-> (User "B", "Lovin' the ass. candies")
@@ -193,7 +193,7 @@ demoSpec = describe "chatbot" $ do
     example $
       runMockT $ do
         baseExpectations
-        whenever $ JoinRoom "#haskell" |=> \_ -> throwM BannedException
+        expectAny $ JoinRoom "#haskell" |=> \_ -> throwM BannedException
 
         -- An exception will be thrown when attempting to read chat.  The bot
         -- is still expected to log out.
@@ -206,8 +206,8 @@ demoSpec = describe "chatbot" $ do
 
         -- Override the earlier default behavior, returning False for the Admin
         -- permission level.
-        whenever $ HasPermission Admin |-> False
-        whenever $
+        expectAny $ HasPermission Admin |-> False
+        expectAny $
           PollChat_ anything
             |-> (User "A", "I love Haskell")
             |-> (User "A", "!leave")
@@ -221,7 +221,7 @@ demoSpec = describe "chatbot" $ do
         -- A four letter word is used in a bug report.  This is understandable,
         -- so the user shouldn't be banned.  The bug should be reported,
         -- instead.
-        whenever $
+        expectAny $
           PollChat_ anything
             |-> (User "A", "!bug Fix the damn website!")
             |-> (User "A", "!leave")

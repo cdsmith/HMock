@@ -343,7 +343,7 @@ expectN mult e
 --
 --     callCodeUnderTest
 -- @
-whenever ::
+expectAny ::
   ( HasCallStack,
     MonadIO m,
     MockableMethod cls name m r,
@@ -352,7 +352,7 @@ whenever ::
   ) =>
   expectable ->
   ctx m ()
-whenever = fromExpectSet . makeExpect callStack anyMultiplicity
+expectAny = fromExpectSet . makeExpect callStack anyMultiplicity
 
 -- | Creates a sequential expectation.  Other actions can still happen during
 -- the sequence, but these specific expectations must be met in this order.

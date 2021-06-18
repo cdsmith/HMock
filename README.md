@@ -105,7 +105,7 @@ HMock is designed to help you avoid these mistakes, by offering:
 With HMock, you choose which constraints to enforce on the order of methods.
 If certain methods need to happen in a fixed sequence, you can use `inSequence`
 to check that.  But if you don't care about the order, you need not check it.
-If you don't care about certain methods at all, `whenever` will let you set a
+If you don't care about certain methods at all, `expectAny` will let you set a
 response without limiting when they are called.  Using `expectN`, you can make
 a method optional, or limit the number of times it can occur.
 
@@ -531,7 +531,7 @@ places where it was illuminating:
 * Certain behaviors that did need to be mocked, such as looking up `Eq` and
   `Show` instances for common types, were useful for many different tests.  To
   help with reuse, `QuasiMock` exports a reusable action, `setupQuasi`, that
-  configures these common responses as defaults with `whenever`.
+  configures these common responses as defaults with `expectAny`.
 
 * The actual mock required less than 25 lines of very straight-forward code,
   and `setupQuasi` was about the same.  (There was, though an unfortunate need
