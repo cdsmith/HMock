@@ -45,6 +45,10 @@ class (Typeable cls) => Mockable (cls :: (Type -> Type) -> Constraint) where
 -- | A class that can be used to set up default behaviors for a 'Mockable'
 -- class.  There is a default instance that does nothing, but you can derive
 -- your own instances that overlap that one and add setup behavior.
+--
+-- For GHC 9 compatibility, your instance of 'MockableSetup' must be in the same
+-- declaration group with the instance of your class for 'MockT', not separated
+-- by any other Template Haskell splices. 
 class MockableSetup (cls :: (Type -> Type) -> Constraint) where
   -- An action to run and set up defaults for this class.  The action will be
   -- run before HMock touches the class, either to add expectations or to

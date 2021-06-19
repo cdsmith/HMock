@@ -479,6 +479,13 @@ runMockT $ do
     copyFile "foo.txt" "bar.txt"
 ```
 
+### `MockableSetup` isn't working with GHC 9.
+
+When using GHC 9, you must be careful to keep your `MockableSetup` instance in
+the same declaration group with the `MockT` implementation.  That means there
+should be no other Template Haskell splices between `makeMockable` or
+`deriveForMockT` and the instance for `MockableSetup`.
+
 ### Which GHC versions are supported?
 
 HMock is tested with GHC versions from 8.4 through 9.0.
