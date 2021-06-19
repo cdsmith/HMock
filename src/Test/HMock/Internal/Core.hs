@@ -18,6 +18,7 @@ module Test.HMock.Internal.Core where
 
 import Control.Arrow (second)
 import Control.Concurrent (MVar)
+import Control.Monad (unless)
 import Control.Monad.Base (MonadBase)
 import Control.Monad.Catch (MonadCatch, MonadMask, MonadThrow)
 import Control.Monad.Cont (MonadCont)
@@ -39,7 +40,10 @@ import Data.Function (on)
 import Data.Kind (Type)
 import Data.List (intercalate, sortBy)
 import Data.Maybe (catMaybes, fromMaybe, listToMaybe)
-import Data.Typeable (Typeable, cast)
+import Data.Proxy (Proxy (Proxy))
+import Data.Set (Set)
+import qualified Data.Set as Set
+import Data.Typeable (TypeRep, Typeable, cast, typeRep)
 import GHC.Stack (CallStack, HasCallStack, callStack, withFrozenCallStack)
 import GHC.TypeLits (KnownSymbol, Symbol)
 import Test.HMock.Internal.Multiplicity
@@ -69,7 +73,10 @@ data MatchResult where
 -- | A class for 'Monad' subclasses whose methods can be mocked.  You usually
 -- want to generate this instance using 'Test.HMock.TH.makeMockable' or
 -- 'Test.HMock.TH.deriveMockable', because it's just a lot of boilerplate.
-class Typeable cls => Mockable (cls :: (Type -> Type) -> Constraint) where
+class
+  (Typeable cls, MockableSetup cls) =>
+  Mockable (cls :: (Type -> Type) -> Constraint)
+  where
   -- | An action that is performed.  This data type will have one constructor
   -- for each method.
   data Action cls :: Symbol -> (Type -> Type) -> Type -> Type
@@ -86,6 +93,18 @@ class Typeable cls => Mockable (cls :: (Type -> Type) -> Constraint) where
 
   -- | Attempts to match an 'Action' with a 'Matcher'.
   matchAction :: Matcher cls name m a -> Action cls name m a -> MatchResult
+
+-- | A class that can be used to set up default behaviors for a 'Mockable'
+-- class.  There is a default instance that does nothing, but you can derive
+-- your own instances that overlap that one and add setup behavior.
+class MockableSetup (cls :: (Type -> Type) -> Constraint) where
+  -- An action to run and set up defaults for this class.  The action will be
+  -- run before HMock touches the class, either to add expectations or to
+  -- delegate a method.
+  setupMockable :: (MonadIO m, Typeable m) => proxy cls -> MockT m ()
+
+instance {-# OVERLAPPABLE #-} Mockable cls => MockableSetup cls where
+  setupMockable _ = return ()
 
 -- | Something that can be expected.  This type class covers a number of cases:
 --
@@ -397,14 +416,16 @@ inAnyOrder es = fromExpectSet (ExpectMulti AnyOrder es)
 
 data MockState m = MockState
   { mockExpectSet :: ExpectSet m (),
-    mockDefaults :: [Step m]
+    mockDefaults :: [Step m],
+    mockClasses :: Set TypeRep
   }
 
 initMockState :: MockState m
 initMockState =
   MockState
     { mockExpectSet = ExpectNothing,
-      mockDefaults = []
+      mockDefaults = [],
+      mockClasses = Set.empty
     }
 
 -- | Monad transformer for running mocks.
@@ -434,6 +455,28 @@ instance MonadTrans MockT where
 mapMockT :: (m a -> m b) -> MockT m a -> MockT m b
 mapMockT f = MockT . mapReaderT f . unMockT
 
+initClassIfNeeded ::
+  forall cls m proxy.
+  (Mockable cls, Typeable m, MonadIO m) =>
+  proxy cls ->
+  MockT m ()
+initClassIfNeeded proxy =
+  do
+    stateVar <- MockT ask
+    mockState <- takeMVar stateVar
+    let newMockClasses = Set.insert t (mockClasses mockState)
+    putMVar stateVar (mockState {mockClasses = newMockClasses})
+    unless (t `Set.member` mockClasses mockState) $ do
+      setupMockable (Proxy :: Proxy cls)
+  where
+    t = typeRep proxy
+
+initClassesAsNeeded :: MonadIO m => ExpectSet m () -> MockT m ()
+initClassesAsNeeded ExpectNothing = return ()
+initClassesAsNeeded (ExpectMulti _ es) = mapM_ initClassesAsNeeded es
+initClassesAsNeeded (Expect _ (Step (_ :: Located (Rule cls name m r)))) =
+  initClassIfNeeded (Proxy :: Proxy cls)
+
 instance MonadReader r m => MonadReader r (MockT m) where
   ask = lift ask
   local = mapMockT . local
@@ -441,6 +484,7 @@ instance MonadReader r m => MonadReader r (MockT m) where
 
 instance ExpectContext MockT where
   fromExpectSet e = do
+    initClassesAsNeeded e
     stateVar <- MockT ask
     mockState <- takeMVar stateVar
     let newExpectSet = simplify (ExpectMulti AnyOrder [e, mockExpectSet mockState])
@@ -509,8 +553,12 @@ verifyExpectations = do
 -- response, also overriding any previous defaults. The rule passed in must have
 -- exactly one response.
 byDefault ::
-  (MonadIO m, MockableMethod cls name m r) => Rule cls name m r -> MockT m ()
+  forall cls name m r.
+  (MonadIO m, MockableMethod cls name m r) =>
+  Rule cls name m r ->
+  MockT m ()
 byDefault r@(_ :=> [_]) = do
+  initClassIfNeeded (Proxy :: Proxy cls)
   stateVar <- MockT ask
   mockState <- takeMVar stateVar
   let newDefaults = Step (locate callStack r) : mockDefaults mockState
@@ -529,6 +577,7 @@ mockMethodImpl ::
   MockT m r
 mockMethodImpl lax surrogate action =
   do
+    initClassIfNeeded (Proxy :: Proxy cls)
     stateVar <- MockT ask
     mockState <- takeMVar stateVar
     let (newExpectSet, response) =

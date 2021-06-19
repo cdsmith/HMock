@@ -15,10 +15,16 @@ module Demo where
 import Control.Exception (Exception)
 import Control.Monad (unless, when)
 import Control.Monad.Catch (MonadMask, catch, finally, throwM)
-import Control.Monad.Trans (MonadIO)
 import Data.Char (isLetter)
-import Data.Typeable (Typeable)
-import Test.HMock (MockT, anything, expect, runMockT, expectAny, (|->), (|=>))
+import Test.HMock
+  ( MockableSetup (..),
+    anything,
+    expect,
+    expectAny,
+    runMockT,
+    (|->),
+    (|=>),
+  )
 import Test.HMock.TH (makeMockable)
 import Test.Hspec (SpecWith, describe, example, it)
 import Prelude hiding (appendFile, readFile, writeFile)
@@ -136,6 +142,37 @@ makeMockable ''MonadAuth
 makeMockable ''MonadChat
 makeMockable ''MonadBugReport
 
+-- You can configure your mocks' default behaviors by implementing the
+-- MockableSetup class.  There is a default implementation that does nothing,
+-- so you only need to do this if you have setup to do.
+
+instance MockableSetup MonadAuth where
+  setupMockable _ = do
+    -- Ensure that when the chatbot logs in with the right username and
+    -- password.
+    expectAny $
+      Login "HMockBot" "secretish"
+        |=> \_ -> do
+          -- Every login should be accompanied by a logout
+          expect Logout
+
+    -- By default, assume that the bot has all permissions.  Individual tests
+    -- can override this assumption.
+    expectAny $ HasPermission_ anything |-> True
+
+instance MockableSetup MonadChat where
+  setupMockable _ = do
+    expectAny $
+      JoinRoom_ anything
+        |=> \(JoinRoom room) -> do
+          -- The bot should leave every room it joins.
+          expect $ LeaveRoom (Room room)
+          return (Room room)
+
+    -- Our tests aren't generally concerned with what the bot says.  Individual
+    -- tests can add expectations to check for specific messages.
+    expectAny $ SendChat_ anything anything
+
 -------------------------------------------------------------------------------
 -- PART 4: TESTS
 
@@ -143,38 +180,11 @@ makeMockable ''MonadBugReport
 -- write a few representative tests to see how things work.  I'm using Hspec for
 -- the test framework, but you can use your favorite framework.
 
-baseExpectations :: (Typeable m, MonadIO m) => MockT m ()
-baseExpectations = do
-  -- Ensure that when the chatbot logs in with the right username and
-  -- password.
-  expectAny $
-    Login "HMockBot" "secretish"
-      |=> \_ -> do
-        -- Every login should be accompanied by a logout
-        expect Logout
-
-  expectAny $
-    JoinRoom_ anything
-      |=> \(JoinRoom room) -> do
-        -- The bot should leave every room it joins.
-        expect $ LeaveRoom (Room room)
-        return (Room room)
-
-  -- By default, assume that the bot has all permissions.  Individual tests
-  -- can override this assumption.
-  expectAny $ HasPermission_ anything |-> True
-
-  -- Our tests aren't generally concerned with what the bot says.  Individual
-  -- tests can add expectations to check for specific messages.
-  expectAny $ SendChat_ anything anything
-
 demoSpec :: SpecWith ()
 demoSpec = describe "chatbot" $ do
   it "bans users who use four-letter words" $
     example $
       runMockT $ do
-        baseExpectations
-
         -- Set up some chat messages to be received.
         expectAny $
           PollChat_ anything
@@ -192,7 +202,6 @@ demoSpec = describe "chatbot" $ do
   it "still logs out cleanly when there are errors" $ do
     example $
       runMockT $ do
-        baseExpectations
         expectAny $ JoinRoom "#haskell" |=> \_ -> throwM BannedException
 
         -- An exception will be thrown when attempting to read chat.  The bot
@@ -202,8 +211,6 @@ demoSpec = describe "chatbot" $ do
   it "doesn't ban if it doesn't have permission" $ do
     example $
       runMockT $ do
-        baseExpectations
-
         -- Override the earlier default behavior, returning False for the Admin
         -- permission level.
         expectAny $ HasPermission Admin |-> False
@@ -217,7 +224,6 @@ demoSpec = describe "chatbot" $ do
   it "doesn't ban people for using four-letter words in big reports" $ do
     example $
       runMockT $ do
-        baseExpectations
         -- A four letter word is used in a bug report.  This is understandable,
         -- so the user shouldn't be banned.  The bug should be reported,
         -- instead.

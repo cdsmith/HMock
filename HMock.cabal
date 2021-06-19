@@ -33,6 +33,7 @@ library
                       Test.HMock.Internal.Util
     build-depends:    base >=4.11.0 && < 4.16,
                       constraints >= 0.13 && < 0.14,
+                      containers,
                       data-default >= 0.7.1 && < 0.8,
                       exceptions >= 0.10.4 && < 0.11,
                       extra >= 1.7.9 && < 1.8,
@@ -60,6 +61,7 @@ test-suite tests
                       Extras,
                       QuasiMock,
                       TH,
+                      Util.DeriveRecursive,
                       Util.TH
     build-depends:    HMock,
                       base,

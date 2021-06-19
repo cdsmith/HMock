@@ -42,43 +42,11 @@ Open questions:
    open a file, you must close it", and I want to say that independent of
    whether I assert that you should open a specific filename.
 
-## Consider failing lax mocks on mismatched parameters or multiplicity
+## Remove lax mocks feature
 
-gMock makes a distinction netween uninteresting and unexpected methods.  See
-https://google.github.io/googletest/gmock_cook_book.html#uninteresting-vs-unexpected.
-An uninteresting method is one that has no expectations at all.  An unexpected
-method is one that DOES have expectations, but those expectations don't match
-the arguments, multiplicity constraints, etc.  HMock could easily make a similar
-distinction.  I'm not sure if it's a good idea.
-
-One interesting use case is that in gMock, you can explicitly say "this should
-never happen".  Since gMock is lax by default for uninteresting methods, this
-converts a method from "uninteresting" (thus, accepted) to "unexpected" (thus,
-rejected).
-
-## Default setup per class
-
-In many cases, there's a sort of natural default set of behaviors for mocks of a
-class.  One might hope for a way to write these alongside `makeMockable`, so
-that you don't have to separately export a `setup` action for each mockable
-class.
-
-A design might look something like this:
-
-``` haskell
-class MockSetup cls => Mockable cls where { ... }
-class Mockable cls => MockSetup cls where
-  setupMock :: Proxy cls -> MockT m ()
-```
-
-The contract would be that setupMock is called exactly once before the first
-expectation is added *or* mocked method is resolved for a given class.
-
-The reason for separating `MockSetup` from `Mockable` is that `Mockable` is
-usually defined in Template Haskell, while `MockSetup` should be defined by the
-user.  I don't really understand overlapping instances all that well, but I'm
-tempted to say there should be an overlappable default instance for `MockSetup`
-that does nothing at all.
+Now that we have MockableSetup, there's really no reason to ever use lax mocks.
+You should just call `expectAny` from `setupMockable` instead.  I should delete
+that feature.
 
 ## Local contexts
 

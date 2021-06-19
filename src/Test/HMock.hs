@@ -125,6 +125,7 @@ module Test.HMock
 
     -- * Implementing mocks
     Mockable (..),
+    MockableSetup(..),
     MatchResult (..),
     mockMethod,
     mockLaxMethod,

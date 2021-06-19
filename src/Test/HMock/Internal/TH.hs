@@ -326,10 +326,11 @@ deriveMockableImpl options qt = do
       "Cannot derive Mockable because " ++ pprint (instType inst)
         ++ " has no mockable methods."
 
+  typeableCxts <- constrainVars [conT ''Typeable] (instGeneralParams inst)
   (++)
     <$> sequence
       [ instanceD
-          (constrainVars [conT ''Typeable] (instGeneralParams inst))
+          (pure typeableCxts)
           [t|Mockable $(pure (instType inst))|]
           [ defineActionType options inst,
             defineMatcherType options inst,
