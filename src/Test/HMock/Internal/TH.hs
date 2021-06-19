@@ -35,8 +35,7 @@ import GHC.Stack (HasCallStack)
 import GHC.TypeLits (Symbol)
 import Language.Haskell.TH hiding (Match, match)
 import Language.Haskell.TH.Syntax (Lift (lift))
-import Test.HMock.Internal.Core
-import Test.HMock.Internal.Predicates (Predicate (accept), eq)
+import Test.HMock
 import Test.HMock.Internal.TH.Util
 
 -- | Custom options for deriving a 'Mockable' class.

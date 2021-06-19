@@ -50,7 +50,7 @@ module Test.HMock
 
     -- * Setting expectations
     MockableMethod,
-    Expectable,
+    Expectable (..),
     Rule,
     (|=>),
     (|->),
@@ -125,13 +125,15 @@ module Test.HMock
 
     -- * Implementing mocks
     Mockable (..),
-    MockableSetup(..),
+    MockableSetup (..),
     MatchResult (..),
     mockMethod,
     mockDefaultlessMethod,
   )
 where
 
-import Test.HMock.Internal.Core
+import Test.HMock.Internal.Expectable
+import Test.HMock.Internal.MockT
+import Test.HMock.Internal.Mockable
 import Test.HMock.Internal.Multiplicity
 import Test.HMock.Internal.Predicates
