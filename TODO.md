@@ -100,6 +100,35 @@ far as how to delegate to the mock implementations, this might be handled by
 backpack, or by just creating a new module with an identical API and using CPP
 in the system under test to import one or the other module.
 
+## Slay the overlapping instances
+
+There is currently an overlappable instance for MockableSetup, which can be
+overlapped by class-specific instances that initialize those classes.  This is
+fragile, and already breaks a bit with GHC 9.  Instead, we could adopt a
+different design, as follows:
+
+``` haskell
+
+class MockableBase cls where
+  -- Existing Mockable members go here.
+
+class MockableBase cls => Mockable cls where
+  setupMockable :: MonadIO m => MockT m ()
+
+
+-- | Derive just MockableBase and MockT.
+makeMockableBase :: Name -> Q [Dec]
+
+-- | Derive Mockable (with empty init) and MockT
+makeMockable :: Name -> Q [Dec]
+
+-- and similar for deriveMockable
+```
+
+Now instead of adding an overlapping instance, a developer who wants to add
+custom setup would change `makeMockable` to `makeMockableBase` and then manually
+write a `Mockable` instance.  This is much less fragile.
+
 ## Local contexts
 
 The idea behind this is that sometimes you want to define expectations to be
