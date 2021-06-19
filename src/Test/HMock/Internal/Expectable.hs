@@ -156,7 +156,8 @@ expect ::
   ) =>
   expectable ->
   ctx m ()
-expect e = fromExpectSet (makeExpect callStack (exactly (max 1 (length rs))) e)
+expect e =
+  fromExpectSet (makeExpect callStack (fromIntegral (max 1 (length rs))) e)
   where
     (_ :=> rs) = toRule e
 

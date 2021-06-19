@@ -5,9 +5,9 @@ module Test.HMock.Internal.ExpectSet where
 import Control.Arrow (second)
 import Test.HMock.Internal.Multiplicity
   ( Multiplicity,
-    decMultiplicity,
     exhaustable,
     once,
+    satisfiable,
   )
 
 data Order = InOrder | AnyOrder deriving (Eq)
@@ -44,9 +44,10 @@ liveSteps :: Steppable step => ExpectSet step -> [(step, ExpectSet step)]
 liveSteps = map (second simplify) . go
   where
     go ExpectNothing = []
-    go (Expect multiplicity step) = case decMultiplicity multiplicity of
-      Nothing -> [(step, ExpectNothing)]
-      Just multiplicity' -> [(step, Expect multiplicity' (nextStep step))]
+    go (Expect multiplicity step)
+      | satisfiable (multiplicity - 2) =
+        [(step, Expect (multiplicity - 1) (nextStep step))]
+      | otherwise = [(step, ExpectNothing)]
     go (ExpectMulti order es) = fmap (ExpectMulti order) <$> nextSteps order es
 
     nextSteps _ [] = []

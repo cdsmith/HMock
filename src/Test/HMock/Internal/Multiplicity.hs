@@ -20,33 +20,41 @@ instance Show Multiplicity where
     | m == n - 1 = show m ++ " or " ++ show n ++ " times"
     | otherwise = show m ++ " to " ++ show n ++ " times"
 
+-- | This is an incomplete instance, provided for convenience.  You cannot
+-- multiply multiplicities, so this will result in a runtime error.
+--
+-- >>> meetsMultiplicity 5 4
+-- False
+-- >>> meetsMultiplicity 5 5
+-- True
+-- >>> between 4 6 - between 1 2
+-- 2 to 5 times
+instance Num Multiplicity where
+  fromInteger n =
+    normalize $ Multiplicity (fromInteger n) (Just (fromInteger n))
+  Multiplicity a b + Multiplicity c d =
+    normalize $ Multiplicity (a + c) ((+) <$> b <*> d)
+  Multiplicity a b - Multiplicity c d =
+    normalize $ Multiplicity (maybe 0 (a -) d) (subtract c <$> b)
+
+  (*) = error "Multiplicities cannot be multiplied"
+
+  abs = id
+  signum (Multiplicity 0 (Just 0)) = 0
+  signum m
+    | not (satisfiable m) = -1
+    | otherwise = 1
+
+normalize :: Multiplicity -> Multiplicity
+normalize (Multiplicity a b) = Multiplicity a' b
+  where a' = max 0 a
+
 -- | Checks whether a certain number satisfies the 'Multiplicity'.
 meetsMultiplicity :: Multiplicity -> Int -> Bool
 meetsMultiplicity (Multiplicity lo mbhi) n
   | n < lo = False
   | Just hi <- mbhi, n > hi = False
   | otherwise = True
-
--- | Decrements a 'Multiplicity'.
---
--- Returns 'Just' the remaining 'Multiplicity', if any, or 'Nothing' if there is
--- none left.
-decMultiplicity :: Multiplicity -> Maybe Multiplicity
-decMultiplicity (Multiplicity _ (Just hi))
-  | hi <= 1 = Nothing
-decMultiplicity (Multiplicity lo hi) =
-  Just (Multiplicity (max 0 (lo - 1)) (subtract 1 <$> hi))
-
--- | A 'Multiplicity' that means exactly this many times.
---
--- >>> meetsMultiplicity (exactly 5) 4
--- False
--- >>> meetsMultiplicity (exactly 5) 5
--- True
--- >>> meetsMultiplicity (exactly 5) 6
--- False
-exactly :: Int -> Multiplicity
-exactly n = Multiplicity n (Just n)
 
 -- | A 'Multiplicity' that means exactly once.
 --
@@ -57,7 +65,7 @@ exactly n = Multiplicity n (Just n)
 -- >>> meetsMultiplicity once 2
 -- False
 once :: Multiplicity
-once = exactly 1
+once = 1
 
 -- | A 'Multiplicity' that means any number of times.
 -- >>> meetsMultiplicity anyMultiplicity 0
@@ -77,8 +85,8 @@ anyMultiplicity = atLeast 0
 -- True
 -- >>> meetsMultiplicity (atLeast 2) 3
 -- True
-atLeast :: Int -> Multiplicity
-atLeast n = Multiplicity n Nothing
+atLeast :: Multiplicity -> Multiplicity
+atLeast (Multiplicity n _) = Multiplicity n Nothing
 
 -- | A 'Multiplicity' that means at most this many times.
 --
@@ -88,23 +96,23 @@ atLeast n = Multiplicity n Nothing
 -- True
 -- >>> meetsMultiplicity (atMost 2) 3
 -- False
-atMost :: Int -> Multiplicity
-atMost n = Multiplicity 0 (Just n)
+atMost :: Multiplicity -> Multiplicity
+atMost (Multiplicity _ n) = Multiplicity 0 n
 
 -- | A 'Multiplicity' that means any number in this interval, endpoints
--- included.  For example, @'interval' 2 3@ means 2 or 3 times, while
--- @'interval' n n@ is equivalent to @'exactly' n@.
+-- included.  For example, @'between' 2 3@ means 2 or 3 times, while
+-- @'between' n n@ is equivalent to @n@.
 --
--- >>> meetsMultiplicity (interval 2 3) 1
+-- >>> meetsMultiplicity (between 2 3) 1
 -- False
--- >>> meetsMultiplicity (interval 2 3) 2
+-- >>> meetsMultiplicity (between 2 3) 2
 -- True
--- >>> meetsMultiplicity (interval 2 3) 3
+-- >>> meetsMultiplicity (between 2 3) 3
 -- True
--- >>> meetsMultiplicity (interval 2 3) 4
+-- >>> meetsMultiplicity (between 2 3) 4
 -- False
-interval :: Int -> Int -> Multiplicity
-interval m n = Multiplicity (min m n) (Just (max m n))
+between :: Multiplicity -> Multiplicity -> Multiplicity
+between (Multiplicity m _) (Multiplicity _ n) = Multiplicity m n
 
 -- | Checks whether a 'Multiplicity' includes zero in its range.
 --
@@ -114,7 +122,19 @@ interval m n = Multiplicity (min m n) (Just (max m n))
 -- False
 -- >>> exhaustable (atMost 3)
 -- True
--- >>> exhaustable (interval 0 2)
+-- >>> exhaustable (between 0 2)
 -- True
 exhaustable :: Multiplicity -> Bool
 exhaustable (Multiplicity lo _) = lo == 0
+
+-- | Checks whether a 'Multiplicity' is capable of matching any number at all.
+--
+-- >>> satisfiable once
+-- True
+-- >>> satisfiable 0
+-- True
+-- >>> satisfiable (once - 2)
+-- False
+satisfiable :: Multiplicity -> Bool
+satisfiable (Multiplicity a (Just b)) = a <= b
+satisfiable _ = True

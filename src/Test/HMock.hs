@@ -121,10 +121,9 @@ module Test.HMock
     meetsMultiplicity,
     once,
     anyMultiplicity,
-    exactly,
     atLeast,
     atMost,
-    interval,
+    between,
 
     -- * Implementing mocks
     Mockable (..),

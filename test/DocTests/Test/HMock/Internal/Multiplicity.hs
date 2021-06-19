@@ -8,141 +8,159 @@ import qualified Test.DocTest.Driver as DocTest
 
 test :: DocTest.T ()
 test = do
- DocTest.printPrefix "Test.HMock.Internal.Multiplicity:42: "
-{-# LINE 42 "src/Test/HMock/Internal/Multiplicity.hs" #-}
+ DocTest.printPrefix "Test.HMock.Internal.Multiplicity:26: "
+{-# LINE 26 "src/Test/HMock/Internal/Multiplicity.hs" #-}
  DocTest.example
-{-# LINE 42 "src/Test/HMock/Internal/Multiplicity.hs" #-}
-      (meetsMultiplicity (exactly 5) 4)
+{-# LINE 26 "src/Test/HMock/Internal/Multiplicity.hs" #-}
+      (meetsMultiplicity 5 4)
   [ExpectedLine [LineChunk "False"]]
- DocTest.printPrefix "Test.HMock.Internal.Multiplicity:44: "
-{-# LINE 44 "src/Test/HMock/Internal/Multiplicity.hs" #-}
+ DocTest.printPrefix "Test.HMock.Internal.Multiplicity:28: "
+{-# LINE 28 "src/Test/HMock/Internal/Multiplicity.hs" #-}
  DocTest.example
-{-# LINE 44 "src/Test/HMock/Internal/Multiplicity.hs" #-}
-      (meetsMultiplicity (exactly 5) 5)
+{-# LINE 28 "src/Test/HMock/Internal/Multiplicity.hs" #-}
+      (meetsMultiplicity 5 5)
   [ExpectedLine [LineChunk "True"]]
- DocTest.printPrefix "Test.HMock.Internal.Multiplicity:46: "
-{-# LINE 46 "src/Test/HMock/Internal/Multiplicity.hs" #-}
+ DocTest.printPrefix "Test.HMock.Internal.Multiplicity:30: "
+{-# LINE 30 "src/Test/HMock/Internal/Multiplicity.hs" #-}
  DocTest.example
-{-# LINE 46 "src/Test/HMock/Internal/Multiplicity.hs" #-}
-      (meetsMultiplicity (exactly 5) 6)
-  [ExpectedLine [LineChunk "False"]]
- DocTest.printPrefix "Test.HMock.Internal.Multiplicity:53: "
-{-# LINE 53 "src/Test/HMock/Internal/Multiplicity.hs" #-}
+{-# LINE 30 "src/Test/HMock/Internal/Multiplicity.hs" #-}
+      (between 4 6 - between 1 2)
+  [ExpectedLine [LineChunk "2 to 5 times"]]
+ DocTest.printPrefix "Test.HMock.Internal.Multiplicity:61: "
+{-# LINE 61 "src/Test/HMock/Internal/Multiplicity.hs" #-}
  DocTest.example
-{-# LINE 53 "src/Test/HMock/Internal/Multiplicity.hs" #-}
+{-# LINE 61 "src/Test/HMock/Internal/Multiplicity.hs" #-}
       (meetsMultiplicity once 0)
-  [ExpectedLine [LineChunk "False"]]
- DocTest.printPrefix "Test.HMock.Internal.Multiplicity:55: "
-{-# LINE 55 "src/Test/HMock/Internal/Multiplicity.hs" #-}
- DocTest.example
-{-# LINE 55 "src/Test/HMock/Internal/Multiplicity.hs" #-}
-      (meetsMultiplicity once 1)
-  [ExpectedLine [LineChunk "True"]]
- DocTest.printPrefix "Test.HMock.Internal.Multiplicity:57: "
-{-# LINE 57 "src/Test/HMock/Internal/Multiplicity.hs" #-}
- DocTest.example
-{-# LINE 57 "src/Test/HMock/Internal/Multiplicity.hs" #-}
-      (meetsMultiplicity once 2)
   [ExpectedLine [LineChunk "False"]]
  DocTest.printPrefix "Test.HMock.Internal.Multiplicity:63: "
 {-# LINE 63 "src/Test/HMock/Internal/Multiplicity.hs" #-}
  DocTest.example
 {-# LINE 63 "src/Test/HMock/Internal/Multiplicity.hs" #-}
-      (meetsMultiplicity anyMultiplicity 0)
+      (meetsMultiplicity once 1)
   [ExpectedLine [LineChunk "True"]]
  DocTest.printPrefix "Test.HMock.Internal.Multiplicity:65: "
 {-# LINE 65 "src/Test/HMock/Internal/Multiplicity.hs" #-}
  DocTest.example
 {-# LINE 65 "src/Test/HMock/Internal/Multiplicity.hs" #-}
+      (meetsMultiplicity once 2)
+  [ExpectedLine [LineChunk "False"]]
+ DocTest.printPrefix "Test.HMock.Internal.Multiplicity:71: "
+{-# LINE 71 "src/Test/HMock/Internal/Multiplicity.hs" #-}
+ DocTest.example
+{-# LINE 71 "src/Test/HMock/Internal/Multiplicity.hs" #-}
+      (meetsMultiplicity anyMultiplicity 0)
+  [ExpectedLine [LineChunk "True"]]
+ DocTest.printPrefix "Test.HMock.Internal.Multiplicity:73: "
+{-# LINE 73 "src/Test/HMock/Internal/Multiplicity.hs" #-}
+ DocTest.example
+{-# LINE 73 "src/Test/HMock/Internal/Multiplicity.hs" #-}
       (meetsMultiplicity anyMultiplicity 1)
   [ExpectedLine [LineChunk "True"]]
- DocTest.printPrefix "Test.HMock.Internal.Multiplicity:67: "
-{-# LINE 67 "src/Test/HMock/Internal/Multiplicity.hs" #-}
+ DocTest.printPrefix "Test.HMock.Internal.Multiplicity:75: "
+{-# LINE 75 "src/Test/HMock/Internal/Multiplicity.hs" #-}
  DocTest.example
-{-# LINE 67 "src/Test/HMock/Internal/Multiplicity.hs" #-}
+{-# LINE 75 "src/Test/HMock/Internal/Multiplicity.hs" #-}
       (meetsMultiplicity anyMultiplicity 10)
   [ExpectedLine [LineChunk "True"]]
- DocTest.printPrefix "Test.HMock.Internal.Multiplicity:74: "
-{-# LINE 74 "src/Test/HMock/Internal/Multiplicity.hs" #-}
+ DocTest.printPrefix "Test.HMock.Internal.Multiplicity:82: "
+{-# LINE 82 "src/Test/HMock/Internal/Multiplicity.hs" #-}
  DocTest.example
-{-# LINE 74 "src/Test/HMock/Internal/Multiplicity.hs" #-}
+{-# LINE 82 "src/Test/HMock/Internal/Multiplicity.hs" #-}
       (meetsMultiplicity (atLeast 2) 1)
   [ExpectedLine [LineChunk "False"]]
- DocTest.printPrefix "Test.HMock.Internal.Multiplicity:76: "
-{-# LINE 76 "src/Test/HMock/Internal/Multiplicity.hs" #-}
+ DocTest.printPrefix "Test.HMock.Internal.Multiplicity:84: "
+{-# LINE 84 "src/Test/HMock/Internal/Multiplicity.hs" #-}
  DocTest.example
-{-# LINE 76 "src/Test/HMock/Internal/Multiplicity.hs" #-}
+{-# LINE 84 "src/Test/HMock/Internal/Multiplicity.hs" #-}
       (meetsMultiplicity (atLeast 2) 2)
   [ExpectedLine [LineChunk "True"]]
- DocTest.printPrefix "Test.HMock.Internal.Multiplicity:78: "
-{-# LINE 78 "src/Test/HMock/Internal/Multiplicity.hs" #-}
+ DocTest.printPrefix "Test.HMock.Internal.Multiplicity:86: "
+{-# LINE 86 "src/Test/HMock/Internal/Multiplicity.hs" #-}
  DocTest.example
-{-# LINE 78 "src/Test/HMock/Internal/Multiplicity.hs" #-}
+{-# LINE 86 "src/Test/HMock/Internal/Multiplicity.hs" #-}
       (meetsMultiplicity (atLeast 2) 3)
   [ExpectedLine [LineChunk "True"]]
- DocTest.printPrefix "Test.HMock.Internal.Multiplicity:85: "
-{-# LINE 85 "src/Test/HMock/Internal/Multiplicity.hs" #-}
+ DocTest.printPrefix "Test.HMock.Internal.Multiplicity:93: "
+{-# LINE 93 "src/Test/HMock/Internal/Multiplicity.hs" #-}
  DocTest.example
-{-# LINE 85 "src/Test/HMock/Internal/Multiplicity.hs" #-}
+{-# LINE 93 "src/Test/HMock/Internal/Multiplicity.hs" #-}
       (meetsMultiplicity (atMost 2) 1)
   [ExpectedLine [LineChunk "True"]]
- DocTest.printPrefix "Test.HMock.Internal.Multiplicity:87: "
-{-# LINE 87 "src/Test/HMock/Internal/Multiplicity.hs" #-}
+ DocTest.printPrefix "Test.HMock.Internal.Multiplicity:95: "
+{-# LINE 95 "src/Test/HMock/Internal/Multiplicity.hs" #-}
  DocTest.example
-{-# LINE 87 "src/Test/HMock/Internal/Multiplicity.hs" #-}
+{-# LINE 95 "src/Test/HMock/Internal/Multiplicity.hs" #-}
       (meetsMultiplicity (atMost 2) 2)
   [ExpectedLine [LineChunk "True"]]
- DocTest.printPrefix "Test.HMock.Internal.Multiplicity:89: "
-{-# LINE 89 "src/Test/HMock/Internal/Multiplicity.hs" #-}
+ DocTest.printPrefix "Test.HMock.Internal.Multiplicity:97: "
+{-# LINE 97 "src/Test/HMock/Internal/Multiplicity.hs" #-}
  DocTest.example
-{-# LINE 89 "src/Test/HMock/Internal/Multiplicity.hs" #-}
+{-# LINE 97 "src/Test/HMock/Internal/Multiplicity.hs" #-}
       (meetsMultiplicity (atMost 2) 3)
   [ExpectedLine [LineChunk "False"]]
- DocTest.printPrefix "Test.HMock.Internal.Multiplicity:98: "
-{-# LINE 98 "src/Test/HMock/Internal/Multiplicity.hs" #-}
+ DocTest.printPrefix "Test.HMock.Internal.Multiplicity:106: "
+{-# LINE 106 "src/Test/HMock/Internal/Multiplicity.hs" #-}
  DocTest.example
-{-# LINE 98 "src/Test/HMock/Internal/Multiplicity.hs" #-}
-      (meetsMultiplicity (interval 2 3) 1)
+{-# LINE 106 "src/Test/HMock/Internal/Multiplicity.hs" #-}
+      (meetsMultiplicity (between 2 3) 1)
   [ExpectedLine [LineChunk "False"]]
- DocTest.printPrefix "Test.HMock.Internal.Multiplicity:100: "
-{-# LINE 100 "src/Test/HMock/Internal/Multiplicity.hs" #-}
+ DocTest.printPrefix "Test.HMock.Internal.Multiplicity:108: "
+{-# LINE 108 "src/Test/HMock/Internal/Multiplicity.hs" #-}
  DocTest.example
-{-# LINE 100 "src/Test/HMock/Internal/Multiplicity.hs" #-}
-      (meetsMultiplicity (interval 2 3) 2)
+{-# LINE 108 "src/Test/HMock/Internal/Multiplicity.hs" #-}
+      (meetsMultiplicity (between 2 3) 2)
   [ExpectedLine [LineChunk "True"]]
- DocTest.printPrefix "Test.HMock.Internal.Multiplicity:102: "
-{-# LINE 102 "src/Test/HMock/Internal/Multiplicity.hs" #-}
+ DocTest.printPrefix "Test.HMock.Internal.Multiplicity:110: "
+{-# LINE 110 "src/Test/HMock/Internal/Multiplicity.hs" #-}
  DocTest.example
-{-# LINE 102 "src/Test/HMock/Internal/Multiplicity.hs" #-}
-      (meetsMultiplicity (interval 2 3) 3)
+{-# LINE 110 "src/Test/HMock/Internal/Multiplicity.hs" #-}
+      (meetsMultiplicity (between 2 3) 3)
   [ExpectedLine [LineChunk "True"]]
- DocTest.printPrefix "Test.HMock.Internal.Multiplicity:104: "
-{-# LINE 104 "src/Test/HMock/Internal/Multiplicity.hs" #-}
+ DocTest.printPrefix "Test.HMock.Internal.Multiplicity:112: "
+{-# LINE 112 "src/Test/HMock/Internal/Multiplicity.hs" #-}
  DocTest.example
-{-# LINE 104 "src/Test/HMock/Internal/Multiplicity.hs" #-}
-      (meetsMultiplicity (interval 2 3) 4)
+{-# LINE 112 "src/Test/HMock/Internal/Multiplicity.hs" #-}
+      (meetsMultiplicity (between 2 3) 4)
   [ExpectedLine [LineChunk "False"]]
- DocTest.printPrefix "Test.HMock.Internal.Multiplicity:111: "
-{-# LINE 111 "src/Test/HMock/Internal/Multiplicity.hs" #-}
+ DocTest.printPrefix "Test.HMock.Internal.Multiplicity:119: "
+{-# LINE 119 "src/Test/HMock/Internal/Multiplicity.hs" #-}
  DocTest.example
-{-# LINE 111 "src/Test/HMock/Internal/Multiplicity.hs" #-}
+{-# LINE 119 "src/Test/HMock/Internal/Multiplicity.hs" #-}
       (exhaustable anyMultiplicity)
   [ExpectedLine [LineChunk "True"]]
- DocTest.printPrefix "Test.HMock.Internal.Multiplicity:113: "
-{-# LINE 113 "src/Test/HMock/Internal/Multiplicity.hs" #-}
+ DocTest.printPrefix "Test.HMock.Internal.Multiplicity:121: "
+{-# LINE 121 "src/Test/HMock/Internal/Multiplicity.hs" #-}
  DocTest.example
-{-# LINE 113 "src/Test/HMock/Internal/Multiplicity.hs" #-}
+{-# LINE 121 "src/Test/HMock/Internal/Multiplicity.hs" #-}
       (exhaustable (atLeast 2))
   [ExpectedLine [LineChunk "False"]]
- DocTest.printPrefix "Test.HMock.Internal.Multiplicity:115: "
-{-# LINE 115 "src/Test/HMock/Internal/Multiplicity.hs" #-}
+ DocTest.printPrefix "Test.HMock.Internal.Multiplicity:123: "
+{-# LINE 123 "src/Test/HMock/Internal/Multiplicity.hs" #-}
  DocTest.example
-{-# LINE 115 "src/Test/HMock/Internal/Multiplicity.hs" #-}
+{-# LINE 123 "src/Test/HMock/Internal/Multiplicity.hs" #-}
       (exhaustable (atMost 3))
   [ExpectedLine [LineChunk "True"]]
- DocTest.printPrefix "Test.HMock.Internal.Multiplicity:117: "
-{-# LINE 117 "src/Test/HMock/Internal/Multiplicity.hs" #-}
+ DocTest.printPrefix "Test.HMock.Internal.Multiplicity:125: "
+{-# LINE 125 "src/Test/HMock/Internal/Multiplicity.hs" #-}
  DocTest.example
-{-# LINE 117 "src/Test/HMock/Internal/Multiplicity.hs" #-}
-      (exhaustable (interval 0 2))
+{-# LINE 125 "src/Test/HMock/Internal/Multiplicity.hs" #-}
+      (exhaustable (between 0 2))
   [ExpectedLine [LineChunk "True"]]
+ DocTest.printPrefix "Test.HMock.Internal.Multiplicity:132: "
+{-# LINE 132 "src/Test/HMock/Internal/Multiplicity.hs" #-}
+ DocTest.example
+{-# LINE 132 "src/Test/HMock/Internal/Multiplicity.hs" #-}
+      (satisfiable once)
+  [ExpectedLine [LineChunk "True"]]
+ DocTest.printPrefix "Test.HMock.Internal.Multiplicity:134: "
+{-# LINE 134 "src/Test/HMock/Internal/Multiplicity.hs" #-}
+ DocTest.example
+{-# LINE 134 "src/Test/HMock/Internal/Multiplicity.hs" #-}
+      (satisfiable 0)
+  [ExpectedLine [LineChunk "True"]]
+ DocTest.printPrefix "Test.HMock.Internal.Multiplicity:136: "
+{-# LINE 136 "src/Test/HMock/Internal/Multiplicity.hs" #-}
+ DocTest.example
+{-# LINE 136 "src/Test/HMock/Internal/Multiplicity.hs" #-}
+      (satisfiable (once - 2))
+  [ExpectedLine [LineChunk "False"]]
