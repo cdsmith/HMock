@@ -55,14 +55,14 @@ anyOf ::
   ctx m ()
 
 -- | Satisfy the nested expectation zero or more times (interleaved).
-repeatedly :: (MonadIO m, ExpectContext ctx) =>
+times :: (MonadIO m, ExpectContext ctx) =>
   Multiplicity ->
   (forall ctx'. ExpectContext ctx' => ctx' m ()) ->
   ctx m ()
 
 -- | Satisfy the nested expectation zero or more times consecutively, completing
 -- one before beginning the next.
-consecutively :: (MonadIO m, ExpectContext ctx) =>
+consecutiveTimes :: (MonadIO m, ExpectContext ctx) =>
   Multiplicity ->
   (forall ctx'. ExpectContext ctx' => ctx' m ()) ->
   ctx m ()
