@@ -137,18 +137,20 @@ banIfAdmin room user = do
 -- Set up the mocks for the three classes.  makeMockable is the first step to
 -- using HMock, and defines a number of boilerplate types and instances that are
 -- used by the framework and your tests.
+--
+-- How we do this depends on whether there is setup we want to package with the
+-- class:
 
-makeMockableBase ''MonadAuth
-makeMockableBase ''MonadChat
+-- Since there is no setup for MonadBugReport, it's easiest to use makeMockable
+-- to derive all instances needed to mock this class.
 makeMockable ''MonadBugReport
 
 -- For MonadAuth and MonadChat, we have default behaviors we'd like to offer
--- to all tests.  So instead of completely deriving Mockable, we've derived
--- MockableBase, which contains all the boilerplate.  We can now write a
--- Mockable instance with default behaviors.
---
--- Since there are no interesting default behaviors for MonadBugReport, it was
--- easier to use makeMockable to derive a Mockable class with empty setup.
+-- to all tests.  So instead of makeMockable, we use makeMockableBase to derive
+-- MockableBase, which contains all the boilerplate.  We can then write a
+-- Mockable instance with setup steps.
+
+makeMockableBase ''MonadAuth
 
 instance Mockable MonadAuth where
   setupMockable _ = do
@@ -163,6 +165,8 @@ instance Mockable MonadAuth where
     -- By default, assume that the bot has all permissions.  Individual tests
     -- can override this assumption.
     expectAny $ HasPermission_ anything |-> True
+
+makeMockableBase ''MonadChat
 
 instance Mockable MonadChat where
   setupMockable _ = do
