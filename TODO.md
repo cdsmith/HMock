@@ -42,6 +42,34 @@ Open questions:
    open a file, you must close it", and I want to say that independent of
    whether I assert that you should open a specific filename.
 
+## Instances for more systems
+
+MTL-style type classes are only one way of building an API layer for effectful
+actions.  Some others include:
+
+* Effect systems, like `eff`, `polysemy`, `fused-effects`, or `freer-simple`
+* API layers like `servant` or `haxl`
+* Plain old Haskell modules, with or without backpack
+
+I'd like to evaluate how effectively I could wire HMock's internals to each of
+these to expand the ability to mock more bits of code.
+
+Many of these systems already have their own action types, which could be
+trivially wrapped rather than deriving a new `Action` class.  This might mean
+that `Action` should be an injective type family rather than a data family.
+Then `Mockable` might need some kind of API distinction, such as writing
+`instance Mockable (MTLStyle MonadFoo)`.  The TH code would need to be system-
+specific.
+
+For plain old Haskell modules, we'd need a global set of expectations rather
+than tracking it in a monad wrapper.  Then we'd need `MockT` to be able to
+delegate to that global system, and we'd need a way to reset it before and
+after a test.  Maybe also track a version number, so that stray threads from
+previous tests don't make a mess in the current test and just fail instead.  As
+far as how to delegate to the mock implementations, this might be handled by
+backpack, or by just creating a new module with an identical API and using CPP
+in the system under test to import one or the other module.
+
 ## Local contexts
 
 The idea behind this is that sometimes you want to define expectations to be
@@ -109,34 +137,6 @@ partial matching.  I need:
   action fails to match.
 * To be able to explain why an action didn't match by referring to the specific
   argument or arguments that failed.
-
-## Instances for more systems
-
-MTL-style type classes are only one way of building an API layer for effectful
-actions.  Some others include:
-
-* Effect systems, like `eff`, `polysemy`, `fused-effects`, or `freer-simple`
-* API layers like `servant` or `haxl`
-* Plain old Haskell modules, with or without backpack
-
-I'd like to evaluate how effectively I could wire HMock's internals to each of
-these to expand the ability to mock more bits of code.
-
-Many of these systems already have their own action types, which could be
-trivially wrapped rather than deriving a new `Action` class.  This might mean
-that `Action` should be an injective type family rather than a data family.
-Then `Mockable` might need some kind of API distinction, such as writing
-`instance Mockable (MTLStyle MonadFoo)`.  The TH code would need to be system-
-specific.
-
-For plain old Haskell modules, we'd need a global set of expectations rather
-than tracking it in a monad wrapper.  Then we'd need `MockT` to be able to
-delegate to that global system, and we'd need a way to reset it before and
-after a test.  Maybe also track a version number, so that stray threads from
-previous tests don't make a mess in the current test and just fail instead.  As
-far as how to delegate to the mock implementations, this might be handled by
-backpack, or by just creating a new module with an identical API and using CPP
-in the system under test to import one or the other module.
 
 ## Wrappers to save responses from integration tests.
 
