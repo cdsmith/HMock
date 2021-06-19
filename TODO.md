@@ -30,17 +30,47 @@ Open questions:
    and the other is `x* = empty + (x || x*)`.  The paper linked above proposes
    only the first, but I'm not happy with this bias toward sequential
    expectations (which I believe should be the exception, not the rule).  On the
-   other hand, the interleave rule is inherently ambiguous, so it's useless if
-   ambiguity is rejected.  Maybe both should be offered.
-5. Is there also a use case for an intersection operator?  Since responses are
-   optional in HMock, it's possible we could add yet another operator, which
-   requires that *two* execution plans match simultaneously.  It would be an
-   error if both gave responses for the same action.  The reason this is
-   compelling to me is that it lets you isolate certain properties of the call
-   sequence, and enforce them "on the side" without worrying about how they
-   modify your main expectations.  Example: I want to be able to say "if you
-   open a file, you must close it", and I want to say that independent of
-   whether I assert that you should open a specific filename.
+   other hand, the interleave rule is ambiguous any time x itself contains
+   repeated actions.  Maybe both should be offered.
+
+Proposed API:
+
+``` haskell
+-- | Satisfy these nested expectations in sequence.
+inSequence ::
+  (MonadIO m, ExpectContext ctx) =>
+  (forall ctx'. ExpectContext ctx' => [ctx' m ()]) ->
+  ctx m ()
+
+-- | Satisfy these nested expectations in any order (interleaved).
+inAnyOrder ::
+  (MonadIO m, ExpectContext ctx) =>
+  (forall ctx'. ExpectContext ctx' => [ctx' m ()]) ->
+  ctx m ()
+
+-- | Satisfy only one of the nested expectations.
+anyOf ::
+  (MonadIO m, ExpectContext ctx) =>
+  (forall ctx'. ExpectContext ctx' => [ctx' m ()]) ->
+  ctx m ()
+
+-- | Satisfy the nested expectation zero or more times (interleaved).
+repeatedly :: (MonadIO m, ExpectContext ctx) =>
+  Multiplicity ->
+  (forall ctx'. ExpectContext ctx' => ctx' m ()) ->
+  ctx m ()
+
+-- | Satisfy the nested expectation zero or more times consecutively, completing
+-- one before beginning the next.
+consecutively :: (MonadIO m, ExpectContext ctx) =>
+  Multiplicity ->
+  (forall ctx'. ExpectContext ctx' => ctx' m ()) ->
+  ctx m ()
+```
+
+This covers the operations above, but it doesn't necessarily provide a
+convenient way to mutate them from inside test code.  For that, I get the
+feeling I need some kind of cursor-based system, maybe?
 
 ## Instances for more systems
 
