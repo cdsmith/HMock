@@ -43,13 +43,6 @@ import Test.HMock.Internal.TH.Util
 data MockableOptions = MockableOptions
   { -- | Suffix to add to 'Action' and 'Matcher' names.  Defaults to @""@.
     mockSuffix :: String,
-    -- | Whether to derive a lax 'MockT' instance.  When a lax instance is
-    -- derived, methods that return () may be called at any time without adding
-    -- expectations.  If you want only some methods to be lax, or if you want
-    -- methods that do not return () to be lax, then you must derive your own
-    -- 'MockT' instance, calling either 'mockMethod' or 'mockLaxMethod' as
-    -- desired in each case.
-    mockLax :: Bool,
     -- | Whether to warn about limitations of the generated mocks.  This is
     -- mostly useful temporarily for finding out why generated code doesn't
     -- match your expectations.  Defaults to @'False'@.
@@ -57,7 +50,7 @@ data MockableOptions = MockableOptions
   }
 
 instance Default MockableOptions where
-  def = MockableOptions {mockSuffix = "", mockLax = False, mockVerbose = False}
+  def = MockableOptions {mockSuffix = "", mockVerbose = False}
 
 -- | Define all instances necessary to use HMock with the given class.
 -- Equivalent to both 'deriveMockable' and 'deriveForMockT'.
@@ -619,12 +612,8 @@ implementMethod options method = do
     body argVars = do
       defaultCxt <- resolveInstance ''Default (methodResult method)
       let someMockMethod = case defaultCxt of
-            Just []
-              | mockLax options -> [|mockLaxMethod|]
-              | otherwise -> [|mockMethod|]
-            _
-              | mockLax options -> [|mockLaxDefaultlessMethod|]
-              | otherwise -> [|mockDefaultlessMethod|]
+            Just [] -> [|mockMethod|]
+            _ -> [|mockDefaultlessMethod|]
       [|
         $someMockMethod
           $(actionExp argVars (conE (getActionName options method)))

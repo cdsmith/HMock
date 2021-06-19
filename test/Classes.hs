@@ -23,7 +23,7 @@ import Data.Default (Default (def))
 import Data.Dynamic (Typeable)
 import Data.Kind (Type)
 import Language.Haskell.TH.Syntax hiding (Type)
-import QuasiMock ( Action(..), Matcher(..) )
+import QuasiMock (Action (..), Matcher (..))
 import Test.HMock
 import Test.HMock.TH
 import Test.Hspec
@@ -619,172 +619,68 @@ rankNTests = describe "MonadRankN" $ do
 -- | Type with no Default instance.
 data NoDefault = NoDefault
 
-class MonadStrict m where
-  strictUnit :: m ()
-  strictInt :: m Int
-  strictString :: m String
-  strictMaybe :: m (Maybe Bool)
-  strictNoDefault :: m NoDefault
+class MonadManyReturns m where
+  returnsUnit :: m ()
+  returnsInt :: m Int
+  returnsString :: m String
+  returnsMaybe :: m (Maybe Bool)
+  returnsNoDefault :: m NoDefault
 
-makeMockableWithOptions def {mockLax = False} ''MonadStrict
+makeMockable ''MonadManyReturns
 
-class MonadLax m where
-  laxUnit :: m ()
-  laxInt :: m Int
-  laxString :: m String
-  laxMaybe :: m (Maybe Bool)
-  laxNoDefault :: m NoDefault
-
-makeMockableWithOptions def {mockLax = True} ''MonadLax
-
-class MonadMixedLaxity m where
-  strictMethod :: m ()
-  laxMethod :: m ()
-  defaultlessMethod :: m ()
-  laxDefaultlessMethod :: m ()
-
-deriveMockable ''MonadMixedLaxity
-
-instance (Typeable m, MonadIO m) => MonadMixedLaxity (MockT m) where
-  laxMethod = mockLaxMethod LaxMethod
-  strictMethod = mockMethod StrictMethod
-  defaultlessMethod = mockDefaultlessMethod DefaultlessMethod
-  laxDefaultlessMethod = mockLaxDefaultlessMethod LaxDefaultlessMethod
-
-laxityTests :: SpecWith ()
-laxityTests = do
-  describe "MonadStrict" $ do
+defaultReturnTests :: SpecWith ()
+defaultReturnTests = do
+  describe "MonadManyReturns" $ do
     it "generates mock impl" $
       example $ do
         decs <- runMockT $ do
-          expectAny $ QReify ''MonadStrict |-> $(reifyStatic ''MonadStrict)
+          expectAny $
+            QReify ''MonadManyReturns |-> $(reifyStatic ''MonadManyReturns)
           expectAny $
             QReifyInstances ''Default [ConT ''NoDefault]
               |-> $(reifyInstancesStatic ''Default [ConT ''NoDefault])
 
-          runQ (makeMockableWithOptions def {mockLax = False} ''MonadStrict)
+          runQ (makeMockable ''MonadManyReturns)
         evaluate (rnf decs)
 
     it "fails when there's an unexpected method" $
-      example $ runMockT strictUnit `shouldThrow` anyException
+      example $ runMockT returnsUnit `shouldThrow` anyException
 
     it "succeeds when there's an expected method with default response" $
       example $ do
         result <- runMockT $ do
-          expect StrictUnit
-          expect StrictInt
-          expect StrictString
-          expect StrictMaybe
+          expect ReturnsUnit
+          expect ReturnsInt
+          expect ReturnsString
+          expect ReturnsMaybe
 
           (,,,)
-            <$> strictUnit
-            <*> strictInt
-            <*> strictString
-            <*> strictMaybe
+            <$> returnsUnit
+            <*> returnsInt
+            <*> returnsString
+            <*> returnsMaybe
 
         result `shouldBe` ((), 0, "", Nothing)
 
     it "overrides default when response is specified" $
       example $ do
         result <- runMockT $ do
-          expect StrictInt
-          expect $ StrictString |-> "non-default"
+          expect ReturnsInt
+          expect $ ReturnsString |-> "non-default"
 
           (,)
-            <$> strictInt
-            <*> strictString
+            <$> returnsInt
+            <*> returnsString
 
         result `shouldBe` (0, "non-default")
 
     it "returns undefined when response isn't given for defaultless method" $
       example $ do
         let test = runMockT $ do
-              expect StrictNoDefault
-              strictNoDefault
+              expect ReturnsNoDefault
+              returnsNoDefault
         _ <- test
         (test >>= evaluate) `shouldThrow` anyException
-
-  describe "MonadLax" $ do
-    it "generates mock impl" $
-      example $ do
-        decs <- runMockT $ do
-          expectAny $ QReify ''MonadLax |-> $(reifyStatic ''MonadLax)
-          expectAny $
-            QReifyInstances ''Default [ConT ''NoDefault]
-              |-> $(reifyInstancesStatic ''Default [ConT ''NoDefault])
-
-          runQ (makeMockableWithOptions def {mockLax = True} ''MonadLax)
-        evaluate (rnf decs)
-
-    it "succeeds when unexpected methods are called" $
-      example $ do
-        result <- runMockT $ do
-          (,,,)
-            <$> laxUnit
-            <*> laxInt
-            <*> laxString
-            <*> laxMaybe
-
-        result `shouldBe` ((), 0, "", Nothing)
-
-  describe "MonadMixedLaxity" $ do
-    it "generates mock impl" $
-      example $ do
-        decs <- runMockT $ do
-          expectAny $
-            QReify ''MonadMixedLaxity |-> $(reifyStatic ''MonadMixedLaxity)
-
-          runQ (deriveMockable ''MonadMixedLaxity)
-        evaluate (rnf decs)
-
-    it "responds appropriately to unexpected methods" $
-      example $ do
-        let strict = runMockT strictMethod
-        let lax = runMockT laxMethod
-        let strictND = runMockT defaultlessMethod
-        let laxND = runMockT laxDefaultlessMethod
-
-        strict `shouldThrow` anyException
-
-        lax >>= evaluate
-
-        strictND `shouldThrow` anyException
-
-        laxND
-        (laxND >>= evaluate) `shouldThrow` anyException
-
-    it "responds appropriately to expected methods with no response" $
-      example $ do
-        let strict = runMockT $ expect StrictMethod >> strictMethod
-        let lax = runMockT $ expect LaxMethod >> laxMethod
-        let strictND = runMockT $ expect DefaultlessMethod >> defaultlessMethod
-        let laxND = runMockT $ expect LaxDefaultlessMethod >> laxDefaultlessMethod
-
-        strict >>= evaluate
-
-        lax >>= evaluate
-
-        strictND
-        (strictND >>= evaluate) `shouldThrow` anyException
-
-        laxND
-        (laxND >>= evaluate) `shouldThrow` anyException
-
-    it "responds appropriately to expected methods with response" $
-      example $ do
-        let strict = runMockT $ expect (StrictMethod |-> ()) >> strictMethod
-        let lax = runMockT $ expect (LaxMethod |-> ()) >> laxMethod
-        let strictND =
-              runMockT $
-                expect (DefaultlessMethod |-> ()) >> defaultlessMethod
-        let laxND =
-              runMockT $
-                expect (LaxDefaultlessMethod |-> ()) >> laxDefaultlessMethod
-
-        strict >>= evaluate
-        lax >>= evaluate
-        strictND >>= evaluate
-        laxND >>= evaluate
 
 class MonadNestedNoDef m where
   nestedNoDef :: m (NoDefault, String)
@@ -886,6 +782,6 @@ classTests = describe "makeMockable" $ do
   monadInArgTests
   extraneousMembersTests
   rankNTests
-  laxityTests
+  defaultReturnTests
   nestedNoDefTests
   errorTests

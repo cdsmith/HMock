@@ -42,12 +42,6 @@ Open questions:
    open a file, you must close it", and I want to say that independent of
    whether I assert that you should open a specific filename.
 
-## Remove lax mocks feature
-
-Now that we have MockableSetup, there's really no reason to ever use lax mocks.
-You should just call `expectAny` from `setupMockable` instead.  I should delete
-that feature.
-
 ## Local contexts
 
 The idea behind this is that sometimes you want to define expectations to be

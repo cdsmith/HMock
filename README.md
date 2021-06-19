@@ -280,11 +280,14 @@ implementation for the problematic method.
 
 ### Why do I need a Default instance for `mockMethod`?
 
-`mockMethod` and `mockLaxMethod` use the `Default` class from `data-default` to
-decide what to return when no other response is given for an expectation.  If
-the method you are mocking has no `Default` instance for its return type, you
-can use `mockDefaultlessMethod` or `mockLaxDefaultlessMethod` instead.  In this
-case, if there's no response specified, the method will return `undefined`.
+`mockMethod` uses the `Default` class from `data-default` to decide what to
+return when no other response is given for an expectation.  If the method you
+are mocking has no `Default` instance for its return type, you can use
+`mockDefaultlessMethod` instead.  In this case, if there's no response
+specified, the method will return `undefined`.
+
+This choice is made automatically if you derive the instances for `MockT` using
+Template Haskell.
 
 ### How do I mock multi-parameter type classes?
 

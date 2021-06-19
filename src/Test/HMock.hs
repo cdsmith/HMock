@@ -128,9 +128,7 @@ module Test.HMock
     MockableSetup(..),
     MatchResult (..),
     mockMethod,
-    mockLaxMethod,
     mockDefaultlessMethod,
-    mockLaxDefaultlessMethod,
   )
 where
 

@@ -571,11 +571,10 @@ mockMethodImpl ::
     MonadIO m,
     MockableMethod cls name m r
   ) =>
-  Bool ->
   r ->
   Action cls name m r ->
   MockT m r
-mockMethodImpl lax surrogate action =
+mockMethodImpl surrogate action =
   do
     initClassIfNeeded (Proxy :: Proxy cls)
     stateVar <- MockT ask
@@ -591,7 +590,6 @@ mockMethodImpl lax surrogate action =
        in case (full, findDefault defaults, surrogate, orderedPartial) of
             ((e, Just response) : _, _, _, _) -> (e, response)
             ((e, Nothing) : _, d, s, _) -> (e, fromMaybe (return s) d)
-            ([], d, s, _) | lax -> (expectSet, fromMaybe (return s) d)
             ([], _, _, []) -> error $ noMatchError action
             ([], _, _, _) -> error $ partialMatchError action orderedPartial
     tryMatch ::
@@ -628,22 +626,7 @@ mockMethod ::
   Action cls name m r ->
   MockT m r
 mockMethod action =
-  withFrozenCallStack $ mockMethodImpl False def action
-
--- | Implements a method in a 'Mockable' monad by delegating to the mock
--- framework.  If the method is used unexpectedly, the default value will be
--- returned.  This is called a lax mock.
-mockLaxMethod ::
-  forall cls name m r.
-  ( HasCallStack,
-    MonadIO m,
-    MockableMethod cls name m r,
-    Default r
-  ) =>
-  Action cls name m r ->
-  MockT m r
-mockLaxMethod action =
-  withFrozenCallStack $ mockMethodImpl True def action
+  withFrozenCallStack $ mockMethodImpl def action
 
 -- | Implements a method in a 'Mockable' monad by delegating to the mock
 -- framework.  If the method is called unexpectedly, an exception will be
@@ -659,22 +642,7 @@ mockDefaultlessMethod ::
   Action cls name m r ->
   MockT m r
 mockDefaultlessMethod action =
-  withFrozenCallStack $ mockMethodImpl False undefined action
-
--- | Implements a method in a 'Mockable' monad by delegating to the mock
--- framework.  If the method is used unexpectedly, undefined will be returned.
--- This can be used in place of 'mockLaxMethod' when the return type has no
--- default.
-mockLaxDefaultlessMethod ::
-  forall cls name m r.
-  ( HasCallStack,
-    MonadIO m,
-    MockableMethod cls name m r
-  ) =>
-  Action cls name m r ->
-  MockT m r
-mockLaxDefaultlessMethod action =
-  withFrozenCallStack $ mockMethodImpl True undefined action
+  withFrozenCallStack $ mockMethodImpl undefined action
 
 -- An error for an action that matches no expectations at all.
 noMatchError ::
