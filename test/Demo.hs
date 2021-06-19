@@ -138,13 +138,11 @@ banIfAdmin room user = do
 -- using HMock, and defines a number of boilerplate types and instances that are
 -- used by the framework and your tests.
 
-makeMockable ''MonadAuth
-makeMockable ''MonadChat
-makeMockable ''MonadBugReport
-
 -- You can configure your mocks' default behaviors by implementing the
 -- MockableSetup class.  There is a default implementation that does nothing,
 -- so you only need to do this if you have setup to do.
+
+makeMockable ''MonadAuth
 
 instance MockableSetup MonadAuth where
   setupMockable _ = do
@@ -160,6 +158,8 @@ instance MockableSetup MonadAuth where
     -- can override this assumption.
     expectAny $ HasPermission_ anything |-> True
 
+makeMockable ''MonadChat
+
 instance MockableSetup MonadChat where
   setupMockable _ = do
     expectAny $
@@ -172,6 +172,8 @@ instance MockableSetup MonadChat where
     -- Our tests aren't generally concerned with what the bot says.  Individual
     -- tests can add expectations to check for specific messages.
     expectAny $ SendChat_ anything anything
+
+makeMockable ''MonadBugReport
 
 -------------------------------------------------------------------------------
 -- PART 4: TESTS
