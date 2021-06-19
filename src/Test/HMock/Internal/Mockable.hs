@@ -53,6 +53,6 @@ class MockableSetup (cls :: (Type -> Type) -> Constraint) where
   -- run before HMock touches the class, either to add expectations or to
   -- delegate a method.
   setupMockable :: (MonadIO m, Typeable m) => proxy cls -> MockT m ()
-
-instance {-# OVERLAPPABLE #-} Mockable cls => MockableSetup cls where
   setupMockable _ = return ()
+
+instance {-# OVERLAPPABLE #-} Mockable cls => MockableSetup cls
