@@ -161,6 +161,10 @@ on the classes that you use directly.  This frees you to share convenience
 libraries for testing, and reuse these components in different combinations
 as needed.
 
+You can also set up default behaviors for your mocks by implementing the
+`MockableSetup` class, bundling sensible defaults with your derived mock
+implementations for all users.
+
 ## FAQ
 
 Here are a few tips for making the most of HMock.
