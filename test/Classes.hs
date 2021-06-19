@@ -184,9 +184,9 @@ suffixTests = describe "MonadSuffix" $ do
 class MonadWithSetup m where
   withSetup :: m String
 
-makeMockable ''MonadWithSetup
+makeMockableBase ''MonadWithSetup
 
-instance MockableSetup MonadWithSetup where
+instance Mockable MonadWithSetup where
   setupMockable _ = do
     byDefault $ WithSetup |-> "custom default"
 
@@ -197,7 +197,7 @@ setupTests = describe "MonadWithSetup" $ do
       decs <- runMockT $ do
         expectAny $ QReify ''MonadWithSetup |-> $(reifyStatic ''MonadWithSetup)
 
-        runQ (makeMockable ''MonadWithSetup)
+        runQ (makeMockableBase ''MonadWithSetup)
       evaluate (rnf decs)
 
   it "returns the customized default value" $ do

@@ -126,8 +126,8 @@ module Test.HMock
     between,
 
     -- * Implementing mocks
+    MockableBase (..),
     Mockable (..),
-    MockableSetup (..),
     MatchResult (..),
     mockMethod,
     mockDefaultlessMethod,
@@ -139,5 +139,3 @@ import Test.HMock.Internal.MockT
 import Test.HMock.Internal.Mockable
 import Test.HMock.Internal.Multiplicity
 import Test.HMock.Internal.Predicates
-
-instance {-# OVERLAPPABLE #-} MockableSetup cls

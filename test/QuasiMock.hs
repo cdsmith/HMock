@@ -18,14 +18,14 @@ import Data.Generics (Typeable, everything, mkQ)
 import Language.Haskell.TH hiding (Match)
 import Language.Haskell.TH.Syntax hiding (Match)
 import Test.HMock
-import Test.HMock.TH (deriveMockable)
+import Test.HMock.TH (deriveMockableBase)
 import Util.TH (reifyInstancesStatic, reifyStatic)
 
 #if !MIN_VERSION_base(4, 13, 0)
 import Control.Monad.Fail (MonadFail)
 #endif
 
-deriveMockable ''Quasi
+deriveMockableBase ''Quasi
 
 -- Because not all methods of Quasi are mockable, the instance must be written
 -- by hand.
@@ -73,7 +73,7 @@ functionType = everything (||) (mkQ False isArrow)
     isArrow ArrowT = True
     isArrow _ = False
 
-instance MockableSetup Quasi where
+instance Mockable Quasi where
   setupMockable _ = do
     expectAny $ QIsExtEnabled_ anything |-> True
 

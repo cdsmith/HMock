@@ -21,10 +21,11 @@ data MatchResult where
   -- | Match. Stores a witness to the equality of return types.
   Match :: MatchResult
 
--- | A class for 'Monad' subclasses whose methods can be mocked.  You usually
--- want to generate this instance using 'Test.HMock.TH.makeMockable' or
--- 'Test.HMock.TH.deriveMockable', because it's just a lot of boilerplate.
-class (Typeable cls) => Mockable (cls :: (Type -> Type) -> Constraint) where
+-- | A base class for 'Monad' subclasses whose methods can be mocked.  You
+-- usually want to generate this instance using 'Test.HMock.TH.makeMockable',
+-- 'Test.HMock.TH.makeMockableBase', 'Test.HMock.TH.deriveMockable', or
+-- 'Test.HMock.TH.deriveMockableBase'.  It's just boilerplate.
+class (Typeable cls) => MockableBase (cls :: (Type -> Type) -> Constraint) where
   -- | An action that is performed.  This data type will have one constructor
   -- for each method.
   data Action cls :: Symbol -> (Type -> Type) -> Type -> Type
@@ -42,14 +43,11 @@ class (Typeable cls) => Mockable (cls :: (Type -> Type) -> Constraint) where
   -- | Attempts to match an 'Action' with a 'Matcher'.
   matchAction :: Matcher cls name m a -> Action cls name m a -> MatchResult
 
--- | A class that can be used to set up default behaviors for a 'Mockable'
--- class.  There is a default instance that does nothing, but you can derive
--- your own instances that overlap that one and add setup behavior.
---
--- For GHC 9 compatibility, your instance of 'MockableSetup' must be in the same
--- declaration group with the instance of your class for 'MockT', not separated
--- by any other Template Haskell splices. 
-class MockableSetup (cls :: (Type -> Type) -> Constraint) where
+-- | A class for 'Monad' subclasses whose methods can be mocked.  This class
+-- augments 'MockableBase' with a setup method that is run before HMock touches
+-- the 'Monad' subclass for the first time.  The default implementation does
+-- nothing, but you can derive your own instances that add setup behavior.
+class MockableBase cls => Mockable (cls :: (Type -> Type) -> Constraint) where
   -- An action to run and set up defaults for this class.  The action will be
   -- run before HMock touches the class, either to add expectations or to
   -- delegate a method.

@@ -162,7 +162,7 @@ libraries for testing, and reuse these components in different combinations
 as needed.
 
 You can also set up default behaviors for your mocks by implementing the
-`MockableSetup` class, bundling sensible defaults with your derived mock
+`Mockable` class manually, bundling sensible defaults with your derived mock
 implementations for all users.
 
 ## FAQ
@@ -293,6 +293,20 @@ specified, the method will return `undefined`.
 This choice is made automatically if you derive the instances for `MockT` using
 Template Haskell.
 
+### How can I change the default behavior of mocked methods?
+
+There are a few ways to do this:
+
+1. To catch all otherwise-unexpected calls to a method and specify their
+   behavior, use `expectAny` to add an expectation.
+2. To set a default response for expected methods that do not give an explicit
+   response, use `byDefault`.
+3. To set up defaults using `expectAny`, `byDefault`, etc. for all users of a
+   mock, replace your call to `makeMockable` or `deriveMockable` with a call to
+   `makeMockableBase` or `deriveMockableBase`.  Then write an instance for
+   `Mockable` and implement `setupMockable` to do whatever you like.  This setup
+   will always run before the first time HMock touches your class from any test.
+
 ### How do I mock multi-parameter type classes?
 
 In order to mock a multi-parameter type class, the monad argument `m` must be
@@ -397,7 +411,8 @@ Prohibiting orphan instances is just a *heuristic* to make it less likely that
 two different instances will be defined for the same type class and parameters.
 The heuristic works well for most application code.  It does **not** work so
 well for HMock, because the class you are mocking is non-test code, but the
-`Mockable` and `MockT` instances should be defined in test code.
+`MockableBase`, `Mockable`, and `MockT` instances should be defined in test
+code.
 
 Since the orphan heuristic doesn't work, you must take responsibility for
 managing the risk of multiple instances.  The easiest way to do so is to avoid
@@ -479,13 +494,6 @@ runMockT $ do
     copyFile "foo.txt" "bar.txt"
 ```
 
-### `MockableSetup` isn't working with GHC 9.
-
-When using GHC 9, you must be careful to keep your `MockableSetup` instance in
-the same declaration group with the `MockT` implementation.  That means there
-should be no other Template Haskell splices between `makeMockable` or
-`deriveForMockT` and the instance for `MockableSetup`.
-
 ### Which GHC versions are supported?
 
 HMock is tested with GHC versions from 8.4 through 9.0.
@@ -519,7 +527,7 @@ two significant benefits:
    tests can only cover *successful* uses.  Mocking `Quasi` allows tests of
    Template Haskell to check the error cases, as well.
 
-Indeed, mock `Quasi tests` were quite valuable to HMock development.  First, the
+Indeed, mock `Quasi` tests were quite valuable to HMock development.  First, the
 initial tests revealed several places where tests did not exercise key logic:
 mocking classes with superclasses, and mocking classes whose methods have rank-n
 parameters.  When corresponding tests were added, both of these cases turned out
@@ -544,13 +552,13 @@ places where it was illuminating:
 
 * Certain behaviors that did need to be mocked, such as looking up `Eq` and
   `Show` instances for common types, were useful for many different tests.  To
-  help with reuse, `QuasiMock` exports a reusable action, `setupQuasi`, that
-  configures these common responses as defaults with `expectAny`.
+  help with reuse, these actions are added from `setupMockable` so they are
+  automatically mocked every time the class is used.
 
-* The actual mock required less than 25 lines of very straight-forward code,
-  and `setupQuasi` was about the same.  (There was, though an unfortunate need
-  to generate nearly 100 instances of `Lift` and `NFData` to make the test logic
-  work.)
+* The mocks and setup code required less than 50 lines of very straight-forward
+  code.  There was, though, a need to write more code to derive `Lift` and
+  `NFData` instances for Template Haskell classes so that the correct behavior
+  of the mock could be implemented and tested.
 
 All things considered, the mock of Quasi was not difficult to implement, and
 improved both the experience of HMock development and confidence in its

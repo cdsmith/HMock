@@ -88,7 +88,7 @@ mapMockT f = MockT . mapReaderT f . unMockT
 
 initClassIfNeeded ::
   forall cls m proxy.
-  (Mockable cls, MockableSetup cls, Typeable m, MonadIO m) =>
+  (Mockable cls, Typeable m, MonadIO m) =>
   proxy cls ->
   MockT m ()
 initClassIfNeeded proxy =

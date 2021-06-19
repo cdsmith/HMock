@@ -99,7 +99,7 @@ type MockableMethod
   (name :: Symbol)
   (m :: Type -> Type)
   (r :: Type) =
-  (Mockable cls, MockableSetup cls, Typeable m, KnownSymbol name, Typeable r)
+  (Mockable cls, Typeable m, KnownSymbol name, Typeable r)
 
 -- | A single step of an expectation.
 data Step m where

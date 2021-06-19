@@ -17,7 +17,7 @@ import Control.Monad (unless, when)
 import Control.Monad.Catch (MonadMask, catch, finally, throwM)
 import Data.Char (isLetter)
 import Test.HMock
-  ( MockableSetup (..),
+  ( Mockable (..),
     anything,
     expect,
     expectAny,
@@ -25,7 +25,7 @@ import Test.HMock
     (|->),
     (|=>),
   )
-import Test.HMock.TH (makeMockable)
+import Test.HMock.TH (makeMockable, makeMockableBase)
 import Test.Hspec (SpecWith, describe, example, it)
 import Prelude hiding (appendFile, readFile, writeFile)
 
@@ -138,13 +138,19 @@ banIfAdmin room user = do
 -- using HMock, and defines a number of boilerplate types and instances that are
 -- used by the framework and your tests.
 
--- You can configure your mocks' default behaviors by implementing the
--- MockableSetup class.  There is a default implementation that does nothing,
--- so you only need to do this if you have setup to do.
+makeMockableBase ''MonadAuth
+makeMockableBase ''MonadChat
+makeMockable ''MonadBugReport
 
-makeMockable ''MonadAuth
+-- For MonadAuth and MonadChat, we have default behaviors we'd like to offer
+-- to all tests.  So instead of completely deriving Mockable, we've derived
+-- MockableBase, which contains all the boilerplate.  We can now write a
+-- Mockable instance with default behaviors.
+--
+-- Since there are no interesting default behaviors for MonadBugReport, it was
+-- easier to use makeMockable to derive a Mockable class with empty setup.
 
-instance MockableSetup MonadAuth where
+instance Mockable MonadAuth where
   setupMockable _ = do
     -- Ensure that when the chatbot logs in with the right username and
     -- password.
@@ -158,9 +164,7 @@ instance MockableSetup MonadAuth where
     -- can override this assumption.
     expectAny $ HasPermission_ anything |-> True
 
-makeMockable ''MonadChat
-
-instance MockableSetup MonadChat where
+instance Mockable MonadChat where
   setupMockable _ = do
     expectAny $
       JoinRoom_ anything
@@ -172,8 +176,6 @@ instance MockableSetup MonadChat where
     -- Our tests aren't generally concerned with what the bot says.  Individual
     -- tests can add expectations to check for specific messages.
     expectAny $ SendChat_ anything anything
-
-makeMockable ''MonadBugReport
 
 -------------------------------------------------------------------------------
 -- PART 4: TESTS
