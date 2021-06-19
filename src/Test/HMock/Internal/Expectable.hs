@@ -92,6 +92,15 @@ instance Expectable cls name m r (Rule cls name m r) where
 instance Expectable cls name m r (Matcher cls name m r) where
   toRule m = m :=> []
 
+-- | All constraints needed to mock a method with the given class, name, base
+-- monad, and return type.
+type MockableMethod
+  (cls :: (Type -> Type) -> Constraint)
+  (name :: Symbol)
+  (m :: Type -> Type)
+  (r :: Type) =
+  (Mockable cls, MockableSetup cls, Typeable m, KnownSymbol name, Typeable r)
+
 -- | A single step of an expectation.
 data Step m where
   Step :: MockableMethod cls name m r => Located (Rule cls name m r) -> Step m
@@ -114,15 +123,6 @@ newtype Expected m a = Expected {unwrapExpected :: ExpectSet (Step m)}
 
 instance ExpectContext Expected where
   fromExpectSet = Expected
-
--- | All constraints needed to mock a method with the given class, name, base
--- monad, and return type.
-type MockableMethod
-  (cls :: (Type -> Type) -> Constraint)
-  (name :: Symbol)
-  (m :: Type -> Type)
-  (r :: Type) =
-  (Mockable cls, Typeable m, KnownSymbol name, Typeable r)
 
 makeExpect ::
   (Expectable cls name m r expectable, MockableMethod cls name m r) =>

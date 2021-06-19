@@ -24,10 +24,7 @@ data MatchResult where
 -- | A class for 'Monad' subclasses whose methods can be mocked.  You usually
 -- want to generate this instance using 'Test.HMock.TH.makeMockable' or
 -- 'Test.HMock.TH.deriveMockable', because it's just a lot of boilerplate.
-class
-  (Typeable cls, MockableSetup cls) =>
-  Mockable (cls :: (Type -> Type) -> Constraint)
-  where
+class (Typeable cls) => Mockable (cls :: (Type -> Type) -> Constraint) where
   -- | An action that is performed.  This data type will have one constructor
   -- for each method.
   data Action cls :: Symbol -> (Type -> Type) -> Type -> Type
@@ -54,5 +51,3 @@ class MockableSetup (cls :: (Type -> Type) -> Constraint) where
   -- delegate a method.
   setupMockable :: (MonadIO m, Typeable m) => proxy cls -> MockT m ()
   setupMockable _ = return ()
-
-instance {-# OVERLAPPABLE #-} Mockable cls => MockableSetup cls

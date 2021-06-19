@@ -1,3 +1,6 @@
+{-# LANGUAGE FlexibleInstances #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
+
 -- |
 --
 -- This module provides a monad transformer, 'MockT', which can be used to test
@@ -137,3 +140,5 @@ import Test.HMock.Internal.MockT
 import Test.HMock.Internal.Mockable
 import Test.HMock.Internal.Multiplicity
 import Test.HMock.Internal.Predicates
+
+instance {-# OVERLAPPABLE #-} MockableSetup cls
