@@ -9,8 +9,8 @@
 
 module Test.HMock.Internal.MockT where
 
-import Control.Concurrent (MVar)
-import Control.Monad (forM_, unless)
+import Control.Concurrent (ThreadId)
+import Control.Monad (forM_, join, unless, when)
 import Control.Monad.Base (MonadBase)
 import Control.Monad.Catch (MonadCatch, MonadMask, MonadThrow)
 import Control.Monad.Cont (MonadCont)
@@ -23,45 +23,49 @@ import Control.Monad.Reader
     runReaderT,
   )
 import Control.Monad.State (MonadState)
-import Control.Monad.Trans (MonadIO, MonadTrans, lift)
+import Control.Monad.Trans (MonadTrans, lift)
 import Control.Monad.Writer (MonadWriter)
 import Data.Default (Default (def))
 import Data.Either (partitionEithers)
 import Data.Function (on)
 import Data.List (intercalate, sortBy)
+import Data.Map (Map)
+import qualified Data.Map as Map
 import Data.Maybe (catMaybes, fromMaybe)
 import Data.Proxy (Proxy (Proxy))
 import Data.Set (Set)
 import qualified Data.Set as Set
-import Data.Typeable (TypeRep, Typeable, cast, typeRep)
+import Data.Typeable (TypeRep, cast, typeRep)
 import GHC.Stack
 import Test.HMock.Internal.ExpectSet
 import Test.HMock.Internal.Expectable
 import Test.HMock.Internal.Mockable
 import Test.HMock.Internal.Util (Located (..), locate, withLoc)
-import UnliftIO (MonadUnliftIO, newMVar, putMVar, readMVar, takeMVar)
+import UnliftIO
+import UnliftIO.Concurrent (myThreadId)
 
 #if !MIN_VERSION_base(4, 13, 0)
 import Control.Monad.Fail (MonadFail)
 #endif
 
 data MockState m = MockState
-  { mockExpectSet :: ExpectSet (Step m),
-    mockDefaults :: [Step m],
-    mockClasses :: Set TypeRep
+  { mockExpectSet :: TVar (ExpectSet (Step m)),
+    mockDefaults :: TVar [Step m],
+    mockClasses :: TVar (Set TypeRep),
+    mockInitingClasses :: TVar (Map TypeRep ThreadId)
   }
 
-initMockState :: MockState m
+initMockState :: MonadIO m => m (MockState m)
 initMockState =
   MockState
-    { mockExpectSet = ExpectNothing,
-      mockDefaults = [],
-      mockClasses = Set.empty
-    }
+    <$> newTVarIO ExpectNothing
+    <*> newTVarIO []
+    <*> newTVarIO Set.empty
+    <*> newTVarIO Map.empty
 
 -- | Monad transformer for running mocks.
 newtype MockT m a where
-  MockT :: {unMockT :: ReaderT (MVar (MockState m)) m a} -> MockT m a
+  MockT :: {unMockT :: ReaderT (MockState m) m a} -> MockT m a
   deriving
     ( Functor,
       Applicative,
@@ -93,12 +97,28 @@ initClassIfNeeded ::
   MockT m ()
 initClassIfNeeded proxy =
   do
-    stateVar <- MockT ask
-    mockState <- takeMVar stateVar
-    let newMockClasses = Set.insert t (mockClasses mockState)
-    putMVar stateVar (mockState {mockClasses = newMockClasses})
-    unless (t `Set.member` mockClasses mockState) $ do
+    state <- MockT ask
+    myTid <- myThreadId
+    needsInit <- atomically $ do
+      finishedClasses <- readTVar (mockClasses state)
+      if Set.member t finishedClasses
+        then return False
+        else do
+          initingClasses <- readTVar (mockInitingClasses state)
+          case Map.lookup t initingClasses of
+            Nothing -> do
+              writeTVar
+                (mockInitingClasses state)
+                (Map.insert t myTid initingClasses)
+              return True
+            Just tid
+              | tid == myTid -> return False
+              | otherwise -> retrySTM
+    when needsInit $ do
       setupMockable (Proxy :: Proxy cls)
+      atomically $ do
+        modifyTVar (mockClasses state) (Set.insert t)
+        modifyTVar (mockInitingClasses state) (Map.delete t)
   where
     t = typeRep proxy
 
@@ -115,10 +135,8 @@ instance MonadReader r m => MonadReader r (MockT m) where
 instance ExpectContext MockT where
   fromExpectSet e = do
     initClassesAsNeeded e
-    stateVar <- MockT ask
-    mockState <- takeMVar stateVar
-    let newExpectSet = e `ExpectInterleave` mockExpectSet mockState
-    putMVar stateVar (mockState {mockExpectSet = newExpectSet})
+    state <- MockT ask
+    atomically $ modifyTVar (mockExpectSet state) (e `ExpectInterleave`)
 
 -- | Runs a test in the 'MockT' monad, handling all of the mocks.
 runMockT :: forall m a. MonadIO m => MockT m a -> m a
@@ -144,10 +162,10 @@ runMockT test = withMockT constTest
 withMockT ::
   forall m b. MonadIO m => ((forall a. MockT m a -> m a) -> MockT m b) -> m b
 withMockT test = do
-  stateVar <- newMVar initMockState
+  state <- initMockState
   let inMockT :: forall a. MockT m a -> m a
-      inMockT m = runReaderT (unMockT m) stateVar
-  flip runReaderT stateVar $
+      inMockT m = runReaderT (unMockT m) state
+  flip runReaderT state $
     unMockT $ do
       a <- test inMockT
       verifyExpectations
@@ -158,7 +176,7 @@ withMockT test = do
 -- format is not specified.
 describeExpectations :: MonadIO m => MockT m String
 describeExpectations =
-  formatExpectSet <$> (MockT ask >>= fmap mockExpectSet . readMVar)
+  formatExpectSet <$> (MockT ask >>= readTVarIO . mockExpectSet)
 
 -- | Verifies that all mock expectations are satisfied.  You normally don't need
 -- to do this, because it happens automatically at the end of your test in
@@ -170,7 +188,7 @@ describeExpectations =
 -- case.
 verifyExpectations :: MonadIO m => MockT m ()
 verifyExpectations = do
-  expectSet <- MockT ask >>= fmap mockExpectSet . readMVar
+  expectSet <- MockT ask >>= readTVarIO . mockExpectSet
   unless (satisfied expectSet) $ do
     case excess expectSet of
       ExpectNothing -> return ()
@@ -190,11 +208,9 @@ byDefault ::
   MockT m ()
 byDefault (m :=> [r]) = do
   initClassIfNeeded (Proxy :: Proxy cls)
-  stateVar <- MockT ask
-  mockState <- takeMVar stateVar
-  let newDefaults =
-        Step (locate callStack (m :-> Just r)) : mockDefaults mockState
-  putMVar stateVar (mockState {mockDefaults = newDefaults})
+  state <- MockT ask
+  atomically $
+    modifyTVar' (mockDefaults state) (Step (locate callStack (m :-> Just r)) :)
 byDefault _ = error "Defaults must have exactly one response."
 
 mockMethodImpl ::
@@ -209,12 +225,14 @@ mockMethodImpl ::
 mockMethodImpl surrogate action =
   do
     initClassIfNeeded (Proxy :: Proxy cls)
-    stateVar <- MockT ask
-    mockState <- takeMVar stateVar
-    let (newExpectSet, response) =
-          decideAction (mockExpectSet mockState) (mockDefaults mockState)
-    putMVar stateVar mockState {mockExpectSet = newExpectSet}
-    response
+    state <- MockT ask
+    join $
+      atomically $ do
+        expectSet <- readTVar (mockExpectSet state)
+        defaults <- readTVar (mockDefaults state)
+        let (newExpectSet, response) = decideAction expectSet defaults
+        writeTVar (mockExpectSet state) newExpectSet
+        return response
   where
     decideAction expectSet defaults =
       let (partial, full) = partitionEithers (tryMatch <$> liveSteps expectSet)
