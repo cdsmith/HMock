@@ -63,6 +63,7 @@ test-suite tests
                       DocTests.Test.HMock.Internal.Predicates,
                       ExpectSet,
                       Extras,
+                      PolysemyTest,
                       QuasiMock,
                       TH,
                       Util.DeriveRecursive,
@@ -80,6 +81,8 @@ test-suite tests
                       extra,
                       hspec,
                       mtl,
+                      polysemy,
+                      polysemy-plugin,
                       syb,
                       template-haskell,
                       unliftio
