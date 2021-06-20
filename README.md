@@ -3,8 +3,9 @@
 ![](https://travis-ci.com/cdsmith/HMock.svg?branch=main)
 ![](https://img.shields.io/hackage/v/HMock)
 
-HMock provides a flexible mock framework for Haskell, with similar functionality
-to Mockito for Java, GoogleMock for C++, and other mainstream languages.
+HMock provides a flexible and composable mock framework for Haskell, with
+functionality that generally matches or exceeds that of Mockito for Java,
+GoogleMock for C++, and other mainstream languages.
 
 ## Quick Start
 
@@ -83,24 +84,30 @@ in testing practice.
 ## Why HMock?
 
 HMock was designed to help Haskell programmers adopt good habits when testing
-with mocks.  When testing with mocks, two dangers to look out for are
-over-assertion and over-stubbing.
+with mocks.  When testing with mocks, there are some dangers to look out for:
 
-**Over-assertion** happens when your test requires things you don't care about.
-If you read two files, you usually don't care which order they are read in, so
-your tests should pass with either order.  Even when your code needs to behave
-a certain way, you usually don't want to check that in every single test.  Each
-test should also ideally test one property.  However, a simplistic approach to
-mocks may force you to over-assert just to run your code at all.
+* **Over-assertion** happens when your test requires things you don't care
+  about.  If you read two files, you usually don't care in which order they are
+  read, so your tests should not require an order.  Even when your code needs to
+  behave a certain way, you usually don't need to check that in every single
+  test.  Each test should ideally test one property.  However, a simplistic
+  approach to mocks may force you to over-assert just to run your code at all.
 
-**Over-stubbing** happens when you remove too much functionality from your code,
-and end up assuming part of the logic you intended to test.  This makes your
-test less useful.  Again, a simplistic approach to mocks can lead you to stub
-too much by not providing the right options for the behavior of your methods.
+* **Over-stubbing** happens when you remove too much functionality from your
+  code, and end up assuming part of the logic you wanted to test.  This makes
+  your test less useful.  Again, a simplistic approach to mocks can lead you to
+  stub too much by not providing the right options to get realistic behavior
+  from your methods.
+
+* **Fragile tests** happen when your expectations match too often or at
+  unexpected times, leading to incorrect behavior that's merely an artifact of
+  problems with mocks.  Mainstream mock frameworks are not particularly
+  compositional, leading to frequent struggles with unexpected rules firing at
+  off times and breaking other tests.
 
 HMock is designed to help you avoid these mistakes, by offering:
 
-### Flexible ordering
+### Flexible ordering constraints
 
 With HMock, you choose which constraints to enforce on the order of methods.
 If certain methods need to happen in a fixed sequence, you can use `inSequence`
@@ -111,7 +118,7 @@ a method optional, or limit the number of times it can occur.
 
 These tools let you express more of the exact properties you intend to test, so
 that you don't fall into the over-assertion trap.  This also unlocks the
-opportunity to test concurrent and non-deterministic code.
+opportunity to test concurrent or otherwise non-deterministic code.
 
 ### Flexible matchers
 
@@ -120,13 +127,13 @@ using `Predicate`s.  A `Predicate a` is essentially `a -> Bool`, except that it
 can be printed for better error messages.  If you want to match all parameters
 exactly, there's a shortcut for doing so.  But you can also ignore arguments you
 don't care about, or only make partial assertions about their values.  For
-example, you can match a keyword in a logging message, without needing to copy
-and paste the entire string into your test.
+example, you can use `hasSubstr` to match a key word in a logging message,
+without needing to copy and paste the entire string into your test.
 
-Because you need not compare every argument, HMock can be used to mock methods
-whose parameters have no `Eq` instances at all.  You can write a mock for a
-method that takes a function as an argument, for example.  You can even mock
-polymorphic methods.
+Because you need not compare every argument, HMock can even be used to mock
+methods whose parameters have no `Eq` instances at all.  You can write a mock
+for a method that takes a function as an argument, for example.  You can even
+mock polymorphic methods.
 
 ### Flexible responses
 
@@ -151,6 +158,18 @@ These flexible responses help you to avoid over-stubbing.  You can even use
 HMock to delegate to a lightweight fake.  Not only does this avoid defining
 a new type for each fake instance, but you can also easily inject errors and
 other unusual behavior as exceptions to the fake implementation.
+
+### Composable mocking primitives
+
+HMock's expectations expand on the ideas from Svenningsson, et al. in [An
+Expressive Semantics of Mocking](https://link.springer.com/content/pdf/10.1007%2F978-3-642-54804-8_27.pdf).
+The key idea is to offer compositional primitives.  Anything you can do to a
+single call, you can also do to an entire sequence of calls.  You can express
+repeated sequences of calls, choice between two options, etc.  Because the core
+mocking language is more expressive, you're less likely to need to stub out to
+secondary mechanisms, such as recording calls and asserting about them later,
+the way you may be used to in other languages, and this also makes your tests
+more composable.
 
 ### Reusable mocks
 
