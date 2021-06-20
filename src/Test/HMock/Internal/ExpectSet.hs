@@ -120,7 +120,8 @@ simplify (ExpectConsecutive m e)
     e' = simplify e
 simplify other = other
 
--- | 
+-- | Get a list of all steps mentioned by an 'ExpectSet'.  This is used to
+-- determine which classes need to be initialized before adding an expectation.
 getSteps :: ExpectSet step -> [step]
 getSteps ExpectNothing = []
 getSteps (ExpectStep step) = [step]
