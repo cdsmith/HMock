@@ -120,6 +120,7 @@ simplify (ExpectConsecutive m e)
     e' = simplify e
 simplify other = other
 
+-- | 
 getSteps :: ExpectSet step -> [step]
 getSteps ExpectNothing = []
 getSteps (ExpectStep step) = [step]
