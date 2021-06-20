@@ -11,6 +11,7 @@ import Control.Concurrent (forkIO, newEmptyMVar, putMVar, takeMVar)
 import Control.DeepSeq (rnf)
 import Control.Exception (SomeException, evaluate)
 import Control.Monad (replicateM_)
+import Control.Monad.Reader (MonadReader (local), ask, runReaderT)
 import Control.Monad.State (execStateT, modify)
 import Control.Monad.Trans (liftIO)
 import Data.IORef (newIORef, readIORef, writeIORef)
@@ -18,10 +19,9 @@ import Data.List (isInfixOf, isPrefixOf)
 import Test.HMock
 import Test.HMock.TH (makeMockable)
 import Test.Hspec
+import qualified UnliftIO.Concurrent as UnliftIO
 import Prelude hiding (readFile, writeFile)
 import qualified Prelude
-import Control.Monad.Reader (runReaderT, ask, MonadReader (local))
-import qualified UnliftIO.Concurrent as UnliftIO
 
 class Monad m => MonadFilesystem m where
   readFile :: FilePath -> m String
@@ -94,13 +94,14 @@ coreTests = do
           writeFile "bar.txt" =<< liftIO (takeMVar var)
 
     it "shares expectations across threads using MonadUnliftIO" $
-      example $ runMockT $ do
-        expect $ ReadFile "foo.txt" |-> "lorem ipsum"
-        expect $ WriteFile "bar.txt" "lorem ipsum"
+      example $
+        runMockT $ do
+          expect $ ReadFile "foo.txt" |-> "lorem ipsum"
+          expect $ WriteFile "bar.txt" "lorem ipsum"
 
-        var <- liftIO newEmptyMVar
-        _ <- UnliftIO.forkIO $ readFile "foo.txt" >>= liftIO . putMVar var
-        writeFile "bar.txt" =<< liftIO (takeMVar var)
+          var <- liftIO newEmptyMVar
+          _ <- UnliftIO.forkIO $ readFile "foo.txt" >>= liftIO . putMVar var
+          writeFile "bar.txt" =<< liftIO (takeMVar var)
 
     it "tracks expectations across multiple classes" $
       example $ do
@@ -280,7 +281,7 @@ coreTests = do
         failure1 `shouldThrow` anyException
         failure2 `shouldThrow` anyException
 
-    it "enforces complex nested sequences" $
+    it "enforces nested sequences" $
       example $ do
         let setExpectations =
               inSequence
@@ -352,6 +353,155 @@ coreTests = do
 
         success
         failure `shouldThrow` errorWith ("Wrong arguments:" `isInfixOf`)
+
+    it "implements choice" $
+      example $ do
+        let setExpectations =
+              anyOf
+                [ expect $ WriteFile "status.txt" "all systems go",
+                  expect $ WriteFile "status.txt" "we have a problem"
+                ]
+
+            success1 = runMockT $ do
+              setExpectations
+              writeFile "status.txt" "all systems go"
+
+            success2 = runMockT $ do
+              setExpectations
+              writeFile "status.txt" "we have a problem"
+
+            failure1 = runMockT $ do
+              setExpectations
+              return ()
+
+            failure2 = runMockT $ do
+              setExpectations
+              writeFile "status.txt" "not sure"
+
+        success1
+        success2
+        failure1 `shouldThrow` anyException
+        failure2 `shouldThrow` anyException
+
+    it "implements interleaved repetition" $
+      example $ do
+        let setExpectations =
+              times (atLeast 2) $
+                inAnyOrder
+                  [ expect $ WriteFile "foo.txt" "a",
+                    expect $ WriteFile "bar.txt" "b"
+                  ]
+
+            success1 = runMockT $ do
+              setExpectations
+
+              writeFile "foo.txt" "a"
+              writeFile "bar.txt" "b"
+
+              writeFile "bar.txt" "b"
+              writeFile "foo.txt" "a"
+
+            success2 = runMockT $ do
+              setExpectations
+
+              writeFile "foo.txt" "a"
+              writeFile "foo.txt" "a"
+
+              writeFile "bar.txt" "b"
+              writeFile "bar.txt" "b"
+
+            tooFew = runMockT $ do
+              setExpectations
+
+              writeFile "foo.txt" "a"
+              writeFile "bar.txt" "b"
+
+            incomplete = runMockT $ do
+              setExpectations
+
+              writeFile "foo.txt" "a"
+              writeFile "bar.txt" "b"
+
+              writeFile "foo.txt" "a"
+              writeFile "bar.txt" "b"
+
+              writeFile "foo.txt" "a"
+
+        success1
+        success2
+        tooFew `shouldThrow` anyException
+        incomplete `shouldThrow` anyException
+
+    it "implements consecutive repetition" $
+      example $ do
+        let setExpectations =
+              consecutiveTimes (atLeast 2) $
+                inAnyOrder
+                  [ expect $ WriteFile "foo.txt" "a",
+                    expect $ WriteFile "bar.txt" "b"
+                  ]
+
+            success1 = runMockT $ do
+              setExpectations
+
+              writeFile "foo.txt" "a"
+              writeFile "bar.txt" "b"
+
+              writeFile "bar.txt" "b"
+              writeFile "foo.txt" "a"
+
+            interleaved = runMockT $ do
+              setExpectations
+
+              writeFile "foo.txt" "a"
+              writeFile "foo.txt" "a"
+
+              writeFile "bar.txt" "b"
+              writeFile "bar.txt" "b"
+
+            tooFew = runMockT $ do
+              setExpectations
+
+              writeFile "foo.txt" "a"
+              writeFile "bar.txt" "b"
+
+            incomplete = runMockT $ do
+              setExpectations
+
+              writeFile "foo.txt" "a"
+              writeFile "bar.txt" "b"
+
+              writeFile "foo.txt" "a"
+              writeFile "bar.txt" "b"
+
+              writeFile "foo.txt" "a"
+
+        success1
+        interleaved `shouldThrow` anyException
+        tooFew `shouldThrow` anyException
+        incomplete `shouldThrow` anyException
+
+    it "repeats response sequences during repetition" $
+      example $ do
+        runMockT $ do
+          times 2 $ expect $ ReadFile "foo.txt" |-> "A" |-> "B"
+
+          result <-
+            (,,,) <$> readFile "foo.txt"
+              <*> readFile "foo.txt"
+              <*> readFile "foo.txt"
+              <*> readFile "foo.txt"
+          liftIO $ result `shouldBe` ("A", "B", "A", "B")
+
+        runMockT $ do
+          consecutiveTimes 2 $ expect $ ReadFile "foo.txt" |-> "A" |-> "B"
+
+          result <-
+            (,,,) <$> readFile "foo.txt"
+              <*> readFile "foo.txt"
+              <*> readFile "foo.txt"
+              <*> readFile "foo.txt"
+          liftIO $ result `shouldBe` ("A", "B", "A", "B")
 
     it "gives access to method arguments in the response" $
       example $ do
@@ -444,18 +594,19 @@ coreTests = do
         test `shouldThrow` anyException
 
     it "allows the user to override a default" $
-      example $ runMockT $ do
-        expectAny $ ReadFile_ anything
+      example $
+        runMockT $ do
+          expectAny $ ReadFile_ anything
 
-        r1 <- readFile "foo.txt"
+          r1 <- readFile "foo.txt"
 
-        byDefault $ ReadFile "foo.txt" |-> "foo"
-        r2 <- readFile "foo.txt"
-        r3 <- readFile "bar.txt"
+          byDefault $ ReadFile "foo.txt" |-> "foo"
+          r2 <- readFile "foo.txt"
+          r3 <- readFile "bar.txt"
 
-        liftIO (r1 `shouldBe` "")
-        liftIO (r2 `shouldBe` "foo")
-        liftIO (r3 `shouldBe` "")
+          liftIO (r1 `shouldBe` "")
+          liftIO (r2 `shouldBe` "foo")
+          liftIO (r3 `shouldBe` "")
 
 errorWith :: (String -> Bool) -> SomeException -> Bool
 errorWith p e = p (show e)

@@ -63,6 +63,9 @@ module Test.HMock
     expectAny,
     inSequence,
     inAnyOrder,
+    anyOf,
+    times,
+    consecutiveTimes,
 
     -- * Predicates
     Predicate (..),

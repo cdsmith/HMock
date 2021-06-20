@@ -211,7 +211,7 @@ expect e = fromExpectSet (expandRule callStack (toRule e))
 --
 -- @
 --   'runMockT' '$' do
---     'expect' '$' MakeList '|->' ()
+--     'expect' '$' MakeList
 --     'expectN' ('Test.HMock.atLeast' 2) '$'
 --       CheckList "Cindy Lou Who" '|->' "nice"
 --
@@ -261,9 +261,9 @@ expectAny e =
 --
 -- @
 --   'inSequence'
---     [ 'expect' '$' MoveForward '|->' (),
---       'expect' '$' TurnRight '|->' (),
---       'expect' '$' MoveForward '|->' ()
+--     [ 'expect' '$' MoveForward,
+--       'expect' '$' TurnRight,
+--       'expect' '$' MoveForward
 --     ]
 -- @
 --
@@ -279,16 +279,16 @@ inSequence es = fromExpectSet (foldr1 ExpectSequence (map unwrapExpected es))
 
 -- | Combines multiple expectations, which can occur in any order.  Most of the
 -- time, you can achieve the same thing by expecting each separately, but this
--- can be combined with 'inSequence' to describe more complex ordering
--- constraints, such as:
+-- can be combined in complex expectations to describe more complex ordering
+-- constraints.
 --
 -- @
 --   'inSequence'
 --     [ 'inAnyOrder'
---         [ 'expect' '$' adjustMirrors '|->' (),
---           'expect' '$' fastenSeatBelt '|->' ()
+--         [ 'expect' '$' AdjustMirrors,
+--           'expect' '$' FastenSeatBelt
 --         ],
---       'expect' '$' startCar '|->' ()
+--       'expect' '$' StartCar
 --     ]
 -- @
 inAnyOrder ::
@@ -296,3 +296,47 @@ inAnyOrder ::
   (forall ctx'. ExpectContext ctx' => [ctx' m ()]) ->
   ctx m ()
 inAnyOrder es = fromExpectSet (foldr1 ExpectInterleave (map unwrapExpected es))
+
+-- | Combines multiple expectations, requiring exactly one of them to occur.
+--
+-- @
+--   'anyOf'
+--     [ 'expect' $ ApplyForJob,
+--       'expect' $ ApplyForUniversity
+--     ]
+-- @
+anyOf ::
+  (MonadIO m, ExpectContext ctx) =>
+  (forall ctx'. ExpectContext ctx' => [ctx' m ()]) ->
+  ctx m ()
+anyOf es = fromExpectSet (foldr1 ExpectEither (map unwrapExpected es))
+
+-- | Creates a parent expectation that the child expectation will happen a
+-- certain number of times.  Unlike `expectN`, the child expectation can be
+-- arbitrarily complex and span multiple actions.  Also unlike 'expectN', each
+-- new execution will restart response sequences for rules with more than one
+-- response.
+--
+-- Different occurrences of the child can be interleaved.  In case of ambiguity,
+-- progressing on an existing occurrence is preferred over starting a new
+-- occurrence.
+times :: (MonadIO m, ExpectContext ctx) =>
+  Multiplicity ->
+  (forall ctx'. ExpectContext ctx' => ctx' m ()) ->
+  ctx m ()
+times mult e = fromExpectSet (ExpectMulti mult (unwrapExpected e))
+
+-- | Creates a parent expectation that the child expectation will happen a
+-- certain number of times.  Unlike `expectN`, the child expectation can be
+-- arbitrarily complex and span multiple actions.  Also unlike 'expectN', each
+-- new execution will restart response sequences for rules with more than one
+-- response.
+--
+-- Different occurrences of the child must happen consecutively, with one
+-- finishing before the next begins.
+consecutiveTimes :: (MonadIO m, ExpectContext ctx) =>
+  Multiplicity ->
+  (forall ctx'. ExpectContext ctx' => ctx' m ()) ->
+  ctx m ()
+consecutiveTimes mult e =
+  fromExpectSet (ExpectConsecutive mult (unwrapExpected e))
