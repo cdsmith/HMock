@@ -1,3 +1,5 @@
+{-# LANGUAGE DeriveDataTypeable #-}
+
 module Test.HMock.Internal.Multiplicity where
 
 -- | An acceptable range of number of times for something to happen.
@@ -6,6 +8,8 @@ module Test.HMock.Internal.Multiplicity where
 data Multiplicity = Multiplicity Int (Maybe Int) deriving (Eq)
 
 instance Show Multiplicity where
+  show m | not (feasible m) = "infeasible"
+  show (Multiplicity 0 (Just 0)) = "never"
   show (Multiplicity 1 (Just 1)) = "once"
   show (Multiplicity 2 (Just 2)) = "twice"
   show (Multiplicity 0 Nothing) = "any number of times"
@@ -20,8 +24,11 @@ instance Show Multiplicity where
     | m == n - 1 = show m ++ " or " ++ show n ++ " times"
     | otherwise = show m ++ " to " ++ show n ++ " times"
 
--- | This is an incomplete instance, provided for convenience.  You cannot
--- multiply multiplicities, so this will result in a runtime error.
+-- | A 'Multiplicity' value representing inconsistent expectations.
+infeasible :: Multiplicity
+infeasible = Multiplicity 0 (Just (-1))
+
+-- | This is an incomplete instance, provided for convenience.
 --
 -- >>> meetsMultiplicity 5 4
 -- False
@@ -30,24 +37,31 @@ instance Show Multiplicity where
 -- >>> between 4 6 - between 1 2
 -- 2 to 5 times
 instance Num Multiplicity where
-  fromInteger n =
-    normalize $ Multiplicity (fromInteger n) (Just (fromInteger n))
-  Multiplicity a b + Multiplicity c d =
-    normalize $ Multiplicity (a + c) ((+) <$> b <*> d)
-  Multiplicity a b - Multiplicity c d =
-    normalize $ Multiplicity (maybe 0 (a -) d) (subtract c <$> b)
+  fromInteger n
+    | n < 0 = infeasible
+    | otherwise =
+      normalize $
+        Multiplicity (fromInteger n) (Just (fromInteger n))
 
-  (*) = error "Multiplicities cannot be multiplied"
+  m1@(Multiplicity a b) + m2@(Multiplicity c d)
+    | feasible m1 && feasible m2 =
+      normalize $ Multiplicity (a + c) ((+) <$> b <*> d)
+    | otherwise = infeasible
+
+  m1@(Multiplicity a b) - m2@(Multiplicity c d)
+    | feasible m1 && feasible m2 =
+      normalize $ Multiplicity (maybe 0 (a -) d) (subtract c <$> b)
+    | otherwise = infeasible
+
+  (*) = error "Multiplicities are not closed under multiplication"
 
   abs = id
+
   signum (Multiplicity 0 (Just 0)) = 0
-  signum m
-    | not (satisfiable m) = -1
-    | otherwise = 1
+  signum _ = 1
 
 normalize :: Multiplicity -> Multiplicity
-normalize (Multiplicity a b) = Multiplicity a' b
-  where a' = max 0 a
+normalize (Multiplicity a b) = Multiplicity (max a 0) b
 
 -- | Checks whether a certain number satisfies the 'Multiplicity'.
 meetsMultiplicity :: Multiplicity -> Int -> Bool
@@ -125,16 +139,15 @@ between (Multiplicity m _) (Multiplicity _ n) = Multiplicity m n
 -- >>> exhaustable (between 0 2)
 -- True
 exhaustable :: Multiplicity -> Bool
-exhaustable (Multiplicity lo _) = lo == 0
+exhaustable m@(Multiplicity lo _) = feasible m && lo == 0
 
 -- | Checks whether a 'Multiplicity' is capable of matching any number at all.
 --
--- >>> satisfiable once
+-- >>> feasible once
 -- True
--- >>> satisfiable 0
+-- >>> feasible 0
 -- True
--- >>> satisfiable (once - 2)
+-- >>> feasible (once - 2)
 -- False
-satisfiable :: Multiplicity -> Bool
-satisfiable (Multiplicity a (Just b)) = a <= b
-satisfiable _ = True
+feasible :: Multiplicity -> Bool
+feasible (Multiplicity a b) = maybe True (>= a) b

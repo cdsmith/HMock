@@ -156,7 +156,7 @@ coreTests = do
                   |-> "a"
                   |-> "b"
 
-        test `shouldThrow` errorWith ("Too many responses" `isInfixOf`)
+        test `shouldThrow` errorWith ("2 responses is too many" `isInfixOf`)
 
     it "catches unmet expectations" $
       example $ do

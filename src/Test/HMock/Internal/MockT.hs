@@ -10,7 +10,7 @@
 module Test.HMock.Internal.MockT where
 
 import Control.Concurrent (MVar)
-import Control.Monad (unless)
+import Control.Monad (forM_, unless)
 import Control.Monad.Base (MonadBase)
 import Control.Monad.Catch (MonadCatch, MonadMask, MonadThrow)
 import Control.Monad.Cont (MonadCont)
@@ -29,7 +29,7 @@ import Data.Default (Default (def))
 import Data.Either (partitionEithers)
 import Data.Function (on)
 import Data.List (intercalate, sortBy)
-import Data.Maybe (catMaybes, fromMaybe, listToMaybe)
+import Data.Maybe (catMaybes, fromMaybe)
 import Data.Proxy (Proxy (Proxy))
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -103,10 +103,9 @@ initClassIfNeeded proxy =
     t = typeRep proxy
 
 initClassesAsNeeded :: MonadIO m => ExpectSet (Step m) -> MockT m ()
-initClassesAsNeeded ExpectNothing = return ()
-initClassesAsNeeded (ExpectMulti _ es) = mapM_ initClassesAsNeeded es
-initClassesAsNeeded (Expect _ (Step (_ :: Located (Rule cls name m r)))) =
-  initClassIfNeeded (Proxy :: Proxy cls)
+initClassesAsNeeded es = forM_ (getSteps es) $
+  \(Step (_ :: Located (SingleRule cls name m r))) ->
+    initClassIfNeeded (Proxy :: Proxy cls)
 
 instance MonadReader r m => MonadReader r (MockT m) where
   ask = lift ask
@@ -118,7 +117,7 @@ instance ExpectContext MockT where
     initClassesAsNeeded e
     stateVar <- MockT ask
     mockState <- takeMVar stateVar
-    let newExpectSet = simplify (ExpectMulti AnyOrder [e, mockExpectSet mockState])
+    let newExpectSet = e `ExpectInterleave` mockExpectSet mockState
     putMVar stateVar (mockState {mockExpectSet = newExpectSet})
 
 -- | Runs a test in the 'MockT' monad, handling all of the mocks.
@@ -159,7 +158,7 @@ withMockT test = do
 -- format is not specified.
 describeExpectations :: MonadIO m => MockT m String
 describeExpectations =
-  formatExpectSet "" <$> (MockT ask >>= fmap mockExpectSet . readMVar)
+  formatExpectSet <$> (MockT ask >>= fmap mockExpectSet . readMVar)
 
 -- | Verifies that all mock expectations are satisfied.  You normally don't need
 -- to do this, because it happens automatically at the end of your test in
@@ -172,9 +171,10 @@ describeExpectations =
 verifyExpectations :: MonadIO m => MockT m ()
 verifyExpectations = do
   expectSet <- MockT ask >>= fmap mockExpectSet . readMVar
-  case excess expectSet of
-    ExpectNothing -> return ()
-    missing -> error $ "Unmet expectations:\n" ++ formatExpectSet "  " missing
+  unless (satisfied expectSet) $ do
+    case excess expectSet of
+      ExpectNothing -> return ()
+      missing -> error $ "Unmet expectations:\n" ++ formatExpectSet missing
 
 -- | Changes the default response for matching actions.
 --
@@ -188,11 +188,12 @@ byDefault ::
   (MonadIO m, MockableMethod cls name m r) =>
   Rule cls name m r ->
   MockT m ()
-byDefault r@(_ :=> [_]) = do
+byDefault (m :=> [r]) = do
   initClassIfNeeded (Proxy :: Proxy cls)
   stateVar <- MockT ask
   mockState <- takeMVar stateVar
-  let newDefaults = Step (locate callStack r) : mockDefaults mockState
+  let newDefaults =
+        Step (locate callStack (m :-> Just r)) : mockDefaults mockState
   putMVar stateVar (mockState {mockDefaults = newDefaults})
 byDefault _ = error "Defaults must have exactly one response."
 
@@ -227,18 +228,18 @@ mockMethodImpl surrogate action =
       (Step m, ExpectSet (Step m)) ->
       Either (Maybe (Int, String)) (ExpectSet (Step m), Maybe (MockT m r))
     tryMatch (Step expected, e)
-      | Just lrule@(Loc _ (m :=> impls)) <- cast expected =
+      | Just lrule@(Loc _ (m :-> impl)) <- cast expected =
         case matchAction m action of
           NoMatch n ->
             Left (Just (n, withLoc (showMatcher (Just action) m <$ lrule)))
           Match ->
-            Right (e, listToMaybe impls <*> Just action)
+            Right (e, ($ action) <$> impl)
       | otherwise = Left Nothing
 
     findDefault :: [Step m] -> Maybe (MockT m r)
     findDefault [] = Nothing
     findDefault (Step expected : _)
-      | Just (Loc _ (m :=> [r])) <- cast expected,
+      | Just (Loc _ (m :-> Just r)) <- cast expected,
         Match <- matchAction m action =
         Just (r action)
     findDefault (_ : steps) = findDefault steps

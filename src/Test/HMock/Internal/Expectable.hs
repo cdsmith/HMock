@@ -1,15 +1,18 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE StandaloneDeriving #-}
 
 module Test.HMock.Internal.Expectable where
 
 import Control.Monad.Trans (MonadIO)
 import Data.Kind (Constraint, Type)
+import Data.Maybe (listToMaybe)
 import Data.Typeable
 import GHC.Stack (CallStack, HasCallStack, callStack)
 import GHC.TypeLits (KnownSymbol, Symbol)
@@ -101,17 +104,71 @@ type MockableMethod
   (r :: Type) =
   (Mockable cls, Typeable m, KnownSymbol name, Typeable r)
 
+-- | A Rule that contains only a single response.  This is the target for
+-- desugaring the multi-response rule format.
+data
+  SingleRule
+    (cls :: (Type -> Type) -> Constraint)
+    (name :: Symbol)
+    (m :: Type -> Type)
+    (r :: Type)
+  where
+  (:->) ::
+    Matcher cls name m r ->
+    Maybe (Action cls name m r -> MockT m r) ->
+    SingleRule cls name m r
+
 -- | A single step of an expectation.
 data Step m where
-  Step :: MockableMethod cls name m r => Located (Rule cls name m r) -> Step m
+  Step ::
+    MockableMethod cls name m r =>
+    Located (SingleRule cls name m r) ->
+    Step m
 
 instance Show (Step m) where
-  show (Step l@(Loc _ (m :=> _))) =
+  show (Step l@(Loc _ (m :-> _))) =
     withLoc (showMatcher Nothing m <$ l)
 
-instance Steppable (Step m) where
-  nextStep (Step (Loc l (m :=> (_ : r : rs)))) = Step (Loc l (m :=> (r : rs)))
-  nextStep other = other
+-- | Expands a Rule into an expectation.  The expected multiplicity will be one
+-- if there are no responses; otherwise one call is expected per response.
+expandRule ::
+  MockableMethod cls name m r =>
+  CallStack ->
+  Rule cls name m r ->
+  ExpectSet (Step m)
+expandRule callstack (m :=> []) =
+  ExpectStep (Step (locate callstack (m :-> Nothing)))
+expandRule callstack (m :=> rs) =
+  foldr1
+    ExpectInterleave
+    (map (ExpectStep . Step . locate callstack . (m :->) . Just) rs)
+
+-- | Expands a Rule into an expectation, given a target multiplicity.  It is an
+-- error if there are too many responses for the multiplicity.  If there are
+-- too few responses, the last response will be repeated.
+expandRepeatRule ::
+  MockableMethod cls name m r =>
+  Multiplicity ->
+  CallStack ->
+  Rule cls name m r ->
+  ExpectSet (Step m)
+expandRepeatRule mult _ (_ :=> rs)
+  | not (feasible (mult - fromIntegral (length rs))) =
+    error $
+      show (length rs)
+        ++ " responses is too many for multiplicity "
+        ++ show mult
+expandRepeatRule mult callstack (m :=> (r1 : r2 : rs)) =
+  ExpectSequence first (expandRepeatRule (mult - 1) callstack (m :=> (r2 : rs)))
+  where
+    first
+      | exhaustable mult =
+        ExpectMulti
+          (atMost 1)
+          (ExpectStep (Step (locate callstack (m :-> Just r1))))
+      | otherwise = ExpectStep (Step (locate callstack (m :-> Just r1)))
+expandRepeatRule mult callstack (m :=> rs) =
+  ExpectMulti mult (ExpectStep (Step (locate callstack (m :-> listToMaybe rs))))
 
 -- | Type class for contexts in which it makes sense to express an expectation.
 -- Notably, this includes `MockT`, which expects actions to be performed during
@@ -123,14 +180,6 @@ newtype Expected m a = Expected {unwrapExpected :: ExpectSet (Step m)}
 
 instance ExpectContext Expected where
   fromExpectSet = Expected
-
-makeExpect ::
-  (Expectable cls name m r expectable, MockableMethod cls name m r) =>
-  CallStack ->
-  Multiplicity ->
-  expectable ->
-  ExpectSet (Step m)
-makeExpect cs mult e = Expect mult (Step (locate cs (toRule e)))
 
 -- | Creates an expectation that an action is performed once per given
 -- response (or exactly once if there is no response).
@@ -156,10 +205,7 @@ expect ::
   ) =>
   expectable ->
   ctx m ()
-expect e =
-  fromExpectSet (makeExpect callStack (fromIntegral (max 1 (length rs))) e)
-  where
-    (_ :=> rs) = toRule e
+expect e = fromExpectSet (expandRule callStack (toRule e))
 
 -- | Creates an expectation that an action is performed some number of times.
 --
@@ -183,13 +229,7 @@ expectN ::
   -- | The action and its response.
   expectable ->
   ctx m ()
-expectN mult e
-  | Multiplicity _ (Just n) <- mult,
-    length rs > n =
-    error "Too many responses for the specified multiplicity"
-  | otherwise = fromExpectSet (makeExpect callStack mult e)
-  where
-    (_ :=> rs) = toRule e
+expectN mult e = fromExpectSet (expandRepeatRule mult callStack (toRule e))
 
 -- | Specifies a response if a matching action is performed, but doesn't expect
 -- anything.  This is equivalent to @'expectN' 'anyMultiplicity'@, but shorter.
@@ -213,7 +253,8 @@ expectAny ::
   ) =>
   expectable ->
   ctx m ()
-expectAny = fromExpectSet . makeExpect callStack anyMultiplicity
+expectAny e =
+  fromExpectSet (expandRepeatRule anyMultiplicity callStack (toRule e))
 
 -- | Creates a sequential expectation.  Other actions can still happen during
 -- the sequence, but these specific expectations must be met in this order.
@@ -234,7 +275,7 @@ inSequence ::
   (MonadIO m, ExpectContext ctx) =>
   (forall ctx'. ExpectContext ctx' => [ctx' m ()]) ->
   ctx m ()
-inSequence es = fromExpectSet (ExpectMulti InOrder (map unwrapExpected es))
+inSequence es = fromExpectSet (foldr1 ExpectSequence (map unwrapExpected es))
 
 -- | Combines multiple expectations, which can occur in any order.  Most of the
 -- time, you can achieve the same thing by expecting each separately, but this
@@ -254,4 +295,4 @@ inAnyOrder ::
   (MonadIO m, ExpectContext ctx) =>
   (forall ctx'. ExpectContext ctx' => [ctx' m ()]) ->
   ctx m ()
-inAnyOrder es = fromExpectSet (ExpectMulti AnyOrder (map unwrapExpected es))
+inAnyOrder es = fromExpectSet (foldr1 ExpectInterleave (map unwrapExpected es))

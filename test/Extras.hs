@@ -6,11 +6,16 @@ module Extras where
 import Data.List (isPrefixOf)
 import Data.Typeable (Typeable)
 import Test.HMock
+import Test.HMock.Internal.Multiplicity
 import Test.Hspec
+import Test.QuickCheck hiding (once)
+
+instance Arbitrary Multiplicity where
+  arbitrary = normalize <$> (Multiplicity <$> arbitrary <*> arbitrary)
 
 multiplicityTests :: SpecWith ()
 multiplicityTests = do
-  describe "Multiplicity" $
+  describe "Multiplicity" $ do
     it "describes itself" $
       example $ do
         show once `shouldBe` "once"
@@ -25,6 +30,15 @@ multiplicityTests = do
         show (atMost 3) `shouldBe` "at most 3 times"
         show (between 2 3) `shouldBe` "2 or 3 times"
         show (between 2 5) `shouldBe` "2 to 5 times"
+
+    it "correctly implements sum" $
+      property $
+        \m1 m2 (NonNegative n) ->
+          let natSums k = [(i, k - i) | i <- [0 .. k]]
+           in meetsMultiplicity (m1 + m2) n
+                == any
+                  (\(j, k) -> meetsMultiplicity m1 j && meetsMultiplicity m2 k)
+                  (natSums n)
 
 predicateTests :: SpecWith ()
 predicateTests = do
