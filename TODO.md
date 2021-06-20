@@ -26,6 +26,13 @@ far as how to delegate to the mock implementations, this might be handled by
 backpack, or by just creating a new module with an identical API and using CPP
 in the system under test to import one or the other module.
 
+## Hackage Release
+
+I want to release to Hackage.  However, I don't want to do so until the API is
+at least a little bit stable.  This item marks the line between pending big API
+changes (that should probably block release), and nice-to-haves without big
+API impact (that probably should not)
+
 ## Local contexts
 
 The idea behind this is that sometimes you want to define expectations to be
