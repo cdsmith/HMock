@@ -11,8 +11,8 @@ description:        HMock is a flexible mock framework for testing effectful
                     For more information, see the module documentation for
                     "Test.HMock".
 category:           Testing
-homepage:           N/A
-bug-reports:        N/A
+homepage:           https://github.com/cdsmith/HMock
+bug-reports:        https://github.com/cdsmith/HMock/issues
 license:            BSD-3-Clause
 license-file:       LICENSE
 
@@ -22,6 +22,11 @@ maintainer:         Chris Smith <cdsmith@gmail.com>
 extra-source-files: CHANGELOG.md
 
 tested-with:        GHC == 8.4.4 || == 8.6.5 || == 8.8.4 || == 8.10.4 || == 9.0.1
+
+source-repository head
+    type:     git
+    location: git://github.com/cdsmith/HMock.git
+
 library
     exposed-modules:  Test.HMock,
                       Test.HMock.TH,
