@@ -1,36 +1,37 @@
-{-# OPTIONS_GHC -fplugin=Polysemy.Plugin #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE TypeOperators #-}
+{-# OPTIONS_GHC -fplugin=Polysemy.Plugin #-}
 
 module PolysemyTest where
 
+import Data.Kind (Type)
 import Data.Typeable (Typeable)
 import Polysemy
 
-data FileSystem (m :: * -> *) a where
+data FileSystem (m :: Type -> Type) a where
   ReadFile :: FilePath -> FileSystem m String
   WriteFile :: FilePath -> String -> FileSystem m ()
 
 makeSem ''FileSystem
 
 class Mockable (eff :: Effect) where
-  data Action eff :: (* -> *) -> * -> *
+  data Action eff :: (Type -> Type) -> Type -> Type
 
 instance Mockable FileSystem where
   data Action FileSystem m a where
     ReadFile_ :: FilePath -> Action FileSystem m String
     WriteFile_ :: FilePath -> String -> Action FileSystem m ()
 
-data Step (m :: * -> *) where
+data Step (m :: Type -> Type) where
   Step ::
     (Mockable eff, Typeable eff, Typeable m, Typeable a) =>
     Action eff m a ->
@@ -47,8 +48,8 @@ makeSem ''Mock
 
 interpretFSToMock :: Member Mock r => Sem (FileSystem ': r) a -> Sem r a
 interpretFSToMock = interpret $ \case
-    ReadFile f -> mockAction (ReadFile_ f)
-    WriteFile f s -> mockAction (WriteFile_ f s)
+  ReadFile f -> mockAction (ReadFile_ f)
+  WriteFile f s -> mockAction (WriteFile_ f s)
 
 {-
 interpretMock :: forall r a. Sem (Mock ': r) a -> Sem r a

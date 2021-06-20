@@ -13,6 +13,12 @@
 -- <https://martinfowler.com/articles/mocksArentStubs.html Mocks Aren't Stubs>,
 -- by Martin Fowler.
 --
+-- WARNING: Hmock's API is likely to change soon.  Please ensure you use an
+-- upper bound on the version number.  The current API works fine for mocking
+-- with MTL-style classes.  I want HMock to also work with effect systems,
+-- servant, haxl, and more.  To accomplish this, I'll need to make breaking
+-- changes to the API.
+--
 -- Suppose you have a @MonadFilesystem@ typeclass, which is instantiated by
 -- monads that implement filesystem operations:
 --
