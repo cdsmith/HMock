@@ -2,36 +2,24 @@
 
 https://link.springer.com/content/pdf/10.1007/978-3-642-54804-8_27.pdf makes a
 case for a more compositional and orthogonal semantics for mocks, which includes
-ambiguity checking.
-
-The basic idea:
-
-* `P . Q` means "P, then Q".  This is `inSequence` in HMock.
-* `P || Q` means "P, interleaved with Q".  This is `inAnyOrder` in HMock.
-* `P + Q` means "P or Q".  HMock doesn't currently implement this at all.
-* `P*` means "P, zero or more times".  HMock currently implements this only as
-  multiplicity constraints on single steps.
-* `empty` is a special plan that contains no elements.  This is `ExpectNothing`
-  in HMock's internal structure, or `inAnyOrder []` / `inSequence []` in the
-  public API.
+ambiguity checking.  I have implemented a variant of this language as a "core"
+expectation language for HMock.  However, the exposed API still doesn't offer
+these kinds of flexible options.
 
 Open questions:
 
-1. Can this be made ergonomic?  I'm not interested in this at all if it makes it
-   harder to do the simple cases.
+1. Can this be made ergonomic for end users?
 2. Should we restore ambiguity checking?  The article makes a strong case for
    it.  Earlier versions of HMock did check (dynamically) for ambiguous
-   expectations, and could do so again.  (I have no interest in, nor can I even
-   implement, static ambiguity checking, since HMock matchers are more flexible
-   than those in the article.)
-3. Is there a use case for arbitrary choice and repetition operators?  Probably
-   so.
-4. There seem to be two meanings to repetition.  One is `x* = empty + (x . x*)`,
-   and the other is `x* = empty + (x || x*)`.  The paper linked above proposes
-   only the first, but I'm not happy with this bias toward sequential
-   expectations (which I believe should be the exception, not the rule).  On the
-   other hand, the interleave rule is ambiguous any time x itself contains
-   repeated actions.  Maybe both should be offered.
+   expectations, and could do so again.  (HMock cannot do static ambiguity
+   checking because it lacks static info about whether matchers overlap.)
+3. There are two possible meanings to repetition.  One is
+   `x* = empty + (x . x*)`, and the other is `x* = empty + (x || x*)`.  The
+   paper linked above proposes only the first, but I'm not happy with this bias
+   toward sequential expectations (which I believe should be the exception, not
+   the rule).  On the other hand, the interleave rule is ambiguous any time x
+   itself contains repeated actions.  So maybe both should be offered.  I have
+   implemented both in the core language.
 
 Proposed API:
 
@@ -67,10 +55,6 @@ consecutiveTimes :: (MonadIO m, ExpectContext ctx) =>
   (forall ctx'. ExpectContext ctx' => ctx' m ()) ->
   ctx m ()
 ```
-
-This covers the operations above, but it doesn't necessarily provide a
-convenient way to mutate them from inside test code.  For that, I get the
-feeling I need some kind of cursor-based system, maybe?
 
 ## Instances for more systems
 
