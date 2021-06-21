@@ -653,9 +653,7 @@ nestedNoDefTests = describe "MonadNestedNoDef" $ do
     example $ do
       decs <- runMockT $ do
         $(expectReify ''MonadNestedNoDef)
-        $(expectReifyInstances
-            ''Default
-            [AppT (AppT (TupleT 2) (ConT ''NoDefault)) (ConT ''String)])
+        $([t|(NoDefault, String)|] >>= expectReifyInstances ''Default . (: []))
         $(expectReifyInstances ''Default [ConT ''NoDefault])
 
         runQ (makeMockable ''MonadNestedNoDef)
