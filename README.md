@@ -3,9 +3,10 @@
 ![](https://travis-ci.com/cdsmith/HMock.svg?branch=main)
 ![](https://img.shields.io/hackage/v/HMock)
 
-HMock provides a flexible and composable mock framework for Haskell, with
-functionality that generally matches or exceeds that of Mockito for Java,
-GoogleMock for C++, and other mainstream languages.
+[HMock](https://hackage.haskell.org/package/HMock) provides a flexible and
+composable mock framework for Haskell, with functionality that generally
+matches or exceeds that of Mockito for Java, GoogleMock for C++, and other
+mainstream languages.
 
 WARNING: Hmock's API is likely to change soon.  Please ensure you use an upper
 bound on the version number.  The current API works fine for mocking with
