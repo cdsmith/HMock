@@ -26,6 +26,35 @@ far as how to delegate to the mock implementations, this might be handled by
 backpack, or by just creating a new module with an identical API and using CPP
 in the system under test to import one or the other module.
 
+## Non-ambiguous solution to default expectations
+
+The remaining cases of ambiguous expectations in the test suite mostly come from
+situations where a specific test wants to override a default behavior created
+by `setupMockable`.  This definitely needs to be possible to do without creating
+ambiguity.
+
+Some options I can think of are:
+
+1. `byDefault` doesn't just set a default, but also allows unrestricted calls
+   to the method.  Because it's just a default, though, expectations would
+   override it.  This removes the opportunity to set a default while still
+   restricting calls to the method, though.
+2. Switch to lax mock semantics.  However, adding an expectation with a
+   multiplicity of zero still matches and fails a call.  This lets you at least
+   *explicitly* say something should not happen.  Simplification rules for the
+   core language would need to be modified to preserve repetitions with zero
+   multiplicity, since they are now needed to determine whether a default should
+   apply.
+3. Some merger of 1 and 2, where `byDefault` is the thing that makes a mock lax,
+   but with the same exception about zero multiplicity.  This probably most
+   closely resembles what I intuitively mean, but it's a subtle semantics, which
+   isn't good.
+3. Some kind of hack where expectations from `setupMockable` are made low
+   priority, so that test-specific expectations override them.  This seems messy
+   to implement, and surprising to users.  Conceptually this layering fits my
+   mental model, but I prefer to make it explicit using `byDefault` as in the
+   earlier suggestions.
+
 ## Local contexts
 
 The idea behind this is that sometimes you want to define expectations to be

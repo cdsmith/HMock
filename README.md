@@ -333,6 +333,18 @@ There are a few ways to do this:
    `Mockable` and implement `setupMockable` to do whatever you like.  This setup
    will always run before the first time HMock touches your class from any test.
 
+### What if there are two expectations that match the same method?
+
+By default, the most recently added expectation is matched.  Think of
+expectations as being a stack, so they are first-in, first-matched.  This rule
+makes HMock more compositional, since you can add and satisfy expectations in a
+part of your test without worrying that expectations from a larger containing
+block will interfere.
+
+There is also an option to fail when more than one expectation matches.  To
+enable this, just include `setAmiguityCheck True` as a statement in `MockT`.
+From that point forward, ambiguous matches will throw errors.
+
 ### How do I mock multi-parameter type classes?
 
 In order to mock a multi-parameter type class, the monad argument `m` must be

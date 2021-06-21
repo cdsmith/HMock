@@ -3,6 +3,7 @@
 ## x.y.z.w -- YYYY-MM-dd
 
 * Added optional ambiguity check.
+* Change desugaring of multiple responses to reduce ambiguity.
 
 ## 0.1.0.1 -- 2021-06-20
 
