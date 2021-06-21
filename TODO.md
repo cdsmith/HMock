@@ -26,6 +26,19 @@ far as how to delegate to the mock implementations, this might be handled by
 backpack, or by just creating a new module with an identical API and using CPP
 in the system under test to import one or the other module.
 
+## Option for errors on ambiguity
+
+The Svenningsson et al paper from which I got most of the core language for
+HMock makes a strong argument for ambiguity detection in HMock.  It wouldn't be
+hard to do, really.  I'd just have to fail when `liveSteps` returns more than
+one match.  HMock used to work this way, but I switched it off because it's just
+too convenient to be able to define default implementations and override them.
+
+Still, I could at least make ambiguity checking available as an option.  When it
+was the default, I had also decided to add a special low-priority version of
+`expectAny`, called `whenever`, that was specifically ignored on overlap.  I
+could consider something similar here.
+
 ## Hackage Release
 
 I want to release to Hackage.  However, I don't want to do so until the API is
