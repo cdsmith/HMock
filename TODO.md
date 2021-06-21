@@ -1,5 +1,9 @@
 ## Instances for more systems
 
+* Priority: High
+* Accept Patch: Probably
+* Complexity: Very High
+
 MTL-style type classes are only one way of building an API layer for effectful
 actions.  Some others include:
 
@@ -26,23 +30,34 @@ far as how to delegate to the mock implementations, this might be handled by
 backpack, or by just creating a new module with an identical API and using CPP
 in the system under test to import one or the other module.
 
-## Local contexts
+## Nested context
+
+* Priority: Medium
+* Accept Patch: Definitely
+* Complexity: Medium to Low
 
 The idea behind this is that sometimes you want to define expectations to be
-used in only a single part of your test.  They should get pushed onto the
-stack, but tagged with the part of the test.  Then, when that part of the test
-is done, they can be checked and removed immediately.
+used in only a single part of your test.  When that part of the test
+is done, these expectations should be checked and removed immediately.
 
 The risk this solves is that you add an expectation intending for it to happen
-in one part of the test, but then it gets missed and later satisfied by accident
-elsewhere.  Also, you may want to ignore certain calls in a part of the test,
-which you could accomplish by pushing a `expectAny` rule and then popping it
-when you're done.
+in one specific part of the test, but then it gets missed and later satisfied
+by accident elsewhere.  Also, you may want to ignore certain calls in a part of
+the test, which you could accomplish by pushing a `expectAny` rule and then
+popping it when you're done.
 
 Proposed API:
 
 ``` haskell
-nestMockT :: MockT m a -> MockT m a
+nestMockT :: MonadIO m => MockT m a -> MockT m a
+
+withNestedMockT ::
+  forall m b.
+  MonadIO m =>
+  ((forall a. MockT m a -> m a) -> MockT m b) ->
+  MockT m b
+
+-----------------
 
 test = do
   expect $ DoSomething
@@ -58,7 +73,28 @@ test = do
   doSomething
 ```
 
+The implementation should create a new `MockState` with a parent pointer, so
+other threads are still executing against the original state.  The
+`withNestedMockT` variant allows new threads to be injected into the nested
+context, just as `withMockT` does for the top-level runner.
+
+Open questions:
+
+1. When (if at all) should the parent context be used?  I could imagine several
+   answers here, ranging from "never, until the nested context returns" to
+   "it's always active alongside the nested one", and several things in between.
+2. What happens to defaults?  Probably they get priority over defaults in the
+   parent context, and are then popped when the context is popped.
+3. What happens with class initialization?  If the parent context is available
+   at all, then classes should probably not be re-initialized, preferring
+   instead to rely on their initialization in the parent context to bleed
+   through.
+
 ## Side effects?
+
+* Priority: Medium
+* Accept Patch: Probably
+* Complexity: Low
 
 Sometimes I want to add behavior (such as logging, new expectations, whatever)
 to an action, but without preventing that action from satisfying additional
@@ -71,13 +107,27 @@ response, but it:
 
 The perfect name for this operation is `whenever`.
 
+The counter-argument is that this feature breaks abstraction boundaries.  Since
+all methods are intercepted regardless of where they match in the expectation
+set, changes that aren't related to the part of code you're thinking about can
+nevertheless produce behavior in your test.  This is probably an acceptable
+disadvantage, though, provided that it's documented clearly.
+
 ## Better predicate descriptions
+
+* Priority: Medium
+* Accept Patch: Yes
+* Complexity: Medium to High
 
 Some predicates could do a better job explaining why they succeed or fail.  For
 example, `elemsAre` or `each` could explain which elements don't match.  This
 means expanding the API to `Predicate` to include an optional explanation.
 
 ## Whole-method matching
+
+* Priority: Medium
+* Accept Patch: Yes
+* Complexity: Medium to High
 
 Sometimes you want to be able to define matching predicates that span multiple
 arguments to a method.  There are whole-method matchers in frameworks like gMock
@@ -95,6 +145,10 @@ partial matching.  I need:
   argument or arguments that failed.
 
 ## Wrappers to save responses from integration tests.
+
+* Priority: Medium
+* Accept Patch: Probably
+* Complexity: Very High
 
 One nice feature of a mock framework could be to save interactions during an
 integration test, and then automatically set up the related expectations.
@@ -122,6 +176,10 @@ Open questions:
 
 ## Mockable with Typeable polymorphic return values.
 
+* Priority: Medium
+* Accept Patch: Yes
+* Complexity: Medium
+
 ``` haskell
 class MonadFoo m where
     foo :: forall a. Typeable a => a -> m a
@@ -143,6 +201,10 @@ Unifying the return types requires a `cast` in `matchAction`, but we should have
 the constraints that we would need to implement this.
 
 ## Mockable with unconstrained polymorphic return values.
+
+* Priority: Medium
+* Accept Patch: Yes
+* Complexity: High
 
 Now consider polymorphic return types without the `Typeable` constraint.
 
