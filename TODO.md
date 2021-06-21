@@ -39,13 +39,6 @@ was the default, I had also decided to add a special low-priority version of
 `expectAny`, called `whenever`, that was specifically ignored on overlap.  I
 could consider something similar here.
 
-## Hackage Release
-
-I want to release to Hackage.  However, I don't want to do so until the API is
-at least a little bit stable.  This item marks the line between pending big API
-changes (that should probably block release), and nice-to-haves without big
-API impact (that probably should not)
-
 ## Local contexts
 
 The idea behind this is that sometimes you want to define expectations to be
