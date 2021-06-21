@@ -10,7 +10,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module QuasiMock where
+module QuasiMock (module QuasiMock, module QuasiMockBase) where
 
 import Control.Monad.Trans (MonadIO, liftIO)
 import Data.Default (Default (..))
@@ -18,14 +18,11 @@ import Data.Generics (Typeable, everything, mkQ)
 import Language.Haskell.TH hiding (Match)
 import Language.Haskell.TH.Syntax hiding (Match)
 import Test.HMock
-import Test.HMock.TH (deriveMockableBase)
-import Util.TH (expectReify, expectReifyInstances, reifyInstancesStatic)
+import QuasiMockBase
 
 #if !MIN_VERSION_base(4, 13, 0)
 import Control.Monad.Fail (MonadFail)
 #endif
-
-deriveMockableBase ''Quasi
 
 -- Because not all methods of Quasi are mockable, the instance must be written
 -- by hand.

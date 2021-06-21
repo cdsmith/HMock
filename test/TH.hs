@@ -10,7 +10,6 @@ import QuasiMock
 import Test.HMock
 import Test.HMock.Internal.TH.Util (resolveInstance, unifyTypes)
 import Test.Hspec
-import Util.TH (reifyInstancesStatic, reifyStatic)
 
 data NotShowable
 
@@ -66,21 +65,9 @@ thUtilSpec = do
     it "recognizes when a nested type lacks instance" $
       example $
         runMockT $ do
-          expectAny $ QReify ''NotShowable |-> $(reifyStatic ''NotShowable)
-          expectAny $
-            QReifyInstances ''Show [ConT ''NotShowable]
-              |-> $(reifyInstancesStatic ''Show [ConT ''NotShowable])
-          expectAny $
-            QReifyInstances
-              ''Show
-              [AppT (AppT (TupleT 2) (ConT ''Int)) (ConT ''NotShowable)]
-              |-> $( reifyInstancesStatic
-                       ''Show
-                       [ AppT
-                           (AppT (TupleT 2) (ConT ''Int))
-                           (ConT ''NotShowable)
-                       ]
-                   )
+          $(expectReify ''NotShowable)
+          $(expectReifyInstances ''Show [ConT ''NotShowable])
+          $( [t|(Int, NotShowable)|] >>= expectReifyInstances ''Show . (:[]))
 
           t <- runQ [t|(Int, NotShowable)|]
           result <- runQ $ resolveInstance ''Show t

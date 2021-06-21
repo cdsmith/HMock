@@ -70,9 +70,9 @@ test-suite tests
                       ExpectSet,
                       Extras,
                       QuasiMock,
+                      QuasiMockBase,
                       TH,
-                      Util.DeriveRecursive,
-                      Util.TH
+                      Util.DeriveRecursive
     build-depends:    HMock,
                       QuickCheck,
                       base,

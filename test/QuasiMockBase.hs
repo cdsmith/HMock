@@ -1,19 +1,20 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveLift #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeFamilies #-}
 
-module Util.TH
-  ( expectReify,
-    expectReifyInstances,
-    reifyStatic,
-    reifyInstancesStatic,
-    deriveRecursive,
-  )
-where
+module QuasiMockBase where
 
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax
+import Test.HMock.TH (deriveMockableBase)
 import Util.DeriveRecursive (deriveRecursive)
 
 #if MIN_VERSION_template_haskell(2, 16, 0)
@@ -22,6 +23,8 @@ instance Lift Bytes where lift = undefined; liftTyped = undefined
 #endif
 
 deriveRecursive Nothing ''Lift ''Info
+
+deriveMockableBase ''Quasi
 
 reifyStatic :: Name -> Q Exp
 reifyStatic n = reify n >>= lift
