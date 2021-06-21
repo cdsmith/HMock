@@ -28,6 +28,7 @@ import Control.Monad.Writer (MonadWriter)
 import Data.Default (Default (def))
 import Data.Either (partitionEithers)
 import Data.Function (on)
+import Data.Functor (($>))
 import Data.List (intercalate, sortBy)
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -258,22 +259,30 @@ mockMethodImpl surrogate action =
        in case (full, findDefault defaults, surrogate, orderedPartial) of
             (opts@(_ : _ : _), _, _, _)
               | checkAmbig ->
-                error $ ambiguityError action (show . fst <$> opts)
-            ((e, Just response) : _, _, _, _) -> (e, response)
-            ((e, Nothing) : _, d, s, _) -> (e, fromMaybe (return s) d)
-            ([], _, _, []) -> error $ noMatchError action
-            ([], _, _, _) -> error $ partialMatchError action orderedPartial
+                error $
+                  ambiguityError action ((\(_, s, _) -> s) <$> opts) expectSet
+            ((e, _, Just response) : _, _, _, _) -> (e, response)
+            ((e, _, Nothing) : _, d, s, _) -> (e, fromMaybe (return s) d)
+            ([], _, _, []) -> error $ noMatchError action expectSet
+            ([], _, _, _) ->
+              error $ partialMatchError action orderedPartial expectSet
 
     tryMatch ::
       (Step m, ExpectSet (Step m)) ->
-      Either (Maybe (Int, String)) (ExpectSet (Step m), Maybe (MockT m r))
+      Either
+        (Maybe (Int, String))
+        (ExpectSet (Step m), String, Maybe (MockT m r))
     tryMatch (Step expected, e)
       | Just lrule@(Loc _ (m :-> impl)) <- cast expected =
         case matchAction m action of
           NoMatch n ->
             Left (Just (n, withLoc (showMatcher (Just action) m <$ lrule)))
           Match ->
-            Right (e, ($ action) <$> impl)
+            Right
+              ( e,
+                withLoc (lrule $> showMatcher (Just action) m),
+                ($ action) <$> impl
+              )
       | otherwise = Left Nothing
 
     findDefault :: [Step m] -> Maybe (MockT m r)
@@ -317,21 +326,39 @@ mockDefaultlessMethod action =
   withFrozenCallStack $ mockMethodImpl undefined action
 
 -- An error for an action that matches no expectations at all.
-noMatchError :: Mockable cls => Action cls name m a -> String
-noMatchError a = "Unexpected action: " ++ showAction a
+noMatchError ::
+  Mockable cls => Action cls name m a -> ExpectSet (Step m) -> String
+noMatchError a fullExpectations =
+  "Unexpected action: " ++ showAction a
+    ++ "\n\nFull expectations:\n"
+    ++ formatExpectSet fullExpectations
 
 -- An error for an action that doesn't match the argument predicates for any
 -- of the method's expectations.
-partialMatchError :: Mockable cls => Action cls name m a -> [String] -> String
-partialMatchError a partials =
+partialMatchError ::
+  Mockable cls =>
+  Action cls name m a ->
+  [String] ->
+  ExpectSet (Step m) ->
+  String
+partialMatchError a partials fullExpectations =
   "Wrong arguments: "
     ++ showAction a
     ++ "\n\nClosest matches:\n - "
     ++ intercalate "\n - " (take 5 partials)
+    ++ "\n\nFull expectations:\n"
+    ++ formatExpectSet fullExpectations
 
-ambiguityError :: Mockable cls => Action cls name m a -> [String] -> String
-ambiguityError a choices =
+ambiguityError ::
+  Mockable cls =>
+  Action cls name m a ->
+  [String] ->
+  ExpectSet (Step m) ->
+  String
+ambiguityError a choices fullExpectations =
   "Ambiguous action matched multiple expectations: "
     ++ showAction a
     ++ "\n\nMatches:\n - "
     ++ intercalate "\n - " choices
+    ++ "\n\nFull expectations:\n"
+    ++ formatExpectSet fullExpectations

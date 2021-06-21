@@ -140,7 +140,7 @@ expandRule callstack (m :=> []) =
   ExpectStep (Step (locate callstack (m :-> Nothing)))
 expandRule callstack (m :=> rs) =
   foldr1
-    ExpectInterleave
+    ExpectSequence
     (map (ExpectStep . Step . locate callstack . (m :->) . Just) rs)
 
 -- | Expands a Rule into an expectation, given a target multiplicity.  It is an
@@ -158,17 +158,16 @@ expandRepeatRule mult _ (_ :=> rs)
       show (length rs)
         ++ " responses is too many for multiplicity "
         ++ show mult
-expandRepeatRule mult callstack (m :=> (r1 : r2 : rs)) =
-  ExpectSequence first (expandRepeatRule (mult - 1) callstack (m :=> (r2 : rs)))
-  where
-    first
-      | exhaustable mult =
-        ExpectMulti
-          (atMost 1)
+expandRepeatRule mult callstack (m :=> (r1 : r2 : rs))
+  | exhaustable mult = ExpectEither ExpectNothing body
+  | otherwise = body
+  where body = ExpectSequence
           (ExpectStep (Step (locate callstack (m :-> Just r1))))
-      | otherwise = ExpectStep (Step (locate callstack (m :-> Just r1)))
+          (expandRepeatRule (mult - 1) callstack (m :=> (r2 : rs)))
 expandRepeatRule mult callstack (m :=> rs) =
-  ExpectMulti mult (ExpectStep (Step (locate callstack (m :-> listToMaybe rs))))
+  ExpectConsecutive
+    mult
+    (ExpectStep (Step (locate callstack (m :-> listToMaybe rs))))
 
 -- | Type class for contexts in which it makes sense to express an expectation.
 -- Notably, this includes `MockT`, which expects actions to be performed during
@@ -320,7 +319,8 @@ anyOf es = fromExpectSet (foldr1 ExpectEither (map unwrapExpected es))
 -- Different occurrences of the child can be interleaved.  In case of ambiguity,
 -- progressing on an existing occurrence is preferred over starting a new
 -- occurrence.
-times :: (MonadIO m, ExpectContext ctx) =>
+times ::
+  (MonadIO m, ExpectContext ctx) =>
   Multiplicity ->
   (forall ctx'. ExpectContext ctx' => ctx' m ()) ->
   ctx m ()
@@ -334,7 +334,8 @@ times mult e = fromExpectSet (ExpectMulti mult (unwrapExpected e))
 --
 -- Different occurrences of the child must happen consecutively, with one
 -- finishing before the next begins.
-consecutiveTimes :: (MonadIO m, ExpectContext ctx) =>
+consecutiveTimes ::
+  (MonadIO m, ExpectContext ctx) =>
   Multiplicity ->
   (forall ctx'. ExpectContext ctx' => ctx' m ()) ->
   ctx m ()

@@ -226,7 +226,7 @@ superTests = describe "MonadSuper" $ do
   it "is mockable" $
     example $ do
       let success = runMockT $ do
-            expect $ WithSuper
+            expect WithSuper
             withSuper
 
           failure = runMockT withSuper
