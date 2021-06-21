@@ -90,6 +90,14 @@ instance MonadTrans MockT where
 mapMockT :: (m a -> m b) -> MockT m a -> MockT m b
 mapMockT f = MockT . mapReaderT f . unMockT
 
+-- | The first thread to run this for a given class should execute setupMockable
+-- for that class.  Other threads that try to initialize the same class should
+-- block until that first thread finished.  The first thread, though, should be
+-- able to recursively call this function and get through.
+--
+-- To accomplish this, we use two TVars: one to track which classes are already
+-- initialized, and the other to track which classes are in the process of being
+-- initialized, and which thread is initializing them.
 initClassIfNeeded ::
   forall cls m proxy.
   (Mockable cls, Typeable m, MonadIO m) =>
@@ -215,10 +223,7 @@ byDefault _ = error "Defaults must have exactly one response."
 
 mockMethodImpl ::
   forall cls name m r.
-  ( HasCallStack,
-    MonadIO m,
-    MockableMethod cls name m r
-  ) =>
+  (HasCallStack, MonadIO m, MockableMethod cls name m r) =>
   r ->
   Action cls name m r ->
   MockT m r
@@ -234,6 +239,8 @@ mockMethodImpl surrogate action =
         writeTVar (mockExpectSet state) newExpectSet
         return response
   where
+    decideAction ::
+      ExpectSet (Step m) -> [Step m] -> (ExpectSet (Step m), MockT m r)
     decideAction expectSet defaults =
       let (partial, full) = partitionEithers (tryMatch <$> liveSteps expectSet)
           orderedPartial = snd <$> sortBy (compare `on` fst) (catMaybes partial)
@@ -242,6 +249,7 @@ mockMethodImpl surrogate action =
             ((e, Nothing) : _, d, s, _) -> (e, fromMaybe (return s) d)
             ([], _, _, []) -> error $ noMatchError action
             ([], _, _, _) -> error $ partialMatchError action orderedPartial
+
     tryMatch ::
       (Step m, ExpectSet (Step m)) ->
       Either (Maybe (Int, String)) (ExpectSet (Step m), Maybe (MockT m r))
