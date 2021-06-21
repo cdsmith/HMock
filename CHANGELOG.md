@@ -3,7 +3,9 @@
 ## x.y.z.w -- YYYY-MM-dd
 
 * Added optional ambiguity check.
-* Change desugaring of multiple responses to reduce ambiguity.
+* byDefault now makes a mock accept calls with default response.
+* Added setDefault, with the old behavior of byDefault.
+* Changed desugaring of multiple responses to reduce ambiguity.
 
 ## 0.1.0.1 -- 2021-06-20
 

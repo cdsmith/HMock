@@ -65,9 +65,11 @@ thUtilSpec = do
     it "recognizes when a nested type lacks instance" $
       example $
         runMockT $ do
-          $(expectReify ''NotShowable)
-          $(expectReifyInstances ''Show [ConT ''NotShowable])
-          $( [t|(Int, NotShowable)|] >>= expectReifyInstances ''Show . (:[]))
+          $(onReify [|expectAny|] ''NotShowable)
+          $(onReifyInstances [|expectAny|] ''Show [ConT ''NotShowable])
+          $( [t|(Int, NotShowable)|]
+               >>= onReifyInstances [|expectAny|] ''Show . (: [])
+           )
 
           t <- runQ [t|(Int, NotShowable)|]
           result <- runQ $ resolveInstance ''Show t

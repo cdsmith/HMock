@@ -29,17 +29,17 @@ deriveMockableBase ''Quasi
 reifyStatic :: Name -> Q Exp
 reifyStatic n = reify n >>= lift
 
-expectReify :: Name -> Q Exp
-expectReify n = do
+onReify :: Q Exp -> Name -> Q Exp
+onReify handler n = do
   result <- reify n
-  [|expectAny (QReify $(lift n) |-> $(lift result))|]
+  [| $handler (QReify $(lift n) |-> $(lift result))|]
 
 deriveRecursive Nothing ''Lift ''InstanceDec
 
 reifyInstancesStatic :: Name -> [Type] -> Q Exp
 reifyInstancesStatic n ts = reifyInstances n ts >>= lift
 
-expectReifyInstances :: Name -> [Type] -> Q Exp
-expectReifyInstances n ts = do
+onReifyInstances :: Q Exp -> Name -> [Type] -> Q Exp
+onReifyInstances handler n ts = do
   result <- reifyInstances n ts
-  [|expectAny (QReifyInstances $(lift n) $(lift ts) |-> $(lift result))|]
+  [|$handler (QReifyInstances $(lift n) $(lift ts) |-> $(lift result))|]

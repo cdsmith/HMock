@@ -493,6 +493,8 @@ coreTests = do
               <*> readFile "foo.txt"
           liftIO $ result `shouldBe` ("A", "B", "A", "B")
 
+    it "repeats response sequences during consecutive repetition" $
+      example $ do
         runMockT $ do
           consecutiveTimes 2 $ expect $ ReadFile "foo.txt" |-> "A" |-> "B"
 
@@ -593,20 +595,42 @@ coreTests = do
 
         test `shouldThrow` anyException
 
-    it "allows the user to override a default" $
+    it "allows the user to override a default with setDefault" $
       example $
         runMockT $ do
           expectAny $ ReadFile_ anything
 
           r1 <- readFile "foo.txt"
 
-          byDefault $ ReadFile "foo.txt" |-> "foo"
+          setDefault $ ReadFile "foo.txt" |-> "foo"
           r2 <- readFile "foo.txt"
           r3 <- readFile "bar.txt"
 
           liftIO (r1 `shouldBe` "")
           liftIO (r2 `shouldBe` "foo")
           liftIO (r3 `shouldBe` "")
+
+    it "adopts lax behavior for byDefault" $
+      example $
+        runMockT $ do
+          byDefault $ ReadFile "foo.txt" |-> "foo"
+          r <- readFile "foo.txt"
+          liftIO (r `shouldBe` "foo")
+
+    it "prefers expect over byDefault" $
+      example $
+        runMockT $ do
+          expectAny $ ReadFile_ anything |-> "bar"
+          byDefault $ ReadFile "foo.txt" |-> "foo"
+          r <- readFile "foo.txt"
+          liftIO (r `shouldBe` "bar")
+
+    it "doesn't adopt lax behavior for setDefault" $
+      example $
+        runMockT $ do
+          byDefault $ ReadFile "foo.txt" |-> "foo"
+          r <- readFile "foo.txt"
+          liftIO (r `shouldBe` "foo")
 
     it "checks ambiguity when asked" $
       example $ do

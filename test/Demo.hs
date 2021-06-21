@@ -23,7 +23,7 @@ import Test.HMock
     expectAny,
     runMockT,
     (|->),
-    (|=>),
+    (|=>), byDefault
   )
 import Test.HMock.TH (makeMockable, makeMockableBase)
 import Test.Hspec (SpecWith, describe, example, it)
@@ -156,7 +156,7 @@ instance Mockable MonadAuth where
   setupMockable _ = do
     -- Ensure that when the chatbot logs in with the right username and
     -- password.
-    expectAny $
+    byDefault $
       Login "HMockBot" "secretish"
         |=> \_ -> do
           -- Every login should be accompanied by a logout
@@ -164,13 +164,13 @@ instance Mockable MonadAuth where
 
     -- By default, assume that the bot has all permissions.  Individual tests
     -- can override this assumption.
-    expectAny $ HasPermission_ anything |-> True
+    byDefault $ HasPermission_ anything |-> True
 
 makeMockableBase ''MonadChat
 
 instance Mockable MonadChat where
   setupMockable _ = do
-    expectAny $
+    byDefault $
       JoinRoom_ anything
         |=> \(JoinRoom room) -> do
           -- The bot should leave every room it joins.
@@ -179,7 +179,7 @@ instance Mockable MonadChat where
 
     -- Our tests aren't generally concerned with what the bot says.  Individual
     -- tests can add expectations to check for specific messages.
-    expectAny $ SendChat_ anything anything
+    byDefault $ SendChat_ anything anything |-> ()
 
 -------------------------------------------------------------------------------
 -- PART 4: TESTS

@@ -8,8 +8,8 @@ import Data.Default (Default (..))
 import Data.Generics (Typeable, everything, mkQ)
 import Language.Haskell.TH hiding (Match)
 import Language.Haskell.TH.Syntax hiding (Match)
-import Test.HMock
 import QuasiMockBase
+import Test.HMock
 
 #if !MIN_VERSION_base(4, 13, 0)
 import Control.Monad.Fail (MonadFail)
@@ -63,32 +63,36 @@ functionType = everything (||) (mkQ False isArrow)
 
 instance Mockable Quasi where
   setupMockable _ = do
-    expectAny $ QIsExtEnabled_ anything |-> True
+    byDefault $ QIsExtEnabled_ anything |-> True
 
-    $(expectReify ''String)
-    $(expectReify ''Char)
-    $(expectReify ''Int)
-    $(expectReify ''Bool)
-    $(expectReify ''Enum)
-    $(expectReify ''Monad)
+    $(onReify [|byDefault|] ''String)
+    $(onReify [|byDefault|] ''Char)
+    $(onReify [|byDefault|] ''Int)
+    $(onReify [|byDefault|] ''Bool)
+    $(onReify [|byDefault|] ''Enum)
+    $(onReify [|byDefault|] ''Monad)
 
-    $(expectReifyInstances ''Show [ConT ''String])
-    $(expectReifyInstances ''Eq [ConT ''String])
-    $(expectReifyInstances ''Show [ConT ''Char])
-    $(expectReifyInstances ''Eq [ConT ''Char])
-    $(expectReifyInstances ''Show [ConT ''Int])
-    $(expectReifyInstances ''Eq [ConT ''Int])
-    $(expectReifyInstances ''Show [ConT ''Bool])
-    $(expectReifyInstances ''Eq [ConT ''Bool])
-    $(expectReifyInstances ''Default [TupleT 0])
-    $(expectReifyInstances ''Default [ConT ''String])
-    $(expectReifyInstances ''Default [ConT ''Int])
-    $(expectReifyInstances ''Default [AppT (ConT ''Maybe) (ConT ''Bool)])
+    $(onReifyInstances [|byDefault|] ''Show [ConT ''String])
+    $(onReifyInstances [|byDefault|] ''Eq [ConT ''String])
+    $(onReifyInstances [|byDefault|] ''Show [ConT ''Char])
+    $(onReifyInstances [|byDefault|] ''Eq [ConT ''Char])
+    $(onReifyInstances [|byDefault|] ''Show [ConT ''Int])
+    $(onReifyInstances [|byDefault|] ''Eq [ConT ''Int])
+    $(onReifyInstances [|byDefault|] ''Show [ConT ''Bool])
+    $(onReifyInstances [|byDefault|] ''Eq [ConT ''Bool])
+    $(onReifyInstances [|byDefault|] ''Default [TupleT 0])
+    $(onReifyInstances [|byDefault|] ''Default [ConT ''String])
+    $(onReifyInstances [|byDefault|] ''Default [ConT ''Int])
+    $( onReifyInstances
+         [|byDefault|]
+         ''Default
+         [AppT (ConT ''Maybe) (ConT ''Bool)]
+     )
 
-    expectAny $ QReifyInstances_ (eq ''Show) (is functionType) |-> []
-    expectAny $ QReifyInstances_ (eq ''Eq) (is functionType) |-> []
+    byDefault $ QReifyInstances_ (eq ''Show) (is functionType) |-> []
+    byDefault $ QReifyInstances_ (eq ''Eq) (is functionType) |-> []
 
-    expectAny $
+    byDefault $
       QReifyInstances_
         (eq ''Show)
         (elemsAre [$(qMatch [p|AppT ListT (VarT _)|])])

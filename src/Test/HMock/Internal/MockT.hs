@@ -51,7 +51,7 @@ import Control.Monad.Fail (MonadFail)
 
 data MockState m = MockState
   { mockExpectSet :: TVar (ExpectSet (Step m)),
-    mockDefaults :: TVar [Step m],
+    mockDefaults :: TVar [(Bool, Step m)],
     mockClasses :: TVar (Set TypeRep),
     mockInitingClasses :: TVar (Map TypeRep ThreadId),
     mockCheckAmbiguity :: TVar Bool
@@ -205,24 +205,53 @@ verifyExpectations = do
       ExpectNothing -> return ()
       missing -> error $ "Unmet expectations:\n" ++ formatExpectSet missing
 
--- | Changes the default response for matching actions.
+-- | Sets a default action for matching calls.  These calls will not fail, but
+-- the default will only be used if there is no expectation in effect with an
+-- explicit response.  The rule passed in must have exactly one response.
+--
+-- The difference between 'expectAny' and 'byDefault' is subtle.  It comes down
+-- to ambiguity:
+--
+-- * 'byDefault' is not an expectation.  It only has an effect if no expectation
+--   matches, regardless of when the expectations were added.
+-- * 'expectAny' adds an expectation, so if another expectation is in effect at
+--   the same time, a call to the method is ambiguous.  If ambiguity checking is
+--   enabled, the method will throw an error; otherwise, the more recently added
+--   of the two expectations is used.
 --
 -- Without 'byDefault', actions with no explicit response will return the
--- 'Default' value for the type, or 'undefined' if the return type isn't an
--- instance of 'Default'.  'byDefault' replaces that with a new default
--- response, also overriding any previous defaults. The rule passed in must have
--- exactly one response.
+-- 'Default' value for the type (or 'undefined' if the return type isn't an
+-- instance of 'Default').
 byDefault ::
-  forall cls name m r.
-  (MonadIO m, MockableMethod cls name m r) =>
-  Rule cls name m r ->
+  forall cls name m r rule.
+  (MonadIO m, MockableMethod cls name m r, Expectable cls name m r rule) =>
+  rule ->
   MockT m ()
-byDefault (m :=> [r]) = do
+byDefault e | m :=> [r] <- toRule e = do
   initClassIfNeeded (Proxy :: Proxy cls)
   state <- MockT ask
   atomically $
-    modifyTVar' (mockDefaults state) (Step (locate callStack (m :-> Just r)) :)
+    modifyTVar'
+      (mockDefaults state)
+      ((True, Step (locate callStack (m :-> Just r))) :)
 byDefault _ = error "Defaults must have exactly one response."
+
+-- | Sets a default action for *expected* matching calls.  The new default only
+-- applies to calls for which an expectation exists, but it lacks an explicit
+-- response.  The rule passed in must have exactly one response.
+setDefault ::
+  forall cls name m r rule.
+  (MonadIO m, MockableMethod cls name m r, Expectable cls name m r rule) =>
+  rule ->
+  MockT m ()
+setDefault e | m :=> [r] <- toRule e = do
+  initClassIfNeeded (Proxy :: Proxy cls)
+  state <- MockT ask
+  atomically $
+    modifyTVar'
+      (mockDefaults state)
+      ((False, Step (locate callStack (m :-> Just r))) :)
+setDefault _ = error "Defaults must have exactly one response."
 
 -- | Sets whether to check for ambiguous actions.  If 'True', then actions that
 -- match expectations in more than one way will fail.  If 'False', then the
@@ -252,19 +281,25 @@ mockMethodImpl surrogate action =
         return response
   where
     decideAction ::
-      ExpectSet (Step m) -> [Step m] -> Bool -> (ExpectSet (Step m), MockT m r)
+      ExpectSet (Step m) ->
+      [(Bool, Step m)] ->
+      Bool ->
+      (ExpectSet (Step m), MockT m r)
     decideAction expectSet defaults checkAmbig =
       let (partial, full) = partitionEithers (tryMatch <$> liveSteps expectSet)
           orderedPartial = snd <$> sortBy (compare `on` fst) (catMaybes partial)
-       in case (full, findDefault defaults, surrogate, orderedPartial) of
-            (opts@(_ : _ : _), _, _, _)
+       in case (full, surrogate, orderedPartial) of
+            (opts@(_ : _ : _), _, _)
               | checkAmbig ->
                 error $
                   ambiguityError action ((\(_, s, _) -> s) <$> opts) expectSet
-            ((e, _, Just response) : _, _, _, _) -> (e, response)
-            ((e, _, Nothing) : _, d, s, _) -> (e, fromMaybe (return s) d)
-            ([], _, _, []) -> error $ noMatchError action expectSet
-            ([], _, _, _) ->
+            ((e, _, Just response) : _, _, _) -> (e, response)
+            ((e, _, Nothing) : _, s, _)
+              | d <- findDefault False defaults -> (e, fromMaybe (return s) d)
+            ([], _, _)
+              | Just d <- findDefault True defaults -> (expectSet, d)
+            ([], _, []) -> error $ noMatchError action expectSet
+            ([], _, _) ->
               error $ partialMatchError action orderedPartial expectSet
 
     tryMatch ::
@@ -285,13 +320,14 @@ mockMethodImpl surrogate action =
               )
       | otherwise = Left Nothing
 
-    findDefault :: [Step m] -> Maybe (MockT m r)
-    findDefault [] = Nothing
-    findDefault (Step expected : _)
-      | Just (Loc _ (m :-> Just r)) <- cast expected,
+    findDefault :: Bool -> [(Bool, Step m)] -> Maybe (MockT m r)
+    findDefault _ [] = Nothing
+    findDefault unexpected ((lax, Step expected) : _)
+      | lax || not unexpected,
+        Just (Loc _ (m :-> Just r)) <- cast expected,
         Match <- matchAction m action =
         Just (r action)
-    findDefault (_ : steps) = findDefault steps
+    findDefault unexpected (_ : steps) = findDefault unexpected steps
 
 -- | Implements a method in a 'Mockable' monad by delegating to the mock
 -- framework.  If the method is called unexpectedly, an exception will be

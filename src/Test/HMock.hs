@@ -56,6 +56,7 @@ module Test.HMock
     describeExpectations,
     verifyExpectations,
     byDefault,
+    setDefault,
     setAmbiguityCheck,
 
     -- * Setting expectations
