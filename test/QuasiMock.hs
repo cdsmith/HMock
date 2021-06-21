@@ -19,7 +19,7 @@ import Language.Haskell.TH hiding (Match)
 import Language.Haskell.TH.Syntax hiding (Match)
 import Test.HMock
 import Test.HMock.TH (deriveMockableBase)
-import Util.TH (reifyInstancesStatic, reifyStatic)
+import Util.TH (expectReify, expectReifyInstances, reifyInstancesStatic)
 
 #if !MIN_VERSION_base(4, 13, 0)
 import Control.Monad.Fail (MonadFail)
@@ -77,56 +77,36 @@ instance Mockable Quasi where
   setupMockable _ = do
     expectAny $ QIsExtEnabled_ anything |-> True
 
-    expectAny $ QReify ''String |-> $(reifyStatic ''String)
-    expectAny $ QReify ''Char |-> $(reifyStatic ''Char)
-    expectAny $ QReify ''Int |-> $(reifyStatic ''Int)
-    expectAny $ QReify ''Bool |-> $(reifyStatic ''Bool)
-    expectAny $ QReify ''Enum |-> $(reifyStatic ''Enum)
-    expectAny $ QReify ''Monad |-> $(reifyStatic ''Monad)
-    expectAny $
-      QReifyInstances ''Show [ConT ''String]
-        |-> $(reifyInstancesStatic ''Show [ConT ''String])
-    expectAny $
-      QReifyInstances ''Eq [ConT ''String]
-        |-> $(reifyInstancesStatic ''Eq [ConT ''String])
-    expectAny $
-      QReifyInstances ''Show [ConT ''Char]
-        |-> $(reifyInstancesStatic ''Show [ConT ''Char])
-    expectAny $
-      QReifyInstances ''Eq [ConT ''Char]
-        |-> $(reifyInstancesStatic ''Eq [ConT ''Char])
-    expectAny $
-      QReifyInstances ''Show [ConT ''Int]
-        |-> $(reifyInstancesStatic ''Show [ConT ''Int])
-    expectAny $
-      QReifyInstances ''Eq [ConT ''Int]
-        |-> $(reifyInstancesStatic ''Eq [ConT ''Int])
-    expectAny $
-      QReifyInstances ''Show [ConT ''Bool]
-        |-> $(reifyInstancesStatic ''Show [ConT ''Bool])
-    expectAny $
-      QReifyInstances ''Eq [ConT ''Bool]
-        |-> $(reifyInstancesStatic ''Eq [ConT ''Bool])
-    expectAny $
-      QReifyInstances ''Default [TupleT 0]
-        |-> $(reifyInstancesStatic ''Default [TupleT 0])
-    expectAny $
-      QReifyInstances ''Default [ConT ''String]
-        |-> $(reifyInstancesStatic ''Default [ConT ''String])
-    expectAny $
-      QReifyInstances ''Default [ConT ''Int]
-        |-> $(reifyInstancesStatic ''Default [ConT ''Int])
-    expectAny $
-      QReifyInstances ''Default [AppT (ConT ''Maybe) (ConT ''Bool)]
-        |-> $(reifyInstancesStatic ''Default [AppT (ConT ''Maybe) (ConT ''Bool)])
-    expectAny $
-      QReifyInstances_ (eq ''Show) (is functionType) |-> []
-    expectAny $
-      QReifyInstances_ (eq ''Eq) (is functionType) |-> []
+    $(expectReify ''String)
+    $(expectReify ''Char)
+    $(expectReify ''Int)
+    $(expectReify ''Bool)
+    $(expectReify ''Enum)
+    $(expectReify ''Monad)
+
+    $(expectReifyInstances ''Show [ConT ''String])
+    $(expectReifyInstances ''Eq [ConT ''String])
+    $(expectReifyInstances ''Show [ConT ''Char])
+    $(expectReifyInstances ''Eq [ConT ''Char])
+    $(expectReifyInstances ''Show [ConT ''Int])
+    $(expectReifyInstances ''Eq [ConT ''Int])
+    $(expectReifyInstances ''Show [ConT ''Bool])
+    $(expectReifyInstances ''Eq [ConT ''Bool])
+    $(expectReifyInstances ''Default [TupleT 0])
+    $(expectReifyInstances ''Default [ConT ''String])
+    $(expectReifyInstances ''Default [ConT ''Int])
+    $(expectReifyInstances ''Default [AppT (ConT ''Maybe) (ConT ''Bool)])
+
+    expectAny $ QReifyInstances_ (eq ''Show) (is functionType) |-> []
+    expectAny $ QReifyInstances_ (eq ''Eq) (is functionType) |-> []
 
     expectAny $
-      QReifyInstances_ (eq ''Show) (elemsAre [$(qMatch [p|AppT ListT (VarT _)|])])
-        |-> $(reifyInstancesStatic ''Show [AppT ListT (VarT (mkName "a_0"))])
+      QReifyInstances_
+        (eq ''Show)
+        (elemsAre [$(qMatch [p|AppT ListT (VarT _)|])])
+        |-> $(reifyInstancesStatic ''Show [AppT ListT (VarT (mkName "a"))])
     expectAny $
-      QReifyInstances_ (eq ''Eq) (elemsAre [$(qMatch [p|AppT ListT (VarT _)|])])
-        |-> $(reifyInstancesStatic ''Eq [AppT ListT (VarT (mkName "a_0"))])
+      QReifyInstances_
+        (eq ''Eq)
+        (elemsAre [$(qMatch [p|AppT ListT (VarT _)|])])
+        |-> $(reifyInstancesStatic ''Eq [AppT ListT (VarT (mkName "a"))])
