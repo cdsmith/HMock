@@ -1,5 +1,9 @@
 # Revision history for hmock
 
+## x.y.z.w -- YYYY-MM-dd
+
+* Added optional ambiguity check.
+
 ## 0.1.0.1 -- 2021-06-20
 
 * Fixed a bad dependency that broke some GHC versions.

@@ -608,6 +608,28 @@ coreTests = do
           liftIO (r2 `shouldBe` "foo")
           liftIO (r3 `shouldBe` "")
 
+    it "checks ambiguity when asked" $
+      example $ do
+        let setExpectations = do
+              expect $ ReadFile_ anything
+              expect $ ReadFile "foo.txt"
+              setAmbiguityCheck True
+
+            failure = runMockT $ do
+              setExpectations
+              _ <- readFile "foo.txt"
+              _ <- readFile "bar.txt"
+              return ()
+
+            success = runMockT $ do
+              setExpectations
+              _ <- readFile "bar.txt"
+              _ <- readFile "foo.txt"
+              return ()
+
+        success
+        failure `shouldThrow` errorWith ("Ambiguous action" `isInfixOf`)
+
 errorWith :: (String -> Bool) -> SomeException -> Bool
 errorWith p e = p (show e)
 

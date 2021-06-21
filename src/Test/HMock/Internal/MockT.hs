@@ -52,7 +52,8 @@ data MockState m = MockState
   { mockExpectSet :: TVar (ExpectSet (Step m)),
     mockDefaults :: TVar [Step m],
     mockClasses :: TVar (Set TypeRep),
-    mockInitingClasses :: TVar (Map TypeRep ThreadId)
+    mockInitingClasses :: TVar (Map TypeRep ThreadId),
+    mockCheckAmbiguity :: TVar Bool
   }
 
 initMockState :: MonadIO m => m (MockState m)
@@ -62,6 +63,7 @@ initMockState =
     <*> newTVarIO []
     <*> newTVarIO Set.empty
     <*> newTVarIO Map.empty
+    <*> newTVarIO False
 
 -- | Monad transformer for running mocks.
 newtype MockT m a where
@@ -221,6 +223,13 @@ byDefault (m :=> [r]) = do
     modifyTVar' (mockDefaults state) (Step (locate callStack (m :-> Just r)) :)
 byDefault _ = error "Defaults must have exactly one response."
 
+-- | Sets whether to check for ambiguous actions.  If 'True', then actions that
+-- match expectations in more than one way will fail.  If 'False', then the
+-- most recently added action will take precedence.  This defaults to 'False'.
+setAmbiguityCheck :: MonadIO m => Bool -> MockT m ()
+setAmbiguityCheck flag =
+  MockT ask >>= atomically . flip writeTVar flag . mockCheckAmbiguity
+
 mockMethodImpl ::
   forall cls name m r.
   (HasCallStack, MonadIO m, MockableMethod cls name m r) =>
@@ -235,16 +244,21 @@ mockMethodImpl surrogate action =
       atomically $ do
         expectSet <- readTVar (mockExpectSet state)
         defaults <- readTVar (mockDefaults state)
-        let (newExpectSet, response) = decideAction expectSet defaults
+        checkAmbig <- readTVar (mockCheckAmbiguity state)
+        let (newExpectSet, response) =
+              decideAction expectSet defaults checkAmbig
         writeTVar (mockExpectSet state) newExpectSet
         return response
   where
     decideAction ::
-      ExpectSet (Step m) -> [Step m] -> (ExpectSet (Step m), MockT m r)
-    decideAction expectSet defaults =
+      ExpectSet (Step m) -> [Step m] -> Bool -> (ExpectSet (Step m), MockT m r)
+    decideAction expectSet defaults checkAmbig =
       let (partial, full) = partitionEithers (tryMatch <$> liveSteps expectSet)
           orderedPartial = snd <$> sortBy (compare `on` fst) (catMaybes partial)
        in case (full, findDefault defaults, surrogate, orderedPartial) of
+            (opts@(_ : _ : _), _, _, _)
+              | checkAmbig ->
+                error $ ambiguityError action (show . fst <$> opts)
             ((e, Just response) : _, _, _, _) -> (e, response)
             ((e, Nothing) : _, d, s, _) -> (e, fromMaybe (return s) d)
             ([], _, _, []) -> error $ noMatchError action
@@ -303,25 +317,21 @@ mockDefaultlessMethod action =
   withFrozenCallStack $ mockMethodImpl undefined action
 
 -- An error for an action that matches no expectations at all.
-noMatchError ::
-  (HasCallStack, Mockable cls) =>
-  -- | The action that was received.
-  Action cls name m a ->
-  String
-noMatchError a =
-  "Unexpected action: " ++ showAction a
+noMatchError :: Mockable cls => Action cls name m a -> String
+noMatchError a = "Unexpected action: " ++ showAction a
 
 -- An error for an action that doesn't match the argument predicates for any
 -- of the method's expectations.
-partialMatchError ::
-  (HasCallStack, Mockable cls) =>
-  -- | The action that was received.
-  Action cls name m a ->
-  -- | Descriptions of the matchers that most closely matched, closest first.
-  [String] ->
-  String
+partialMatchError :: Mockable cls => Action cls name m a -> [String] -> String
 partialMatchError a partials =
   "Wrong arguments: "
     ++ showAction a
     ++ "\n\nClosest matches:\n - "
     ++ intercalate "\n - " (take 5 partials)
+
+ambiguityError :: Mockable cls => Action cls name m a -> [String] -> String
+ambiguityError a choices =
+  "Ambiguous action matched multiple expectations: "
+    ++ showAction a
+    ++ "\n\nMatches:\n - "
+    ++ intercalate "\n - " choices
