@@ -1,9 +1,10 @@
 # Revision history for hmock
 
-## x.y.z.w -- YYYY-MM-dd
+## 0.2.0.0 -- 2021-06-22
 
+* Separated modules to make selective imports easier.
 * Added optional ambiguity check.
-* byDefault now makes a mock accept calls with default response.
+* byDefault now causes a mock to accept unexpected calls.
 * Added setDefault, with the old behavior of byDefault.
 * Restricted mockable setup to avoid a race condition.
 * Changed desugaring of multiple responses to reduce ambiguity.

@@ -7,6 +7,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE UndecidableInstances #-}
 
+-- | This module defines the 'MockT' monad transformer.
 module Test.HMock.Internal.MockT where
 
 import Control.Monad (forM_, join, unless)
@@ -34,17 +35,21 @@ import Data.Proxy (Proxy (Proxy))
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Typeable (TypeRep, cast, typeRep)
-import GHC.Stack
+import GHC.Stack (HasCallStack, callStack, withFrozenCallStack)
+import Test.HMock.ExpectContext (ExpectContext (..), MockableMethod)
 import Test.HMock.Internal.ExpectSet
-import Test.HMock.Internal.Expectable
-import Test.HMock.Internal.Mockable
+import Test.HMock.Internal.Rule (Rule ((:=>)))
+import Test.HMock.Internal.Step (SingleRule (..), Step (..), unwrapExpected)
 import Test.HMock.Internal.Util (Located (..), locate, withLoc)
+import Test.HMock.Mockable (MatchResult (..), Mockable (..), MockableBase (..))
+import Test.HMock.Rule (Expectable (..))
 import UnliftIO
 
 #if !MIN_VERSION_base(4, 13, 0)
 import Control.Monad.Fail (MonadFail)
 #endif
 
+-- | Full state of a mock.
 data MockState m = MockState
   { mockExpectSet :: TVar (ExpectSet (Step m)),
     mockDefaults :: TVar [(Bool, Step m)],
@@ -52,6 +57,7 @@ data MockState m = MockState
     mockCheckAmbiguity :: TVar Bool
   }
 
+-- | Initializes a new 'MockState' with a blank slate.
 initMockState :: MonadIO m => m (MockState m)
 initMockState =
   MockState
@@ -84,6 +90,7 @@ newtype MockT m a where
 instance MonadTrans MockT where
   lift = MockT . lift
 
+-- | Applies a function to the base monad of 'MockT'.
 mapMockT :: (m a -> m b) -> MockT m a -> MockT m b
 mapMockT f = MockT . mapReaderT f . unMockT
 
@@ -107,8 +114,8 @@ runMockT test = withMockT constTest
 -- test = 'withMockT' '$' \inMockT -> do
 --    'expect' '$' ...
 --
---    'liftIO' '$' 'forkIO' '$' inMockT firstThread
---    'liftIO' '$' 'forkIO' '$' inMockT secondThread
+--    'liftIO' '$' 'Control.Concurrent.forkIO' '$' inMockT firstThread
+--    'liftIO' '$' 'Control.Concurrent.forkIO' '$' inMockT secondThread
 -- @
 --
 -- This is a low-level primitive.  Consider using the @unliftio@ package for
@@ -162,6 +169,7 @@ mockSetupSTM m = MockSetupT (lift m)
 -- | Type class for contexts in which defaults can be set up for a mockable
 -- class.  Notably, this includes `MockSetupT` and `MockT`.
 class MockSetupContext ctx where
+  -- | Runs a 'MockSetupT' action in this monad.
   fromMockSetup :: MonadIO m => MockSetupT m a -> ctx m a
 
 instance MockSetupContext MockT where
@@ -172,6 +180,8 @@ instance MockSetupContext MockT where
 instance MockSetupContext MockSetupT where
   fromMockSetup = id
 
+-- | Runs class initialization for a 'Mockable' class, if it hasn't been run
+-- yet.
 initClassIfNeeded ::
   forall cls m proxy.
   (Mockable cls, Typeable m, MonadIO m) =>
@@ -186,16 +196,39 @@ initClassIfNeeded proxy = do
   where
     t = typeRep proxy
 
+-- | Runs class initialization for all uninitialized 'Mockable' classes in the
+-- given 'ExpectSet'.
 initClassesAsNeeded :: MonadIO m => ExpectSet (Step m) -> MockSetupT m ()
 initClassesAsNeeded es = forM_ (getSteps es) $
   \(Step (_ :: Located (SingleRule cls name m r))) ->
     initClassIfNeeded (Proxy :: Proxy cls)
 
+-- | Adds an expectation to the 'MockState' for the given 'ExpectSet',
+-- interleaved with any existing expectations.
+expectThisSet :: HasCallStack => MonadIO m => ExpectSet (Step m) -> MockT m ()
+expectThisSet e = fromMockSetup $ do
+  initClassesAsNeeded e
+  state <- MockSetupT ask
+  mockSetupSTM $ modifyTVar (mockExpectSet state) (e `ExpectInterleave`)
+
 instance ExpectContext MockT where
-  fromExpectSet e = fromMockSetup $ do
-    initClassesAsNeeded e
-    state <- MockSetupT ask
-    mockSetupSTM $ modifyTVar (mockExpectSet state) (e `ExpectInterleave`)
+  expect e =
+    withFrozenCallStack $ expectThisSet $ unwrapExpected $ expect e
+  expectN mult e =
+    withFrozenCallStack $ expectThisSet $ unwrapExpected $ expectN mult e
+  expectAny e =
+    withFrozenCallStack $ expectThisSet $ unwrapExpected $ expectAny e
+  inSequence es =
+    withFrozenCallStack $ expectThisSet $ unwrapExpected $ inSequence es
+  inAnyOrder es =
+    withFrozenCallStack $ expectThisSet $ unwrapExpected $ inAnyOrder es
+  anyOf es =
+    withFrozenCallStack $ expectThisSet $ unwrapExpected $ anyOf es
+  times mult es =
+    withFrozenCallStack $ expectThisSet $ unwrapExpected $ times mult es
+  consecutiveTimes mult es =
+    withFrozenCallStack $
+      expectThisSet $ unwrapExpected $ consecutiveTimes mult es
 
 -- | Sets a default action for matching calls.  These calls will not fail, but
 -- the default will only be used if there is no expectation in effect with an
@@ -260,6 +293,7 @@ setAmbiguityCheck :: MonadIO m => Bool -> MockT m ()
 setAmbiguityCheck flag =
   MockT ask >>= atomically . flip writeTVar flag . mockCheckAmbiguity
 
+-- | Implements mock delegation for actions.
 mockMethodImpl ::
   forall cls name m r.
   (HasCallStack, MonadIO m, MockableMethod cls name m r) =>
@@ -359,7 +393,7 @@ mockDefaultlessMethod ::
 mockDefaultlessMethod action =
   withFrozenCallStack $ mockMethodImpl undefined action
 
--- An error for an action that matches no expectations at all.
+-- | An error for an action that matches no expectations at all.
 noMatchError ::
   Mockable cls => Action cls name m a -> ExpectSet (Step m) -> String
 noMatchError a fullExpectations =
@@ -367,7 +401,7 @@ noMatchError a fullExpectations =
     ++ "\n\nFull expectations:\n"
     ++ formatExpectSet fullExpectations
 
--- An error for an action that doesn't match the argument predicates for any
+-- | An error for an action that doesn't match the argument predicates for any
 -- of the method's expectations.
 partialMatchError ::
   Mockable cls =>
@@ -383,6 +417,8 @@ partialMatchError a partials fullExpectations =
     ++ "\n\nFull expectations:\n"
     ++ formatExpectSet fullExpectations
 
+-- | An error for an 'Action' that matches more than one 'Matcher'.  This only
+-- triggers an error if ambiguity checks are on.
 ambiguityError ::
   Mockable cls =>
   Action cls name m a ->

@@ -6,7 +6,61 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module Test.HMock.Internal.Predicates where
+-- | This module defines 'Predicate's which you can use to match the arguments of
+-- a method in your execution plan.
+module Test.HMock.Predicates
+  ( Predicate (..),
+    anything,
+    eq,
+    neq,
+    gt,
+    geq,
+    lt,
+    leq,
+    just,
+    left,
+    right,
+    zipP,
+    zip3P,
+    zip4P,
+    zip5P,
+    andP,
+    orP,
+    notP,
+    startsWith,
+    endsWith,
+    hasSubstr,
+    hasSubsequence,
+    caseInsensitive,
+    matchesRegex,
+    matchesCaseInsensitiveRegex,
+    containsRegex,
+    containsCaseInsensitiveRegex,
+    isEmpty,
+    nonEmpty,
+    sizeIs,
+    elemsAre,
+    unorderedElemsAre,
+    each,
+    contains,
+    containsAll,
+    containsOnly,
+    containsKey,
+    containsEntry,
+    keysAre,
+    entriesAre,
+    approxEq,
+    finite,
+    infinite,
+    nAn,
+    is,
+    qIs,
+    with,
+    qWith,
+    qMatch,
+    typed,
+  )
+where
 
 import Data.Char (toUpper)
 import Data.Maybe (isJust)
@@ -18,7 +72,7 @@ import GHC.Stack (HasCallStack, callStack)
 import Language.Haskell.TH (ExpQ, PatQ, pprint)
 import Language.Haskell.TH.Syntax (lift)
 import Test.HMock.Internal.TH.Util (removeModNames)
-import Test.HMock.Internal.Util (choices, locate, isSubsequenceOf, withLoc)
+import Test.HMock.Internal.Util (choices, isSubsequenceOf, locate, withLoc)
 import Text.Regex.TDFA hiding (match)
 
 -- $setup
@@ -30,7 +84,7 @@ import Text.Regex.TDFA hiding (match)
 -- is similar to @a -> 'Bool'@, but also has a 'Show' instance to describe what
 -- it is checking.
 --
--- Predicates are used to define which arguments a general matcher should
+-- 'Predicate's are used to define which arguments a general matcher should
 -- accept.
 data Predicate a = Predicate
   { showPredicate :: String,
@@ -139,24 +193,6 @@ leq x =
       accept = (<= x)
     }
 
--- | A 'Predicate' that matches 'True' values.
---
--- >>> accept true True
--- True
--- >>> accept true False
--- False
-true :: Predicate Bool
-true = eq True
-
--- | A 'Predicate' that matches 'False' values.
---
--- >>> accept false True
--- False
--- >>> accept false False
--- True
-false :: Predicate Bool
-false = eq False
-
 -- | A 'Predicate' that accepts 'Maybe' values of @'Just' x@, where @x@ matches
 -- the given child 'Predicate'.
 --
@@ -206,7 +242,7 @@ right p =
     }
 
 -- | A 'Predicate' that accepts pairs whose elements satisfy the corresponding
--- child 'Predicates'.
+-- child 'Predicate's.
 --
 -- >>> accept (zipP (eq "foo") (eq "bar")) ("foo", "bar")
 -- True
@@ -234,7 +270,7 @@ zip3P p1 p2 p3 =
     }
 
 -- | A 'Predicate' that accepts 3-tuples whose elements satisfy the
--- corresponding child 'Predicates'.
+-- corresponding child 'Predicate's.
 --
 -- >>> accept (zip4P (eq 1) (eq 2) (eq 3) (eq 4)) (1, 2, 3, 4)
 -- True
@@ -254,7 +290,7 @@ zip4P p1 p2 p3 p4 =
     }
 
 -- | A 'Predicate' that accepts 3-tuples whose elements satisfy the
--- corresponding child 'Predicates'.
+-- corresponding child 'Predicate's.
 --
 -- >>> accept (zip5P (eq 1) (eq 2) (eq 3) (eq 4) (eq 5)) (1, 2, 3, 4, 5)
 -- True
@@ -638,7 +674,7 @@ contains p =
     }
 
 -- | A 'Predicate' that accepts data structures which contain an element
--- satisfying each of the child predicates.  @'containsAll' [p1, p2, ..., pn]@
+-- satisfying each of the child 'Predicate's.  @'containsAll' [p1, p2, ..., pn]@
 -- is equivalent to @'contains' p1 `'andP'` 'contains' p2 `'andP'` ... `'andP'`
 -- 'contains' pn@.
 --
@@ -656,7 +692,7 @@ containsAll ps =
     }
 
 -- | A 'Predicate' that accepts data structures whose elements all satisfy at
--- least one of the child predicates.  @'containsOnly' [p1, p2, ..., pn]@ is
+-- least one of the child 'Predicate's.  @'containsOnly' [p1, p2, ..., pn]@ is
 -- equivalent to @'each' (p1 `'orP'` p2 `'orP'` ... `'orP'` pn)@.
 --
 -- >>> accept (containsOnly [eq "foo", eq "bar"]) ["foo", "foo"]
@@ -705,7 +741,7 @@ containsEntry p q =
     }
 
 -- | A 'Predicate' that accepts map-like structures whose keys are exactly those
--- matched by the given list of 'Predicates', in any order.
+-- matched by the given list of 'Predicate's, in any order.
 --
 -- >>> accept (keysAre [eq "a", eq "b", eq "c"]) [("a", 1), ("b", 2), ("c", 3)]
 -- True

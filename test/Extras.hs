@@ -6,12 +6,14 @@ module Extras where
 import Data.List (isPrefixOf)
 import Data.Typeable (Typeable)
 import Test.HMock
-import Test.HMock.Internal.Multiplicity
 import Test.Hspec
 import Test.QuickCheck hiding (once)
 
 instance Arbitrary Multiplicity where
-  arbitrary = normalize <$> (Multiplicity <$> arbitrary <*> arbitrary)
+  arbitrary =
+    between
+      <$> (fromInteger <$> arbitrary)
+      <*> (fromInteger . getNonNegative <$> arbitrary)
 
 multiplicityTests :: SpecWith ()
 multiplicityTests = do

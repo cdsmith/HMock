@@ -4,6 +4,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TupleSections #-}
 
+-- | This module contains the implementation of the Template Haskell generator.
 module Test.HMock.Internal.TH
   ( MockableOptions (..),
     makeMockable,

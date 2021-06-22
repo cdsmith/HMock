@@ -3,14 +3,13 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 
+-- | The internal core language of expectations in HMock.
 module Test.HMock.Internal.ExpectSet where
 
-import Test.HMock.Internal.Multiplicity
+import Test.HMock.Multiplicity
   ( Multiplicity,
     between,
-    exhaustable,
-    feasible,
-    normalize,
+    feasible, meetsMultiplicity
   )
 
 -- | A set of expected steps and their responses.  This is the "core" language
@@ -40,9 +39,9 @@ satisfied (ExpectSequence e f) = satisfied e && satisfied f
 satisfied (ExpectInterleave e f) = satisfied e && satisfied f
 satisfied (ExpectEither e f) = satisfied e || satisfied f
 satisfied (ExpectMulti mult e) =
-  feasible mult && (exhaustable mult || satisfied e)
+  feasible mult && (meetsMultiplicity mult 0 || satisfied e)
 satisfied (ExpectConsecutive mult e) =
-  feasible mult && (exhaustable mult || satisfied e)
+  feasible mult && (meetsMultiplicity mult 0 || satisfied e)
 
 -- | Computes the live steps of the ExpectSet.  In other words: which individual
 -- steps can be matched right now, and what are the remaining expectations in
@@ -107,7 +106,7 @@ simplify (ExpectMulti m e)
   | ExpectNothing <- e' = ExpectNothing
   | m == 0 = ExpectNothing
   | m == 1 = e'
-  | otherwise = ExpectMulti (normalize m) e'
+  | otherwise = ExpectMulti m e'
   where
     e' = simplify e
 simplify (ExpectConsecutive m e)
@@ -115,7 +114,7 @@ simplify (ExpectConsecutive m e)
   | ExpectNothing <- e' = ExpectNothing
   | m == 0 = ExpectNothing
   | m == 1 = e'
-  | otherwise = ExpectConsecutive (normalize m) e'
+  | otherwise = ExpectConsecutive m e'
   where
     e' = simplify e
 simplify other = other
@@ -196,9 +195,9 @@ excess = simplify . go
       | satisfied e || satisfied f = ExpectNothing
       | otherwise = ExpectEither (go e) (go f)
     go (ExpectMulti m e)
-      | exhaustable m = ExpectNothing
+      | meetsMultiplicity m 0 = ExpectNothing
       | otherwise = ExpectMulti m (go e)
     go (ExpectConsecutive m e)
-      | exhaustable m = ExpectNothing
+      | meetsMultiplicity m 0 = ExpectNothing
       | otherwise = ExpectConsecutive m (go e)
     go other = other

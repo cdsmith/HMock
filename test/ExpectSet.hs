@@ -6,7 +6,7 @@ module ExpectSet where
 import Control.Arrow (second)
 import Data.List (foldl')
 import Test.HMock.Internal.ExpectSet
-import Test.HMock.Internal.Multiplicity
+import Test.HMock.Multiplicity
 import Test.Hspec
 import Test.Hspec.QuickCheck (modifyMaxSuccess)
 import Test.QuickCheck
@@ -48,7 +48,10 @@ instance Arbitrary (ExpectSet Int) where
       ++ [e]
 
 instance Arbitrary Multiplicity where
-  arbitrary = normalize <$> (Multiplicity <$> arbitrary <*> arbitrary)
+  arbitrary =
+    between
+      <$> (fromInteger <$> arbitrary)
+      <*> (fromInteger . getNonNegative <$> arbitrary)
 
 liveSteps' :: ExpectSet step -> [(step, ExpectSet step)]
 liveSteps' = map (second simplify) . liveSteps

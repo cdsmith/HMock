@@ -1,6 +1,19 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 
-module Test.HMock.Internal.Multiplicity where
+-- | This module provides the basic vocabulary for talking about multiplicity,
+-- which is the number of times something is allowed to happen.  Multiplicities
+-- can be any range of natural numbers, with or without an upper bound.
+module Test.HMock.Multiplicity
+  ( Multiplicity,
+    meetsMultiplicity,
+    feasible,
+    once,
+    anyMultiplicity,
+    atLeast,
+    atMost,
+    between,
+  )
+where
 
 -- | An acceptable range of number of times for something to happen.
 --
@@ -8,21 +21,22 @@ module Test.HMock.Internal.Multiplicity where
 data Multiplicity = Multiplicity Int (Maybe Int) deriving (Eq)
 
 instance Show Multiplicity where
-  show m | not (feasible m) = "infeasible"
-  show (Multiplicity 0 (Just 0)) = "never"
-  show (Multiplicity 1 (Just 1)) = "once"
-  show (Multiplicity 2 (Just 2)) = "twice"
-  show (Multiplicity 0 Nothing) = "any number of times"
-  show (Multiplicity 1 Nothing) = "at least once"
-  show (Multiplicity 2 Nothing) = "at least twice"
-  show (Multiplicity n Nothing) = "at least " ++ show n ++ " times"
-  show (Multiplicity 0 (Just 1)) = "at most once"
-  show (Multiplicity 0 (Just 2)) = "at most twice"
-  show (Multiplicity 0 (Just n)) = "at most " ++ show n ++ " times"
-  show (Multiplicity m (Just n))
-    | m == n = show n ++ " times"
-    | m == n - 1 = show m ++ " or " ++ show n ++ " times"
-    | otherwise = show m ++ " to " ++ show n ++ " times"
+  show mult = go (normalize mult) where
+    go m | not (feasible m) = "infeasible"
+    go (Multiplicity 0 (Just 0)) = "never"
+    go (Multiplicity 1 (Just 1)) = "once"
+    go (Multiplicity 2 (Just 2)) = "twice"
+    go (Multiplicity 0 Nothing) = "any number of times"
+    go (Multiplicity 1 Nothing) = "at least once"
+    go (Multiplicity 2 Nothing) = "at least twice"
+    go (Multiplicity n Nothing) = "at least " ++ show n ++ " times"
+    go (Multiplicity 0 (Just 1)) = "at most once"
+    go (Multiplicity 0 (Just 2)) = "at most twice"
+    go (Multiplicity 0 (Just n)) = "at most " ++ show n ++ " times"
+    go (Multiplicity m (Just n))
+      | m == n = show n ++ " times"
+      | m == n - 1 = show m ++ " or " ++ show n ++ " times"
+      | otherwise = show m ++ " to " ++ show n ++ " times"
 
 -- | A 'Multiplicity' value representing inconsistent expectations.
 infeasible :: Multiplicity
@@ -127,19 +141,6 @@ atMost (Multiplicity _ n) = Multiplicity 0 n
 -- False
 between :: Multiplicity -> Multiplicity -> Multiplicity
 between (Multiplicity m _) (Multiplicity _ n) = Multiplicity m n
-
--- | Checks whether a 'Multiplicity' includes zero in its range.
---
--- >>> exhaustable anyMultiplicity
--- True
--- >>> exhaustable (atLeast 2)
--- False
--- >>> exhaustable (atMost 3)
--- True
--- >>> exhaustable (between 0 2)
--- True
-exhaustable :: Multiplicity -> Bool
-exhaustable m@(Multiplicity lo _) = feasible m && lo == 0
 
 -- | Checks whether a 'Multiplicity' is capable of matching any number at all.
 --

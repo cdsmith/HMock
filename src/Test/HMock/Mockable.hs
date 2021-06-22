@@ -4,7 +4,18 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module Test.HMock.Internal.Mockable where
+-- | This module defines the 'MockableBase' and 'Mockable' classes that are
+-- needed to use an MTL-style type class with 'Test.HMock.MockT.MockT'.  You
+-- will typically derive 'MockableBase' with Template Haskell, since it's mostly
+-- boilerplate.  The 'Mockable' class adds a customizable setup method which you
+-- can define yourself to add the right defaults for methods in the mocked
+-- class.
+module Test.HMock.Mockable
+  ( Mockable (..),
+    MockableBase (..),
+    MatchResult (..),
+  )
+where
 
 import Control.Monad.Trans (MonadIO)
 import Data.Kind (Constraint, Type)

@@ -57,21 +57,11 @@ module Test.HMock
     verifyExpectations,
     setAmbiguityCheck,
 
-    -- * Setting expectations
-    MockableMethod,
-    Expectable (..),
-    Rule,
-    (|=>),
-    (|->),
-    ExpectContext,
-    expect,
-    expectN,
-    expectAny,
-    inSequence,
-    inAnyOrder,
-    anyOf,
-    times,
-    consecutiveTimes,
+    -- * Rules for calls and responses
+    module Test.HMock.Rule,
+
+    -- * Combinators for building test plans
+    module Test.HMock.ExpectContext,
 
     -- * Initializing mockable classes
     MockSetupContext,
@@ -80,77 +70,21 @@ module Test.HMock
     setDefault,
 
     -- * Predicates
-    Predicate (..),
-    anything,
-    eq,
-    neq,
-    gt,
-    geq,
-    lt,
-    leq,
-    just,
-    left,
-    right,
-    zipP,
-    zip3P,
-    zip4P,
-    zip5P,
-    andP,
-    orP,
-    notP,
-    startsWith,
-    endsWith,
-    hasSubstr,
-    hasSubsequence,
-    caseInsensitive,
-    matchesRegex,
-    matchesCaseInsensitiveRegex,
-    containsRegex,
-    containsCaseInsensitiveRegex,
-    isEmpty,
-    nonEmpty,
-    sizeIs,
-    elemsAre,
-    unorderedElemsAre,
-    each,
-    contains,
-    containsAll,
-    containsOnly,
-    containsKey,
-    containsEntry,
-    keysAre,
-    entriesAre,
-    approxEq,
-    finite,
-    infinite,
-    nAn,
-    is,
-    qIs,
-    with,
-    qWith,
-    qMatch,
-    typed,
+    module Test.HMock.Predicates,
 
     -- * Multiplicity
-    Multiplicity,
-    meetsMultiplicity,
-    once,
-    anyMultiplicity,
-    atLeast,
-    atMost,
-    between,
+    module Test.HMock.Multiplicity,
 
     -- * Implementing mocks
-    MockableBase (..),
-    Mockable (..),
-    MatchResult (..),
+    module Test.HMock.Mockable,
     mockMethod,
     mockDefaultlessMethod,
   )
 where
 
-import Test.HMock.Internal.Expectable
+import Test.HMock.ExpectContext
 import Test.HMock.Internal.MockT
-import Test.HMock.Internal.Mockable
-import Test.HMock.Internal.Multiplicity
-import Test.HMock.Internal.Predicates
+import Test.HMock.Mockable
+import Test.HMock.Multiplicity
+import Test.HMock.Predicates
+import Test.HMock.Rule

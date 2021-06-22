@@ -1,6 +1,6 @@
 cabal-version:      2.4
 name:               HMock
-version:            0.1.0.1
+version:            0.2.0.0
 synopsis:           A flexible mock framework for testing effectful code.
 description:        HMock is a flexible mock framework for testing effectful
                     code in Haskell.  Tests can set up expectations about
@@ -30,12 +30,15 @@ source-repository head
 library
     exposed-modules:  Test.HMock,
                       Test.HMock.TH,
-                      Test.HMock.Internal.Multiplicity,
+                      Test.HMock.Multiplicity,
+                      Test.HMock.ExpectContext,
+                      Test.HMock.Mockable,
+                      Test.HMock.Predicates,
+                      Test.HMock.Rule,
                       Test.HMock.Internal.MockT,
                       Test.HMock.Internal.ExpectSet,
-                      Test.HMock.Internal.Expectable,
-                      Test.HMock.Internal.Mockable,
-                      Test.HMock.Internal.Predicates,
+                      Test.HMock.Internal.Rule,
+                      Test.HMock.Internal.Step,
                       Test.HMock.Internal.TH,
                       Test.HMock.Internal.TH.Util,
                       Test.HMock.Internal.Util
@@ -65,8 +68,8 @@ test-suite tests
                       Core,
                       Demo,
                       DocTests.All,
-                      DocTests.Test.HMock.Internal.Multiplicity,
-                      DocTests.Test.HMock.Internal.Predicates,
+                      DocTests.Test.HMock.Multiplicity,
+                      DocTests.Test.HMock.Predicates,
                       ExpectSet,
                       Extras,
                       QuasiMock,
