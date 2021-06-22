@@ -10,7 +10,7 @@ import Control.Monad.Trans (MonadIO)
 import Data.Kind (Constraint, Type)
 import Data.Typeable (Typeable)
 import GHC.TypeLits (Symbol)
-import {-# SOURCE #-} Test.HMock.Internal.MockT (MockT)
+import {-# SOURCE #-} Test.HMock.Internal.MockT (MockSetupT)
 
 -- | The result of matching a @'Matcher' a@ with an @'Action' b@.  Because the
 -- types should already guarantee that the methods match, all that's left is to
@@ -51,5 +51,5 @@ class MockableBase cls => Mockable (cls :: (Type -> Type) -> Constraint) where
   -- An action to run and set up defaults for this class.  The action will be
   -- run before HMock touches the class, either to add expectations or to
   -- delegate a method.
-  setupMockable :: (MonadIO m, Typeable m) => proxy cls -> MockT m ()
+  setupMockable :: (MonadIO m, Typeable m) => proxy cls -> MockSetupT m ()
   setupMockable _ = return ()

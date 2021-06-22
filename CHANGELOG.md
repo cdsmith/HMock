@@ -5,6 +5,7 @@
 * Added optional ambiguity check.
 * byDefault now makes a mock accept calls with default response.
 * Added setDefault, with the old behavior of byDefault.
+* Restricted mockable setup to avoid a race condition.
 * Changed desugaring of multiple responses to reduce ambiguity.
 
 ## 0.1.0.1 -- 2021-06-20

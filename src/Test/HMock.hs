@@ -55,8 +55,6 @@ module Test.HMock
     withMockT,
     describeExpectations,
     verifyExpectations,
-    byDefault,
-    setDefault,
     setAmbiguityCheck,
 
     -- * Setting expectations
@@ -74,6 +72,12 @@ module Test.HMock
     anyOf,
     times,
     consecutiveTimes,
+
+    -- * Initializing mockable classes
+    MockSetupContext,
+    MockSetupT,
+    byDefault,
+    setDefault,
 
     -- * Predicates
     Predicate (..),

@@ -97,7 +97,7 @@ instance Mockable Quasi where
         (eq ''Show)
         (elemsAre [$(qMatch [p|AppT ListT (VarT _)|])])
         |-> $(reifyInstancesStatic ''Show [AppT ListT (VarT (mkName "a"))])
-    expectAny $
+    byDefault $
       QReifyInstances_
         (eq ''Eq)
         (elemsAre [$(qMatch [p|AppT ListT (VarT _)|])])

@@ -22,7 +22,7 @@ import Test.HMock.Internal.Mockable
 import Test.HMock.Internal.Multiplicity
 import Test.HMock.Internal.Util (Located (Loc), locate, withLoc)
 
--- | Something that can be expected.  This type class covers a number of cases:
+-- | Class for  things that can be expected.  Covers a number of cases:
 --
 --   * Expecting an exact 'Action'.
 --   * Expecting anything that matches a 'Matcher'.
