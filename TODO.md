@@ -1,3 +1,63 @@
+## Initialize classes in STM.
+
+There's some complicated logic right now to keep classes from being initialized
+twice, but it can deadlock if the initialization of classes mention other
+classes in a cycle, and two different threads are involved.  That's unfortunate.
+A solution would be to move initialization to the STM monad, so that it can be
+performed atomically in the same transaction as the update to note that the
+class is initialized in the first place.
+
+I don't want to expose STM in the API, though.  So I'd use the same class trick
+as we currently do with `expect` and friends.  To elaborate, it would look
+something like this:
+
+``` haskell
+
+class MockContext ctx
+class MockContext ctx => ExpectContext ctx
+
+byDefault :: 
+byDefault ::
+  forall cls name m r rule.
+  (MonadIO m,
+   MockableMethod cls name m r,
+   Expectable cls name m r rule,
+   MockContext ctx) =>
+  rule ->
+  ctx m ()
+
+expect ::
+  ( HasCallStack,
+    MonadIO m,
+    MockableMethod cls name m r,
+    Expectable cls name m r expectable,
+    ExpectContext ctx
+  ) =>
+  expectable ->
+  ctx m ()
+```
+
+Note that `MockT` is an instance of both `ExpectContext` and `MockContext`, so
+it's legal to use `expect` and `byDefault` in `MockT`.  But a new monad
+transformer, called something like `MockSetupT`, would can also be an instance,
+and it can be a wrapper around `ReaderT ... STM` rather than `ReaderT ... IO`,
+so it would be possible to use them from an existing transaction as well.
+
+Note that `MockContext` needs to be a different class from `ExpectContext`,
+because `byDefault` shouldn't be legal to nest inside a `inSequence` or other
+higher-order expectation combinator.  A slight variant would have `MockContext`
+be called `MockSetupContext` and not a superclass of `ExpectContext` at all.
+This would allow initialization to use `byDefault`, but not `expect` and
+friends.  This is probably what you want to do anyway.  Anything but `expectAny`
+behaves very oddly from a setup handler.  (The expectations are only enforced if
+the class is touched by the test!)  And `expectAny` can always be replaced with
+`byDefault`, with the added advantage that it doesn't create ambiguities when
+overridden.
+
+Either one would be a breaking change, since right now setup runs in `MockT m`,
+which can perform arbitrary IO.  So I don't see a reason not to go in the
+`MockSetupContext` direction.
+
 ## Instances for more systems
 
 * Priority: High
