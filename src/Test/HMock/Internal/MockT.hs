@@ -9,8 +9,7 @@
 
 module Test.HMock.Internal.MockT where
 
-import Control.Concurrent (ThreadId)
-import Control.Monad (forM_, join, unless, when)
+import Control.Monad (forM_, join, unless)
 import Control.Monad.Base (MonadBase)
 import Control.Monad.Catch (MonadCatch, MonadMask, MonadThrow)
 import Control.Monad.Cont (MonadCont)
@@ -30,8 +29,6 @@ import Data.Either (partitionEithers)
 import Data.Function (on)
 import Data.Functor (($>))
 import Data.List (intercalate, sortBy)
-import Data.Map (Map)
-import qualified Data.Map as Map
 import Data.Maybe (catMaybes, fromMaybe)
 import Data.Proxy (Proxy (Proxy))
 import Data.Set (Set)
@@ -43,7 +40,6 @@ import Test.HMock.Internal.Expectable
 import Test.HMock.Internal.Mockable
 import Test.HMock.Internal.Util (Located (..), locate, withLoc)
 import UnliftIO
-import UnliftIO.Concurrent (myThreadId)
 
 #if !MIN_VERSION_base(4, 13, 0)
 import Control.Monad.Fail (MonadFail)
@@ -53,7 +49,6 @@ data MockState m = MockState
   { mockExpectSet :: TVar (ExpectSet (Step m)),
     mockDefaults :: TVar [(Bool, Step m)],
     mockClasses :: TVar (Set TypeRep),
-    mockInitingClasses :: TVar (Map TypeRep ThreadId),
     mockCheckAmbiguity :: TVar Bool
   }
 
@@ -63,7 +58,6 @@ initMockState =
     <$> newTVarIO ExpectNothing
     <*> newTVarIO []
     <*> newTVarIO Set.empty
-    <*> newTVarIO Map.empty
     <*> newTVarIO False
 
 -- | Monad transformer for running mocks.
@@ -93,61 +87,10 @@ instance MonadTrans MockT where
 mapMockT :: (m a -> m b) -> MockT m a -> MockT m b
 mapMockT f = MockT . mapReaderT f . unMockT
 
--- | The first thread to run this for a given class should execute setupMockable
--- for that class.  Other threads that try to initialize the same class should
--- block until that first thread finished.  The first thread, though, should be
--- able to recursively call this function and get through.
---
--- To accomplish this, we use two TVars: one to track which classes are already
--- initialized, and the other to track which classes are in the process of being
--- initialized, and which thread is initializing them.
-initClassIfNeeded ::
-  forall cls m proxy.
-  (Mockable cls, Typeable m, MonadIO m) =>
-  proxy cls ->
-  MockT m ()
-initClassIfNeeded proxy =
-  do
-    state <- MockT ask
-    myTid <- myThreadId
-    needsInit <- atomically $ do
-      finishedClasses <- readTVar (mockClasses state)
-      if Set.member t finishedClasses
-        then return False
-        else do
-          initingClasses <- readTVar (mockInitingClasses state)
-          case Map.lookup t initingClasses of
-            Nothing -> do
-              writeTVar
-                (mockInitingClasses state)
-                (Map.insert t myTid initingClasses)
-              return True
-            Just tid
-              | tid == myTid -> return False
-              | otherwise -> retrySTM
-    when needsInit $ do
-      setupMockable (Proxy :: Proxy cls)
-      atomically $ do
-        modifyTVar (mockClasses state) (Set.insert t)
-        modifyTVar (mockInitingClasses state) (Map.delete t)
-  where
-    t = typeRep proxy
-
-initClassesAsNeeded :: MonadIO m => ExpectSet (Step m) -> MockT m ()
-initClassesAsNeeded es = forM_ (getSteps es) $
-  \(Step (_ :: Located (SingleRule cls name m r))) ->
-    initClassIfNeeded (Proxy :: Proxy cls)
-
 instance MonadReader r m => MonadReader r (MockT m) where
   ask = lift ask
   local = mapMockT . local
   reader = lift . reader
-
-instance ExpectContext MockT where
-  fromExpectSet e = do
-    initClassesAsNeeded e
-    state <- MockT ask
-    atomically $ modifyTVar (mockExpectSet state) (e `ExpectInterleave`)
 
 -- | Runs a test in the 'MockT' monad, handling all of the mocks.
 runMockT :: forall m a. MonadIO m => MockT m a -> m a
@@ -205,6 +148,55 @@ verifyExpectations = do
       ExpectNothing -> return ()
       missing -> error $ "Unmet expectations:\n" ++ formatExpectSet missing
 
+-- | Monad for setting up a mockable class.  Note that even though the type
+-- looks that way, this is *not* a monad transformer.  It's a very restricted
+-- environment that can only be used to set up defaults for the class.
+newtype MockSetupT m a where
+  MockSetupT :: {unMockSetupT :: ReaderT (MockState m) STM a} -> MockSetupT m a
+  deriving (Functor, Applicative, Monad)
+
+-- | Run an STM action in 'MockSetupT'
+mockSetupSTM :: STM a -> MockSetupT m a
+mockSetupSTM m = MockSetupT (lift m)
+
+-- | Type class for contexts in which defaults can be set up for a mockable
+-- class.  Notably, this includes `MockSetupT` and `MockT`.
+class MockSetupContext ctx where
+  fromMockSetup :: MonadIO m => MockSetupT m a -> ctx m a
+
+instance MockSetupContext MockT where
+  fromMockSetup m = do
+    state <- MockT ask
+    atomically $ runReaderT (unMockSetupT m) state
+
+instance MockSetupContext MockSetupT where
+  fromMockSetup = id
+
+initClassIfNeeded ::
+  forall cls m proxy.
+  (Mockable cls, Typeable m, MonadIO m) =>
+  proxy cls ->
+  MockSetupT m ()
+initClassIfNeeded proxy = do
+  state <- MockSetupT ask
+  classes <- mockSetupSTM $ readTVar (mockClasses state)
+  unless (Set.member t classes) $ do
+    mockSetupSTM $ modifyTVar (mockClasses state) (Set.insert t)
+    setupMockable (Proxy :: Proxy cls)
+  where
+    t = typeRep proxy
+
+initClassesAsNeeded :: MonadIO m => ExpectSet (Step m) -> MockSetupT m ()
+initClassesAsNeeded es = forM_ (getSteps es) $
+  \(Step (_ :: Located (SingleRule cls name m r))) ->
+    initClassIfNeeded (Proxy :: Proxy cls)
+
+instance ExpectContext MockT where
+  fromExpectSet e = fromMockSetup $ do
+    initClassesAsNeeded e
+    state <- MockSetupT ask
+    mockSetupSTM $ modifyTVar (mockExpectSet state) (e `ExpectInterleave`)
+
 -- | Sets a default action for matching calls.  These calls will not fail, but
 -- the default will only be used if there is no expectation in effect with an
 -- explicit response.  The rule passed in must have exactly one response.
@@ -223,14 +215,18 @@ verifyExpectations = do
 -- 'Default' value for the type (or 'undefined' if the return type isn't an
 -- instance of 'Default').
 byDefault ::
-  forall cls name m r rule.
-  (MonadIO m, MockableMethod cls name m r, Expectable cls name m r rule) =>
+  forall cls name m r rule ctx.
+  ( MonadIO m,
+    MockableMethod cls name m r,
+    Expectable cls name m r rule,
+    MockSetupContext ctx
+  ) =>
   rule ->
-  MockT m ()
-byDefault e | m :=> [r] <- toRule e = do
+  ctx m ()
+byDefault e | m :=> [r] <- toRule e = fromMockSetup $ do
   initClassIfNeeded (Proxy :: Proxy cls)
-  state <- MockT ask
-  atomically $
+  state <- MockSetupT ask
+  mockSetupSTM $
     modifyTVar'
       (mockDefaults state)
       ((True, Step (locate callStack (m :-> Just r))) :)
@@ -240,14 +236,18 @@ byDefault _ = error "Defaults must have exactly one response."
 -- applies to calls for which an expectation exists, but it lacks an explicit
 -- response.  The rule passed in must have exactly one response.
 setDefault ::
-  forall cls name m r rule.
-  (MonadIO m, MockableMethod cls name m r, Expectable cls name m r rule) =>
+  forall cls name m r rule ctx.
+  ( MonadIO m,
+    MockableMethod cls name m r,
+    Expectable cls name m r rule,
+    MockSetupContext ctx
+  ) =>
   rule ->
-  MockT m ()
-setDefault e | m :=> [r] <- toRule e = do
+  ctx m ()
+setDefault e | m :=> [r] <- toRule e = fromMockSetup $ do
   initClassIfNeeded (Proxy :: Proxy cls)
-  state <- MockT ask
-  atomically $
+  state <- MockSetupT ask
+  mockSetupSTM $
     modifyTVar'
       (mockDefaults state)
       ((False, Step (locate callStack (m :-> Just r))) :)
@@ -266,19 +266,17 @@ mockMethodImpl ::
   r ->
   Action cls name m r ->
   MockT m r
-mockMethodImpl surrogate action =
-  do
+mockMethodImpl surrogate action = join $
+  fromMockSetup $ do
     initClassIfNeeded (Proxy :: Proxy cls)
-    state <- MockT ask
-    join $
-      atomically $ do
-        expectSet <- readTVar (mockExpectSet state)
-        defaults <- readTVar (mockDefaults state)
-        checkAmbig <- readTVar (mockCheckAmbiguity state)
-        let (newExpectSet, response) =
-              decideAction expectSet defaults checkAmbig
-        writeTVar (mockExpectSet state) newExpectSet
-        return response
+    state <- MockSetupT ask
+    expectSet <- mockSetupSTM $ readTVar (mockExpectSet state)
+    defaults <- mockSetupSTM $ readTVar (mockDefaults state)
+    checkAmbig <- mockSetupSTM $ readTVar (mockCheckAmbiguity state)
+    let (newExpectSet, response) =
+          decideAction expectSet defaults checkAmbig
+    mockSetupSTM $ writeTVar (mockExpectSet state) newExpectSet
+    return response
   where
     decideAction ::
       ExpectSet (Step m) ->
