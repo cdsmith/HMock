@@ -30,6 +30,16 @@ far as how to delegate to the mock implementations, this might be handled by
 backpack, or by just creating a new module with an identical API and using CPP
 in the system under test to import one or the other module.
 
+## Fix the API for TH generators
+
+* Priority: High
+* Accept Patch: Maybe (depends on UX concerns)
+* Complexity: Low
+
+20 variants based on combinatorial explosion is a lot!  I mean, using the record
+syntax for options is annoying, but so it looking through a list of 20 methods
+and wondering which variant does what you want.
+
 ## Nested context
 
 * Priority: Medium
