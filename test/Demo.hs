@@ -231,7 +231,7 @@ demoSpec = describe "chatbot" $ do
 
         chatbot "#haskell"
 
-  it "doesn't ban people for using four-letter words in big reports" $ do
+  it "doesn't ban people for using four-letter words in bug reports" $ do
     example $
       runMockT $ do
         -- A four letter word is used in a bug report.  This is understandable,
