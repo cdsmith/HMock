@@ -39,7 +39,6 @@ library
                       Test.HMock.Internal.ExpectSet,
                       Test.HMock.Internal.Rule,
                       Test.HMock.Internal.Step,
-                      Test.HMock.Internal.TH,
                       Test.HMock.Internal.TH.Util,
                       Test.HMock.Internal.Util
     build-depends:    base >=4.11.0 && < 4.16,
