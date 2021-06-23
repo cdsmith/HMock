@@ -21,7 +21,7 @@ import Control.Monad.Trans (MonadIO)
 import Data.Kind (Constraint, Type)
 import Data.Typeable (Typeable)
 import GHC.TypeLits (Symbol)
-import {-# SOURCE #-} Test.HMock.Internal.MockT (MockSetupT)
+import {-# SOURCE #-} Test.HMock.Internal.State (MockSetupT)
 
 -- | The result of matching a @'Matcher' a@ with an @'Action' b@.  Because the
 -- types should already guarantee that the methods match, all that's left is to

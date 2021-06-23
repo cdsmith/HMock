@@ -64,10 +64,7 @@ module Test.HMock
     module Test.HMock.ExpectContext,
 
     -- * Initializing mockable classes
-    MockSetupContext,
-    MockSetupT,
-    byDefault,
-    setDefault,
+    module Test.HMock.Setup,
 
     -- * Predicates
     module Test.HMock.Predicates,
@@ -77,14 +74,15 @@ module Test.HMock
 
     -- * Implementing mocks
     module Test.HMock.Mockable,
-    mockMethod,
-    mockDefaultlessMethod,
+    module Test.HMock.MockMethod,
   )
 where
 
 import Test.HMock.ExpectContext
 import Test.HMock.Internal.MockT
+import Test.HMock.MockMethod
 import Test.HMock.Mockable
 import Test.HMock.Multiplicity
 import Test.HMock.Predicates
 import Test.HMock.Rule
+import Test.HMock.Setup

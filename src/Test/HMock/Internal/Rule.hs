@@ -8,7 +8,7 @@ module Test.HMock.Internal.Rule where
 
 import Data.Kind (Constraint, Type)
 import GHC.TypeLits (Symbol)
-import {-# SOURCE #-} Test.HMock.Internal.MockT (MockT)
+import {-# SOURCE #-} Test.HMock.Internal.State (MockT)
 import Test.HMock.Mockable (MockableBase (..))
 
 -- | A rule for matching a method and responding to it when it matches.
@@ -21,7 +21,7 @@ import Test.HMock.Mockable (MockableBase (..))
 -- for a 'Rule', then there must be a default response for that action, and it
 -- is used.  If more than one response is added, the rule will perform the
 -- responses in order, repeating the last response if there are additional
-  -- matches.
+-- matches.
 --
 -- Example:
 --

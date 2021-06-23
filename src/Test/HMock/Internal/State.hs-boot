@@ -1,7 +1,7 @@
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE RoleAnnotations #-}
 
-module Test.HMock.Internal.MockT where
+module Test.HMock.Internal.State where
 
 import Data.Kind (Type)
 
