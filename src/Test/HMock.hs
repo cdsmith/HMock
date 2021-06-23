@@ -49,40 +49,83 @@
 -- 'runMockT' to begin a test with mocks, 'expect' to set up your expected
 -- actions and responses, and finally execute your code.
 module Test.HMock
-  ( -- * Running mocks
-    MockT,
-    runMockT,
-    withMockT,
-    describeExpectations,
-    verifyExpectations,
-    setAmbiguityCheck,
+  ( 
+    -- * The 'Mockable' class
 
-    -- * Rules for calls and responses
+    -- | HMock starts with the 'Mockable' class (most of which is actually in
+    -- its superclass, 'MockableBase').  This class is implemented for each
+    -- interface you want to mock, and describes which actions are possible,
+    -- and how to match and compare them.  It's a lot of boilerplate, so you'll
+    -- usually derive it with Template Haskell, but the instance must exist.
+    module Test.HMock.Mockable,
+
+    -- * Running mocks
+
+    -- | Tests with mocks run in the 'MockT' monad transformer, which wraps a
+    -- base monad and adds the ability to delegate methods to HMock for
+    -- matching.  'runMockT' is the entry point for 'MockT'.
+    module Test.HMock.MockT,
+
+    -- * Rules for actions and responses
+
+    -- | The bread and butter of mocks is matching actions and specifying
+    -- responses.  Matchers and corresponding responses are combined into a
+    -- 'Rule'
     module Test.HMock.Rule,
 
     -- * Combinators for building test plans
+
+    -- | A complete execution plans consists of a collection of individual rules
+    -- combined in various ways.  HMock defines a set of composable combinators
+    -- for the execution plan.
     module Test.HMock.ExpectContext,
 
-    -- * Initializing mockable classes
+    -- * Setting up mockable classes
+
+    -- | When you reuse a mock in many tests, you often need the same setup to
+    -- happen in each.  By implementing 'setupMockable' from the 'Mockable'
+    -- class, you can package this initialization with the type so it's always
+    -- performed.  You can also do the setup on a test-by-test basis.
     module Test.HMock.Setup,
 
     -- * Predicates
+
+    -- | When matching methods, you can either match on exact parameter values,
+    -- or using 'Predicate's.  The 'Predicate' type either accepts or rejects
+    -- values of parameters, and HMock provides an extensive library of standard
+    -- 'Predicate's to make it easier to match exactly what you want to.
     module Test.HMock.Predicates,
 
     -- * Multiplicity
+
+    -- | For repeated actions in your execution plan, you often want to control
+    -- the number of times somrthing is allowed to happen.  This is called a
+    -- 'Multiplicity'.
     module Test.HMock.Multiplicity,
 
-    -- * Implementing mocks
-    module Test.HMock.Mockable,
+    -- * Delegating mocks
+
+    -- | In order to run your test code with the 'MockT', you need instances of
+    -- your effect classes for the 'MockT' type.  If you mock all methods of the
+    -- class, this can be derived using Template Haskell.  For partial mocks,
+    -- you'll need to write the instances yourself, using 'mockMethod' and its
+    -- cousin 'mockDefaultlessMethod'.
     module Test.HMock.MockMethod,
+
+    -- * Template Haskell generator
+
+    -- | These are the Template Haskell splices which generate boilerplate for
+    -- your classes to be used with HMock.
+    module Test.HMock.TH,
   )
 where
 
 import Test.HMock.ExpectContext
-import Test.HMock.Internal.MockT
+import Test.HMock.MockT
 import Test.HMock.MockMethod
 import Test.HMock.Mockable
 import Test.HMock.Multiplicity
 import Test.HMock.Predicates
 import Test.HMock.Rule
 import Test.HMock.Setup
+import Test.HMock.TH

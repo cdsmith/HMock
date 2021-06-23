@@ -17,7 +17,6 @@ import Control.Monad.Trans (liftIO)
 import Data.IORef (newIORef, readIORef, writeIORef)
 import Data.List (isInfixOf, isPrefixOf)
 import Test.HMock
-import Test.HMock.TH (makeMockable)
 import Test.Hspec
 import qualified UnliftIO.Concurrent as UnliftIO
 import Prelude hiding (readFile, writeFile)

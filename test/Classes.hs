@@ -25,7 +25,6 @@ import Data.Kind (Type)
 import Language.Haskell.TH.Syntax hiding (Type)
 import QuasiMock
 import Test.HMock
-import Test.HMock.TH
 import Test.Hspec
 import Util.DeriveRecursive (deriveRecursive)
 

@@ -19,13 +19,15 @@ import Data.Char (isLetter)
 import Test.HMock
   ( Mockable (..),
     anything,
+    byDefault,
     expect,
     expectAny,
+    makeMockable,
+    makeMockableBase,
     runMockT,
     (|->),
-    (|=>), byDefault
+    (|=>),
   )
-import Test.HMock.TH (makeMockable, makeMockableBase)
 import Test.Hspec (SpecWith, describe, example, it)
 import Prelude hiding (appendFile, readFile, writeFile)
 

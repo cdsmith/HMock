@@ -8,7 +8,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 
 -- | This module defines the 'MockT' monad transformer.
-module Test.HMock.Internal.MockT
+module Test.HMock.MockT
   ( MockT,
     runMockT,
     withMockT,

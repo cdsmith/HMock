@@ -56,8 +56,12 @@ import GHC.Stack (HasCallStack)
 import GHC.TypeLits (Symbol)
 import Language.Haskell.TH hiding (Match, match)
 import Language.Haskell.TH.Syntax (Lift (lift))
-import Test.HMock
 import Test.HMock.Internal.TH.Util
+import Test.HMock.MockT (MockT)
+import Test.HMock.MockMethod (mockMethod, mockDefaultlessMethod)
+import Test.HMock.Mockable (MatchResult (..), Mockable, MockableBase (..))
+import Test.HMock.Predicates (Predicate (..), eq)
+import Test.HMock.Rule (Expectable (..))
 
 -- | Custom options for deriving a 'Mockable' class.
 data MockableOptions = MockableOptions
