@@ -56,7 +56,7 @@ import GHC.Stack (HasCallStack)
 import GHC.TypeLits (Symbol)
 import Language.Haskell.TH hiding (Match, match)
 import Language.Haskell.TH.Syntax (Lift (lift))
-import Test.HMock.Internal.TH.Util
+import Test.HMock.Internal.TH
 import Test.HMock.MockT (MockT)
 import Test.HMock.MockMethod (mockMethod, mockDefaultlessMethod)
 import Test.HMock.Mockable (MatchResult (..), Mockable, MockableBase (..))

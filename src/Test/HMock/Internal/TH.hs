@@ -3,7 +3,7 @@
 {-# LANGUAGE TupleSections #-}
 
 -- | Template Haskell utilities used to implement HMock.
-module Test.HMock.Internal.TH.Util
+module Test.HMock.Internal.TH
   ( unappliedName,
     tvName,
     bindVar,

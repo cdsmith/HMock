@@ -8,7 +8,7 @@ import Control.Monad.Trans (liftIO)
 import Language.Haskell.TH
 import QuasiMock
 import Test.HMock
-import Test.HMock.Internal.TH.Util (resolveInstance, unifyTypes)
+import Test.HMock.Internal.TH (resolveInstance, unifyTypes)
 import Test.Hspec
 
 data NotShowable

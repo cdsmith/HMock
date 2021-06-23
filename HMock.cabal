@@ -42,7 +42,7 @@ library
                       Test.HMock.Internal.Rule,
                       Test.HMock.Internal.State,
                       Test.HMock.Internal.Step,
-                      Test.HMock.Internal.TH.Util,
+                      Test.HMock.Internal.TH,
                       Test.HMock.Internal.Util
     build-depends:    base >=4.11.0 && < 4.16,
                       constraints >= 0.13 && < 0.14,

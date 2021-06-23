@@ -71,7 +71,7 @@ import GHC.Exts (IsList (Item, toList))
 import GHC.Stack (HasCallStack, callStack)
 import Language.Haskell.TH (ExpQ, PatQ, pprint)
 import Language.Haskell.TH.Syntax (lift)
-import Test.HMock.Internal.TH.Util (removeModNames)
+import Test.HMock.Internal.TH (removeModNames)
 import Test.HMock.Internal.Util (choices, isSubsequenceOf, locate, withLoc)
 import Text.Regex.TDFA hiding (match)
 
