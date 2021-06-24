@@ -43,6 +43,7 @@ import Test.HMock.Internal.Step (SingleRule ((:->)), Step (Step))
 import Test.HMock.Internal.Util (locate)
 import Test.HMock.Rule (Expectable (toRule))
 import UnliftIO
+import Data.Maybe (listToMaybe)
 
 -- | Runs a test in the 'MockT' monad, handling all of the mocks.
 runMockT :: forall m a. MonadIO m => MockT m a -> m a
@@ -150,14 +151,17 @@ verifyExpectations = do
       missing -> error $ "Unmet expectations:\n" ++ formatExpectSet missing
 
 -- | Adds a handler for unexpected actions.  Matching calls will not fail, but
--- will use the given response instead.  The rule passed in must have exactly
--- one response.
+-- will use a default response instead.  The rule passed in must have zero or
+-- one responses: if there is a response, @'allowUnexpected' (m
+-- 'Test.HMock.Rule.|=>' r)@ is equivalent to @'allowUnexpected' m >>
+-- 'byDefault' (m 'Test.HMock.Rule.|=>' r)@.
 --
 -- The difference between 'Test.HMock.Expectable.expectAny' and
 -- 'allowUnexpected' is subtle, but comes down to ambiguity:
 --
--- * 'allowUnexpected' is not an expectation.  It only has an effect if no
---   expectation matches, regardless of when the expectations were added.
+-- * 'allowUnexpected' is not an expectation, so it cannot be ambiguous.  It
+--   only has an effect if no true expectation matches, regardless of when the
+--   expectations were added.
 -- * 'Test.HMock.Expectable.expectAny' adds an expectation, so if another
 --   expectation is in effect at the same time, a call to the method is
 --   ambiguous.  If ambiguity checking is enabled, the method will throw an
@@ -171,14 +175,15 @@ allowUnexpected ::
   ) =>
   rule ->
   ctx m ()
-allowUnexpected e | m :=> [r] <- toRule e = fromMockSetup $ do
-  initClassIfNeeded (Proxy :: Proxy cls)
-  state <- MockSetup ask
-  mockSetupSTM $
-    modifyTVar'
-      (mockDefaults state)
-      ((True, Step (locate callStack (m :-> Just r))) :)
-allowUnexpected _ = error "allowUnexpected must have exactly one response."
+allowUnexpected e = fromMockSetup $ case toRule e of
+  _ :=> (_ : _ : _) -> error "allowUnexpected may not have multiple responses."
+  m :=> r -> do
+    initClassIfNeeded (Proxy :: Proxy cls)
+    state <- MockSetup ask
+    mockSetupSTM $
+      modifyTVar'
+        (mockDefaults state)
+        ((True, Step (locate callStack (m :-> listToMaybe r))) :)
 
 -- | Sets a default action for *expected* matching calls.  The new default only
 -- applies to calls for which an expectation exists, but it lacks an explicit

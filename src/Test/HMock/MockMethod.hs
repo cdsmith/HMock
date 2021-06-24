@@ -21,7 +21,7 @@ import Data.Either (partitionEithers)
 import Data.Function (on)
 import Data.Functor (($>))
 import Data.List (intercalate, sortBy)
-import Data.Maybe (catMaybes, fromMaybe)
+import Data.Maybe (catMaybes, fromMaybe, isNothing)
 import Data.Proxy (Proxy (Proxy))
 import Data.Typeable (cast)
 import GHC.Stack (HasCallStack, withFrozenCallStack)
@@ -40,6 +40,7 @@ import Test.HMock.Internal.Step (SingleRule ((:->)), Step (Step))
 import Test.HMock.Internal.Util (Located (Loc), withLoc)
 import Test.HMock.MockT (describeExpectations)
 import Test.HMock.Mockable (MatchResult (..), Mockable (..), MockableBase (..))
+import Control.Applicative ((<|>))
 
 -- | Implements mock delegation for actions.
 mockMethodImpl ::
@@ -61,7 +62,7 @@ mockMethodImpl surrogate action = join $
     let orderedPartial = snd <$> sortBy (compare `on` fst) (catMaybes partial)
     defaults <- concatMapM (mockSetupSTM . readTVar . mockDefaults) states
     checkAmbig <- mockSetupSTM $ readTVar . mockCheckAmbiguity . head $ states
-    case (full, surrogate, orderedPartial) of
+    case (full, orderedPartial, findDefault defaults) of
       (opts@(_ : _ : _), _, _)
         | checkAmbig ->
           return $
@@ -69,12 +70,9 @@ mockMethodImpl surrogate action = join $
               action
               ((\(s, _, _) -> s) <$> opts)
       ((_, choose, Just response) : _, _, _) -> choose >> return response
-      ((_, choose, Nothing) : _, s, _)
-        | d <- findDefault False defaults ->
-          choose >> return (fromMaybe (return s) d)
-      ([], _, _)
-        | Just d <- findDefault True defaults -> return d
-      ([], _, []) -> return (noMatchError action)
+      ((_, choose, Nothing) : _, _, (_, d)) -> choose >> return d
+      ([], _, (True, d)) -> return d
+      ([], [], _) -> return (noMatchError action)
       ([], _, _) ->
         return (partialMatchError action orderedPartial)
   where
@@ -97,14 +95,16 @@ mockMethodImpl surrogate action = join $
               )
       | otherwise = Left Nothing
 
-    findDefault :: Bool -> [(Bool, Step m)] -> Maybe (MockT m r)
-    findDefault _ [] = Nothing
-    findDefault unexpected ((lax, Step expected) : _)
-      | lax || not unexpected,
-        Just (Loc _ (m :-> Just r)) <- cast expected,
-        Match <- matchAction m action =
-        Just (r action)
-    findDefault unexpected (_ : steps) = findDefault unexpected steps
+    findDefault :: [(Bool, Step m)] -> (Bool, MockT m r)
+    findDefault defaults = go False Nothing defaults
+      where go True (Just r) _ = (True, r)
+            go allowed r ((thisAllowed, Step expected) : steps)
+              | thisAllowed || isNothing r,
+                Just (Loc _ (m :-> r')) <- cast expected,
+                Match <- matchAction m action =
+                  go (allowed || thisAllowed) (r <|> (($ action) <$> r')) steps
+              | otherwise = go allowed r steps
+            go allowed r [] = (allowed, fromMaybe (return surrogate) r)
 
 -- | Implements a method in a 'Mockable' monad by delegating to the mock
 -- framework.  If the method is called unexpectedly, an exception will be

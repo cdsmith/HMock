@@ -624,6 +624,19 @@ coreTests = do
           r <- readFile "foo.txt"
           liftIO (r `shouldBe` "bar")
 
+    it "uses defaults when allowUnexpected is not explicit" $
+      example $ do
+        runMockT $ do
+          byDefault $ ReadFile "foo.txt" |-> "foo" -- added before allow
+          allowUnexpected $ ReadFile_ anything
+          byDefault $ ReadFile "bar.txt" |-> "bar" -- added after allow
+          result <-
+            (,,)
+              <$> readFile "foo.txt"
+              <*> readFile "bar.txt"
+              <*> readFile "baz.txt"
+          liftIO (result `shouldBe` ("foo", "bar", ""))
+
     it "doesn't adopt lax behavior for byDefault" $
       example $ do
         let test = runMockT $ do
