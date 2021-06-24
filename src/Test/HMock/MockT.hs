@@ -23,7 +23,7 @@ module Test.HMock.MockT
     MockSetup,
     MockContext,
     allowUnexpected,
-    setDefault,
+    byDefault,
   )
 where
 
@@ -183,7 +183,7 @@ allowUnexpected _ = error "allowUnexpected must have exactly one response."
 -- | Sets a default action for *expected* matching calls.  The new default only
 -- applies to calls for which an expectation exists, but it lacks an explicit
 -- response.  The rule passed in must have exactly one response.
-setDefault ::
+byDefault ::
   forall cls name m r ctx.
   ( MonadIO m,
     MockableMethod cls name m r,
@@ -191,11 +191,11 @@ setDefault ::
   ) =>
   Rule cls name m r ->
   ctx m ()
-setDefault (m :=> [r]) = fromMockSetup $ do
+byDefault (m :=> [r]) = fromMockSetup $ do
   initClassIfNeeded (Proxy :: Proxy cls)
   state <- MockSetup ask
   mockSetupSTM $
     modifyTVar'
       (mockDefaults state)
       ((False, Step (locate callStack (m :-> Just r))) :)
-setDefault _ = error "Defaults must have exactly one response."
+byDefault _ = error "Defaults must have exactly one response."

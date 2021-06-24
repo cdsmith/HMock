@@ -594,14 +594,14 @@ coreTests = do
 
         test `shouldThrow` anyException
 
-    it "allows the user to override a default with setDefault" $
+    it "allows the user to override a default with byDefault" $
       example $
         runMockT $ do
           expectAny $ ReadFile_ anything
 
           r1 <- readFile "foo.txt"
 
-          setDefault $ ReadFile "foo.txt" |-> "foo"
+          byDefault $ ReadFile "foo.txt" |-> "foo"
           r2 <- readFile "foo.txt"
           r3 <- readFile "bar.txt"
 
@@ -624,12 +624,12 @@ coreTests = do
           r <- readFile "foo.txt"
           liftIO (r `shouldBe` "bar")
 
-    it "doesn't adopt lax behavior for setDefault" $
-      example $
-        runMockT $ do
-          allowUnexpected $ ReadFile "foo.txt" |-> "foo"
-          r <- readFile "foo.txt"
-          liftIO (r `shouldBe` "foo")
+    it "doesn't adopt lax behavior for byDefault" $
+      example $ do
+        let test = runMockT $ do
+              byDefault $ ReadFile "foo.txt" |-> "foo"
+              readFile "foo.txt"
+        liftIO (test `shouldThrow` anyException)
 
     it "checks ambiguity when asked" $
       example $ do
