@@ -42,6 +42,10 @@ import UnliftIO
     readTVarIO,
   )
 
+#if !MIN_VERSION_base(4, 13, 0)
+import Control.Monad.Fail (MonadFail)
+#endif
+
 -- | Full state of a mock.
 data MockState m = MockState
   { mockExpectSet :: TVar (ExpectSet (Step m)),
@@ -82,7 +86,7 @@ newtype MockSetup m a where
   MockSetup :: {unMockSetup :: ReaderT (MockState m) STM a} -> MockSetup m a
   deriving (Functor, Applicative, Monad)
 
--- | Runs a setup action with the root state, rather than the current one. 
+-- | Runs a setup action with the root state, rather than the current one.
 runInRootState :: MockSetup m a -> MockSetup m a
 runInRootState = MockSetup . local rootState . unMockSetup
 
