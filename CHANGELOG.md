@@ -12,7 +12,7 @@
   * Setup handlers now run in the `MockSetup` monad.
   * Adding expectations from setup is no longer allowed.  However, you can use
     `allowUnexpected` to allow unexpected calls.
-* Added nestMockT and withNestedMockT to the API.
+* Added `nestMockT` and `withNestedMockT` to the API.
 * Exported smaller modules to make selective imports easier.
 
 ## 0.1.0.1 -- 2021-06-20
