@@ -30,13 +30,13 @@ far as how to delegate to the mock implementations, this might be handled by
 backpack, or by just creating a new module with an identical API and using CPP
 in the system under test to import one or the other module.
 
-## Response-less `onUnexpected`
+## Response-less `allowUnexpected`
 
 * Priority: High
 * Accept Patch: Yes
 * Complexity: Low
 
-`onUnexpected` takes an `Expectable`, but requires that it have one response.
+`allowUnexpected` takes an `Expectable`, but requires that it have one response.
 Instead, it should allow zero or one response.  The one-response variant should
 just be shorthand for combining the zero-response version and also calling
 `setDefault` for the same matcher.  This should be documented, once it's true.
@@ -44,9 +44,6 @@ just be shorthand for combining the zero-response version and also calling
 Implementation-wise, defaults are currently a list of (Bool, response).
 Instead, there should be two lists: one for matchers that can be unexpected
 (no responses there), and another for default responses (no Bool flag).
-
-Maybe should rename again to `allowUnexpected`, given that the response is
-secondary to the point of the method.
 
 ## Fix the API for TH generators
 

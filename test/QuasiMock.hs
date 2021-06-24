@@ -63,41 +63,41 @@ functionType = everything (||) (mkQ False isArrow)
 
 instance Mockable Quasi where
   setupMockable _ = do
-    onUnexpected $ QIsExtEnabled_ anything |-> True
+    allowUnexpected $ QIsExtEnabled_ anything |-> True
 
-    $(onReify [|onUnexpected|] ''String)
-    $(onReify [|onUnexpected|] ''Char)
-    $(onReify [|onUnexpected|] ''Int)
-    $(onReify [|onUnexpected|] ''Bool)
-    $(onReify [|onUnexpected|] ''Enum)
-    $(onReify [|onUnexpected|] ''Monad)
+    $(onReify [|allowUnexpected|] ''String)
+    $(onReify [|allowUnexpected|] ''Char)
+    $(onReify [|allowUnexpected|] ''Int)
+    $(onReify [|allowUnexpected|] ''Bool)
+    $(onReify [|allowUnexpected|] ''Enum)
+    $(onReify [|allowUnexpected|] ''Monad)
 
-    $(onReifyInstances [|onUnexpected|] ''Show [ConT ''String])
-    $(onReifyInstances [|onUnexpected|] ''Eq [ConT ''String])
-    $(onReifyInstances [|onUnexpected|] ''Show [ConT ''Char])
-    $(onReifyInstances [|onUnexpected|] ''Eq [ConT ''Char])
-    $(onReifyInstances [|onUnexpected|] ''Show [ConT ''Int])
-    $(onReifyInstances [|onUnexpected|] ''Eq [ConT ''Int])
-    $(onReifyInstances [|onUnexpected|] ''Show [ConT ''Bool])
-    $(onReifyInstances [|onUnexpected|] ''Eq [ConT ''Bool])
-    $(onReifyInstances [|onUnexpected|] ''Default [TupleT 0])
-    $(onReifyInstances [|onUnexpected|] ''Default [ConT ''String])
-    $(onReifyInstances [|onUnexpected|] ''Default [ConT ''Int])
+    $(onReifyInstances [|allowUnexpected|] ''Show [ConT ''String])
+    $(onReifyInstances [|allowUnexpected|] ''Eq [ConT ''String])
+    $(onReifyInstances [|allowUnexpected|] ''Show [ConT ''Char])
+    $(onReifyInstances [|allowUnexpected|] ''Eq [ConT ''Char])
+    $(onReifyInstances [|allowUnexpected|] ''Show [ConT ''Int])
+    $(onReifyInstances [|allowUnexpected|] ''Eq [ConT ''Int])
+    $(onReifyInstances [|allowUnexpected|] ''Show [ConT ''Bool])
+    $(onReifyInstances [|allowUnexpected|] ''Eq [ConT ''Bool])
+    $(onReifyInstances [|allowUnexpected|] ''Default [TupleT 0])
+    $(onReifyInstances [|allowUnexpected|] ''Default [ConT ''String])
+    $(onReifyInstances [|allowUnexpected|] ''Default [ConT ''Int])
     $( onReifyInstances
-         [|onUnexpected|]
+         [|allowUnexpected|]
          ''Default
          [AppT (ConT ''Maybe) (ConT ''Bool)]
      )
 
-    onUnexpected $ QReifyInstances_ (eq ''Show) (is functionType) |-> []
-    onUnexpected $ QReifyInstances_ (eq ''Eq) (is functionType) |-> []
+    allowUnexpected $ QReifyInstances_ (eq ''Show) (is functionType) |-> []
+    allowUnexpected $ QReifyInstances_ (eq ''Eq) (is functionType) |-> []
 
-    onUnexpected $
+    allowUnexpected $
       QReifyInstances_
         (eq ''Show)
         (elemsAre [$(qMatch [p|AppT ListT (VarT _)|])])
         |-> $(reifyInstancesStatic ''Show [AppT ListT (VarT (mkName "a"))])
-    onUnexpected $
+    allowUnexpected $
       QReifyInstances_
         (eq ''Eq)
         (elemsAre [$(qMatch [p|AppT ListT (VarT _)|])])

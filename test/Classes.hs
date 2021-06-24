@@ -176,7 +176,7 @@ makeMockableBase ''MonadWithSetup
 
 instance Mockable MonadWithSetup where
   setupMockable _ = do
-    onUnexpected $ WithSetup |-> "custom default"
+    allowUnexpected $ WithSetup |-> "custom default"
 
 setupTests :: SpecWith ()
 setupTests = describe "MonadWithSetup" $ do

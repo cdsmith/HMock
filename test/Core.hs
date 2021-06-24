@@ -609,25 +609,25 @@ coreTests = do
           liftIO (r2 `shouldBe` "foo")
           liftIO (r3 `shouldBe` "")
 
-    it "adopts lax behavior for onUnexpected" $
+    it "adopts lax behavior for allowUnexpected" $
       example $
         runMockT $ do
-          onUnexpected $ ReadFile "foo.txt" |-> "foo"
+          allowUnexpected $ ReadFile "foo.txt" |-> "foo"
           r <- readFile "foo.txt"
           liftIO (r `shouldBe` "foo")
 
-    it "prefers expect over onUnexpected" $
+    it "prefers expect over allowUnexpected" $
       example $
         runMockT $ do
           expectAny $ ReadFile_ anything |-> "bar"
-          onUnexpected $ ReadFile "foo.txt" |-> "foo"
+          allowUnexpected $ ReadFile "foo.txt" |-> "foo"
           r <- readFile "foo.txt"
           liftIO (r `shouldBe` "bar")
 
     it "doesn't adopt lax behavior for setDefault" $
       example $
         runMockT $ do
-          onUnexpected $ ReadFile "foo.txt" |-> "foo"
+          allowUnexpected $ ReadFile "foo.txt" |-> "foo"
           r <- readFile "foo.txt"
           liftIO (r `shouldBe` "foo")
 
@@ -687,10 +687,10 @@ coreTests = do
       it "inherits defaults correctly" $
         example $
           runMockT $ do
-            onUnexpected $ ReadFile "foo.txt" |-> "foo"
-            onUnexpected $ ReadFile "bar.txt" |-> "bar"
+            allowUnexpected $ ReadFile "foo.txt" |-> "foo"
+            allowUnexpected $ ReadFile "bar.txt" |-> "bar"
             result <- nestMockT $ do
-              onUnexpected $ ReadFile "foo.txt" |-> "foo #2"
+              allowUnexpected $ ReadFile "foo.txt" |-> "foo #2"
               (,) <$> readFile "foo.txt" <*> readFile "bar.txt"
 
             liftIO (result `shouldBe` ("foo #2", "bar"))

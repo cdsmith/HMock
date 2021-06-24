@@ -22,7 +22,7 @@ module Test.HMock.MockT
     verifyExpectations,
     MockSetup,
     MockContext,
-    onUnexpected,
+    allowUnexpected,
     setDefault,
   )
 where
@@ -153,16 +153,16 @@ verifyExpectations = do
 -- will use the given response instead.  The rule passed in must have exactly
 -- one response.
 --
--- The difference between 'Test.HMock.Expectable.expectAny' and 'onUnexpected'
--- is subtle, but comes down to ambiguity:
+-- The difference between 'Test.HMock.Expectable.expectAny' and
+-- 'allowUnexpected' is subtle, but comes down to ambiguity:
 --
--- * 'onUnexpected' is not an expectation.  It only has an effect if no
+-- * 'allowUnexpected' is not an expectation.  It only has an effect if no
 --   expectation matches, regardless of when the expectations were added.
 -- * 'Test.HMock.Expectable.expectAny' adds an expectation, so if another
 --   expectation is in effect at the same time, a call to the method is
 --   ambiguous.  If ambiguity checking is enabled, the method will throw an
 --   error; otherwise, the more recently added of the two expectations is used.
-onUnexpected ::
+allowUnexpected ::
   forall cls name m r rule ctx.
   ( MonadIO m,
     MockableMethod cls name m r,
@@ -171,14 +171,14 @@ onUnexpected ::
   ) =>
   rule ->
   ctx m ()
-onUnexpected e | m :=> [r] <- toRule e = fromMockSetup $ do
+allowUnexpected e | m :=> [r] <- toRule e = fromMockSetup $ do
   initClassIfNeeded (Proxy :: Proxy cls)
   state <- MockSetup ask
   mockSetupSTM $
     modifyTVar'
       (mockDefaults state)
       ((True, Step (locate callStack (m :-> Just r))) :)
-onUnexpected _ = error "onUnexpected must have exactly one response."
+allowUnexpected _ = error "allowUnexpected must have exactly one response."
 
 -- | Sets a default action for *expected* matching calls.  The new default only
 -- applies to calls for which an expectation exists, but it lacks an explicit
