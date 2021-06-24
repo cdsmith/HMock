@@ -2,12 +2,19 @@
 
 ## 0.2.0.0 -- 2021-06-22
 
-* Separated modules to make selective imports easier.
-* Added optional ambiguity check.
-* byDefault now causes a mock to accept unexpected calls.
-* Added setDefault, with the old behavior of byDefault.
-* Restricted mockable setup to avoid a race condition.
-* Changed desugaring of multiple responses to reduce ambiguity.
+* Exported smaller modules to make selective imports easier.
+* Added ambiguity checking.
+  * This is an optional feature, which is off by default.
+  * To make it easier to avoid ambiguity, `byDefault` now causes a mock to allow
+    unexpected calls, but doesn't comflict with expectations that override it.
+    Ambiuguous Uses of `expectAny` can often be replaced with `byDefault`.
+  * A new `setDefault` was added, which sets the default response but does not
+    allow unexpected calls.
+* Added nestMockT and withNestedMockT to the API.
+* Restricted mockable setup to defaults to avoid race conditions.
+  * Setup handlers now run in the `MockSetup` monad.
+  * Adding expectations from setup is no longer allowed.  However, you can use
+    `byDefault`, which now allows unexpected calls.
 
 ## 0.1.0.1 -- 2021-06-20
 

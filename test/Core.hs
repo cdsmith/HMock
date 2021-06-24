@@ -609,25 +609,25 @@ coreTests = do
           liftIO (r2 `shouldBe` "foo")
           liftIO (r3 `shouldBe` "")
 
-    it "adopts lax behavior for byDefault" $
+    it "adopts lax behavior for onUnexpected" $
       example $
         runMockT $ do
-          byDefault $ ReadFile "foo.txt" |-> "foo"
+          onUnexpected $ ReadFile "foo.txt" |-> "foo"
           r <- readFile "foo.txt"
           liftIO (r `shouldBe` "foo")
 
-    it "prefers expect over byDefault" $
+    it "prefers expect over onUnexpected" $
       example $
         runMockT $ do
           expectAny $ ReadFile_ anything |-> "bar"
-          byDefault $ ReadFile "foo.txt" |-> "foo"
+          onUnexpected $ ReadFile "foo.txt" |-> "foo"
           r <- readFile "foo.txt"
           liftIO (r `shouldBe` "bar")
 
     it "doesn't adopt lax behavior for setDefault" $
       example $
         runMockT $ do
-          byDefault $ ReadFile "foo.txt" |-> "foo"
+          onUnexpected $ ReadFile "foo.txt" |-> "foo"
           r <- readFile "foo.txt"
           liftIO (r `shouldBe` "foo")
 
@@ -652,6 +652,51 @@ coreTests = do
 
         success
         failure `shouldThrow` errorWith ("Ambiguous action" `isInfixOf`)
+
+    describe "nestMockT" $ do
+      it "checks nested context early" $ do
+        example $ do
+          let success = runMockT $ do
+                expect $ WriteFile "final.txt" "final"
+                nestMockT $ do
+                  expect $ WriteFile "foo.txt" "foo"
+                  writeFile "foo.txt" "foo"
+                writeFile "final.txt" "final"
+
+              failure = runMockT $ do
+                nestMockT $ do
+                  expect $ WriteFile "foo.txt" "foo"
+                writeFile "foo.txt" "foo"
+
+          success
+          failure `shouldThrow` anyException
+
+      it "updates the right context when nesting" $
+        example $
+          runMockT $ do
+            expect $ ReadFile "foo.txt" |-> "foo #1" |-> "foo #2"
+            result <- nestMockT $ do
+              expect $ ReadFile "bar.txt" |-> "bar #1" |-> "bar #2"
+              (,,,)
+                <$> readFile "foo.txt"
+                <*> readFile "bar.txt"
+                <*> readFile "foo.txt"
+                <*> readFile "bar.txt"
+            liftIO (result `shouldBe` ("foo #1", "bar #1", "foo #2", "bar #2"))
+
+      it "inherits defaults correctly" $
+        example $
+          runMockT $ do
+            onUnexpected $ ReadFile "foo.txt" |-> "foo"
+            onUnexpected $ ReadFile "bar.txt" |-> "bar"
+            result <- nestMockT $ do
+              onUnexpected $ ReadFile "foo.txt" |-> "foo #2"
+              (,) <$> readFile "foo.txt" <*> readFile "bar.txt"
+
+            liftIO (result `shouldBe` ("foo #2", "bar"))
+
+            result2 <- readFile "foo.txt"
+            liftIO (result2 `shouldBe` "foo")
 
 errorWith :: (String -> Bool) -> SomeException -> Bool
 errorWith p e = p (show e)

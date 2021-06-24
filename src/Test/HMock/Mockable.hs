@@ -21,7 +21,7 @@ import Control.Monad.Trans (MonadIO)
 import Data.Kind (Constraint, Type)
 import Data.Typeable (Typeable)
 import GHC.TypeLits (Symbol)
-import {-# SOURCE #-} Test.HMock.Internal.State (MockSetupT)
+import {-# SOURCE #-} Test.HMock.Internal.State (MockSetup)
 
 -- | The result of matching a @'Matcher' a@ with an @'Action' b@.  Because the
 -- types should already guarantee that the methods match, all that's left is to
@@ -62,5 +62,17 @@ class MockableBase cls => Mockable (cls :: (Type -> Type) -> Constraint) where
   -- An action to run and set up defaults for this class.  The action will be
   -- run before HMock touches the class, either to add expectations or to
   -- delegate a method.
-  setupMockable :: (MonadIO m, Typeable m) => proxy cls -> MockSetupT m ()
+  --
+  -- By default, unexpected actions throw errors, and actions with no explicit
+  -- default always return the default value of their return type, or
+  -- 'undefined' if there is none.  You can change this on a per-class or
+  -- per-test basis.
+  --
+  -- * To change defaults on a per-class basis, you should use
+  --   'Test.HMock.MockT.onUnexpected' and/or 'Test.HMock.MockT.setDefault'
+  --   to perform the setup you need here.
+  -- * To change defaults on a per-test basis, you should use
+  --   'Test.HMock.MockT.onUnexpected' and/or 'Test.HMock.MockT.setDefault'
+  --   directly from the test.
+  setupMockable :: (MonadIO m, Typeable m) => proxy cls -> MockSetup m ()
   setupMockable _ = return ()

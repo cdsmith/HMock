@@ -9,11 +9,12 @@
 -- | This module contains MockT and SetupMockT state functions.
 module Test.HMock.Internal.State where
 
-import Control.Monad (forM_, unless)
+import Control.Monad (forM_, unless, (<=<))
 import Control.Monad.Base (MonadBase)
 import Control.Monad.Catch (MonadCatch, MonadMask, MonadThrow)
 import Control.Monad.Cont (MonadCont)
 import Control.Monad.Except (MonadError)
+import Control.Monad.Extra (maybeM)
 import Control.Monad.RWS (MonadRWS)
 import Control.Monad.Reader (MonadReader (..), ReaderT, mapReaderT, runReaderT)
 import Control.Monad.State (MonadState)
@@ -38,39 +39,56 @@ import UnliftIO
     modifyTVar,
     newTVarIO,
     readTVar,
+    readTVarIO,
   )
-
-#if !MIN_VERSION_base(4, 13, 0)
-import Control.Monad.Fail (MonadFail)
-#endif
 
 -- | Full state of a mock.
 data MockState m = MockState
   { mockExpectSet :: TVar (ExpectSet (Step m)),
     mockDefaults :: TVar [(Bool, Step m)],
+    mockCheckAmbiguity :: TVar Bool,
     mockClasses :: TVar (Set TypeRep),
-    mockCheckAmbiguity :: TVar Bool
+    mockParent :: Maybe (MockState m)
   }
 
--- | Initializes a new 'MockState' with a blank slate.
-initMockState :: MonadIO m => m (MockState m)
-initMockState =
+-- | Initializes a new 'MockState' with the given parent.  If the parent is
+-- 'Nothing', then a new root state is made.
+initMockState :: MonadIO m => Maybe (MockState m) -> m (MockState m)
+initMockState parent =
   MockState
     <$> newTVarIO ExpectNothing
     <*> newTVarIO []
-    <*> newTVarIO Set.empty
-    <*> newTVarIO False
+    <*> maybeM
+      (newTVarIO False)
+      (newTVarIO <=< readTVarIO . mockCheckAmbiguity)
+      (return parent)
+    <*> maybe (newTVarIO Set.empty) (return . mockClasses) parent
+    <*> pure parent
+
+-- | Gets a list of all states, starting with the innermost.
+allStates :: MockState m -> [MockState m]
+allStates s
+  | Just s' <- mockParent s = s : allStates s'
+  | otherwise = [s]
+
+-- | Gets the root state.
+rootState :: MockState m -> MockState m
+rootState = last . allStates
 
 -- | Monad for setting up a mockable class.  Note that even though the type
 -- looks that way, this is *not* a monad transformer.  It's a very restricted
--- environment that can only be used to set up defaults for the class.
-newtype MockSetupT m a where
-  MockSetupT :: {unMockSetupT :: ReaderT (MockState m) STM a} -> MockSetupT m a
+-- environment that can only be used to set up defaults for a class.
+newtype MockSetup m a where
+  MockSetup :: {unMockSetup :: ReaderT (MockState m) STM a} -> MockSetup m a
   deriving (Functor, Applicative, Monad)
 
--- | Run an STM action in 'MockSetupT'
-mockSetupSTM :: STM a -> MockSetupT m a
-mockSetupSTM m = MockSetupT (lift m)
+-- | Runs a setup action with the root state, rather than the current one. 
+runInRootState :: MockSetup m a -> MockSetup m a
+runInRootState = MockSetup . local rootState . unMockSetup
+
+-- | Run an STM action in 'MockSetup'
+mockSetupSTM :: STM a -> MockSetup m a
+mockSetupSTM m = MockSetup (lift m)
 
 -- | Runs class initialization for a 'Mockable' class, if it hasn't been run
 -- yet.
@@ -78,9 +96,9 @@ initClassIfNeeded ::
   forall cls m proxy.
   (Mockable cls, Typeable m, MonadIO m) =>
   proxy cls ->
-  MockSetupT m ()
-initClassIfNeeded proxy = do
-  state <- MockSetupT ask
+  MockSetup m ()
+initClassIfNeeded proxy = runInRootState $ do
+  state <- MockSetup ask
   classes <- mockSetupSTM $ readTVar (mockClasses state)
   unless (Set.member t classes) $ do
     mockSetupSTM $ modifyTVar (mockClasses state) (Set.insert t)
@@ -90,10 +108,11 @@ initClassIfNeeded proxy = do
 
 -- | Runs class initialization for all uninitialized 'Mockable' classes in the
 -- given 'ExpectSet'.
-initClassesAsNeeded :: MonadIO m => ExpectSet (Step m) -> MockSetupT m ()
-initClassesAsNeeded es = forM_ (getSteps es) $
-  \(Step (_ :: Located (SingleRule cls name m r))) ->
-    initClassIfNeeded (Proxy :: Proxy cls)
+initClassesAsNeeded :: MonadIO m => ExpectSet (Step m) -> MockSetup m ()
+initClassesAsNeeded es = runInRootState $
+  forM_ (getSteps es) $
+    \(Step (_ :: Located (SingleRule cls name m r))) ->
+      initClassIfNeeded (Proxy :: Proxy cls)
 
 -- | Monad transformer for running mocks.
 newtype MockT m a where
@@ -128,26 +147,26 @@ instance MonadReader r m => MonadReader r (MockT m) where
   local = mapMockT . local
   reader = lift . reader
 
--- | Type class for contexts in which defaults can be set up for a mockable
--- class.  Notably, this includes `MockSetupT` and `MockT`.
-class MockSetupContext ctx where
-  -- | Runs a 'MockSetupT' action in this monad.
-  fromMockSetup :: MonadIO m => MockSetupT m a -> ctx m a
+-- | This type class defines a shared API between the 'MockT' and 'MockSetup'
+-- monads.
+class MockContext ctx where
+  -- | Runs a 'MockSetup' action in this monad.
+  fromMockSetup :: MonadIO m => MockSetup m a -> ctx m a
 
-instance MockSetupContext MockSetupT where
+instance MockContext MockSetup where
   fromMockSetup = id
 
-instance MockSetupContext MockT where
+instance MockContext MockT where
   fromMockSetup m = do
     state <- MockT ask
-    atomically $ runReaderT (unMockSetupT m) state
+    atomically $ runReaderT (unMockSetup m) state
 
 -- | Adds an expectation to the 'MockState' for the given 'ExpectSet',
 -- interleaved with any existing expectations.
 expectThisSet :: MonadIO m => ExpectSet (Step m) -> MockT m ()
 expectThisSet e = fromMockSetup $ do
   initClassesAsNeeded e
-  state <- MockSetupT ask
+  state <- MockSetup ask
   mockSetupSTM $ modifyTVar (mockExpectSet state) (e `ExpectInterleave`)
 
 instance ExpectContext MockT where

@@ -36,7 +36,6 @@ library
                       Test.HMock.Multiplicity,
                       Test.HMock.Predicates,
                       Test.HMock.Rule,
-                      Test.HMock.Setup,
                       Test.HMock.TH,
                       Test.HMock.Internal.ExpectSet,
                       Test.HMock.Internal.Rule,

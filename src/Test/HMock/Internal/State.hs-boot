@@ -11,8 +11,8 @@ data MockT (m :: Type -> Type) (a :: Type)
 
 instance Monad m => Monad (MockT m)
 
-type role MockSetupT nominal nominal
+type role MockSetup nominal nominal
 
-data MockSetupT (m :: Type -> Type) (a :: Type)
+data MockSetup (m :: Type -> Type) (a :: Type)
 
-instance Monad (MockSetupT m)
+instance Monad (MockSetup m)

@@ -64,6 +64,9 @@ module Test.HMock
     -- | Tests with mocks run in the 'MockT' monad transformer, which wraps a
     -- base monad and adds the ability to delegate methods to HMock for
     -- matching.  'runMockT' is the entry point for 'MockT'.
+    --
+    -- This module also defines the more restricted 'MockSetup;' monad, which
+    -- is used to set up defaults for a type.
     module Test.HMock.MockT,
 
     -- * Rules for actions and responses
@@ -79,14 +82,6 @@ module Test.HMock
     -- combined in various ways.  HMock defines a set of composable combinators
     -- for the execution plan.
     module Test.HMock.ExpectContext,
-
-    -- * Setting up mockable classes
-
-    -- | When you reuse a mock in many tests, you often need the same setup to
-    -- happen in each.  By implementing 'setupMockable' from the 'Mockable'
-    -- class, you can package this initialization with the type so it's always
-    -- performed.  You can also do the setup on a test-by-test basis.
-    module Test.HMock.Setup,
 
     -- * Predicates
 
@@ -127,5 +122,4 @@ import Test.HMock.Mockable
 import Test.HMock.Multiplicity
 import Test.HMock.Predicates
 import Test.HMock.Rule
-import Test.HMock.Setup
 import Test.HMock.TH

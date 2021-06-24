@@ -176,7 +176,7 @@ makeMockableBase ''MonadWithSetup
 
 instance Mockable MonadWithSetup where
   setupMockable _ = do
-    byDefault $ WithSetup |-> "custom default"
+    onUnexpected $ WithSetup |-> "custom default"
 
 setupTests :: SpecWith ()
 setupTests = describe "MonadWithSetup" $ do
@@ -193,6 +193,23 @@ setupTests = describe "MonadWithSetup" $ do
         expectAny WithSetup
 
         result <- withSetup
+        liftIO (result `shouldBe` "custom default")
+
+  it "uses default in a nested context" $ do
+    example $
+      runMockT $ do
+        nestMockT $ do
+          result <- withSetup
+          liftIO (result `shouldBe` "custom default")
+
+  it "retains default when initialized in nested context" $ do
+    example $
+      runMockT $ do
+        nestMockT $ do
+          _ <- withSetup
+          return ()
+        result <- withSetup
+
         liftIO (result `shouldBe` "custom default")
 
 class SuperClass (m :: Type -> Type)

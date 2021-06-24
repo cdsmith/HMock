@@ -10,10 +10,12 @@ module Test.HMock.MockMethod
   )
 where
 
-import Control.Concurrent.STM (readTVar, writeTVar)
-import Control.Monad (join)
+import Control.Concurrent.STM (TVar, readTVar, writeTVar)
+import Control.Monad (forM, join)
+import Control.Monad.Extra (concatMapM)
 import Control.Monad.IO.Class (MonadIO)
 import Control.Monad.Reader (ask)
+import Data.Bifunctor (bimap)
 import Data.Default (Default (def))
 import Data.Either (partitionEithers)
 import Data.Function (on)
@@ -24,17 +26,19 @@ import Data.Proxy (Proxy (Proxy))
 import Data.Typeable (cast)
 import GHC.Stack (HasCallStack, withFrozenCallStack)
 import Test.HMock.ExpectContext (MockableMethod)
-import Test.HMock.Internal.ExpectSet (ExpectSet, formatExpectSet, liveSteps)
+import Test.HMock.Internal.ExpectSet (ExpectSet, liveSteps)
 import Test.HMock.Internal.State
-  ( MockSetupContext (..),
-    MockSetupT (..),
+  ( MockContext (..),
+    MockSetup (..),
     MockState (..),
     MockT,
+    allStates,
     initClassIfNeeded,
     mockSetupSTM,
   )
 import Test.HMock.Internal.Step (SingleRule ((:->)), Step (Step))
 import Test.HMock.Internal.Util (Located (Loc), withLoc)
+import Test.HMock.MockT (describeExpectations)
 import Test.HMock.Mockable (MatchResult (..), Mockable (..), MockableBase (..))
 
 -- | Implements mock delegation for actions.
@@ -47,51 +51,48 @@ mockMethodImpl ::
 mockMethodImpl surrogate action = join $
   fromMockSetup $ do
     initClassIfNeeded (Proxy :: Proxy cls)
-    state <- MockSetupT ask
-    expectSet <- mockSetupSTM $ readTVar (mockExpectSet state)
-    defaults <- mockSetupSTM $ readTVar (mockDefaults state)
-    checkAmbig <- mockSetupSTM $ readTVar (mockCheckAmbiguity state)
-    let (newExpectSet, response) =
-          decideAction expectSet defaults checkAmbig
-    mockSetupSTM $ writeTVar (mockExpectSet state) newExpectSet
-    return response
+    states <- allStates <$> MockSetup ask
+    (partial, full) <- fmap (bimap concat concat . unzip) $
+      forM states $ \state -> do
+        expectSet <- mockSetupSTM $ readTVar (mockExpectSet state)
+        return $
+          partitionEithers
+            (tryMatch (mockExpectSet state) <$> liveSteps expectSet)
+    let orderedPartial = snd <$> sortBy (compare `on` fst) (catMaybes partial)
+    defaults <- concatMapM (mockSetupSTM . readTVar . mockDefaults) states
+    checkAmbig <- mockSetupSTM $ readTVar . mockCheckAmbiguity . head $ states
+    case (full, surrogate, orderedPartial) of
+      (opts@(_ : _ : _), _, _)
+        | checkAmbig ->
+          return $
+            ambiguityError
+              action
+              ((\(s, _, _) -> s) <$> opts)
+      ((_, choose, Just response) : _, _, _) -> choose >> return response
+      ((_, choose, Nothing) : _, s, _)
+        | d <- findDefault False defaults ->
+          choose >> return (fromMaybe (return s) d)
+      ([], _, _)
+        | Just d <- findDefault True defaults -> return d
+      ([], _, []) -> return (noMatchError action)
+      ([], _, _) ->
+        return (partialMatchError action orderedPartial)
   where
-    decideAction ::
-      ExpectSet (Step m) ->
-      [(Bool, Step m)] ->
-      Bool ->
-      (ExpectSet (Step m), MockT m r)
-    decideAction expectSet defaults checkAmbig =
-      let (partial, full) = partitionEithers (tryMatch <$> liveSteps expectSet)
-          orderedPartial = snd <$> sortBy (compare `on` fst) (catMaybes partial)
-       in case (full, surrogate, orderedPartial) of
-            (opts@(_ : _ : _), _, _)
-              | checkAmbig ->
-                error $
-                  ambiguityError action ((\(_, s, _) -> s) <$> opts) expectSet
-            ((e, _, Just response) : _, _, _) -> (e, response)
-            ((e, _, Nothing) : _, s, _)
-              | d <- findDefault False defaults -> (e, fromMaybe (return s) d)
-            ([], _, _)
-              | Just d <- findDefault True defaults -> (expectSet, d)
-            ([], _, []) -> error $ noMatchError action expectSet
-            ([], _, _) ->
-              error $ partialMatchError action orderedPartial expectSet
-
     tryMatch ::
+      TVar (ExpectSet (Step m)) ->
       (Step m, ExpectSet (Step m)) ->
       Either
         (Maybe (Int, String))
-        (ExpectSet (Step m), String, Maybe (MockT m r))
-    tryMatch (Step expected, e)
+        (String, MockSetup m (), Maybe (MockT m r))
+    tryMatch tvar (Step expected, e)
       | Just lrule@(Loc _ (m :-> impl)) <- cast expected =
         case matchAction m action of
           NoMatch n ->
             Left (Just (n, withLoc (showMatcher (Just action) m <$ lrule)))
           Match ->
             Right
-              ( e,
-                withLoc (lrule $> showMatcher (Just action) m),
+              ( withLoc (lrule $> showMatcher (Just action) m),
+                mockSetupSTM $ writeTVar tvar e,
                 ($ action) <$> impl
               )
       | otherwise = Left Nothing
@@ -137,40 +138,44 @@ mockDefaultlessMethod action =
 
 -- | An error for an action that matches no expectations at all.
 noMatchError ::
-  Mockable cls => Action cls name m a -> ExpectSet (Step m) -> String
-noMatchError a fullExpectations =
-  "Unexpected action: " ++ showAction a
-    ++ "\n\nFull expectations:\n"
-    ++ formatExpectSet fullExpectations
+  (Mockable cls, MonadIO m) => Action cls name m r -> MockT m a
+noMatchError a = do
+  fullExpectations <- describeExpectations
+  error $
+    "Unexpected action: " ++ showAction a
+      ++ "\n\nFull expectations:\n"
+      ++ fullExpectations
 
 -- | An error for an action that doesn't match the argument predicates for any
 -- of the method's expectations.
 partialMatchError ::
-  Mockable cls =>
-  Action cls name m a ->
+  (Mockable cls, MonadIO m) =>
+  Action cls name m r ->
   [String] ->
-  ExpectSet (Step m) ->
-  String
-partialMatchError a partials fullExpectations =
-  "Wrong arguments: "
-    ++ showAction a
-    ++ "\n\nClosest matches:\n - "
-    ++ intercalate "\n - " (take 5 partials)
-    ++ "\n\nFull expectations:\n"
-    ++ formatExpectSet fullExpectations
+  MockT m a
+partialMatchError a partials = do
+  fullExpectations <- describeExpectations
+  error $
+    "Wrong arguments: "
+      ++ showAction a
+      ++ "\n\nClosest matches:\n - "
+      ++ intercalate "\n - " (take 5 partials)
+      ++ "\n\nFull expectations:\n"
+      ++ fullExpectations
 
 -- | An error for an 'Action' that matches more than one 'Matcher'.  This only
 -- triggers an error if ambiguity checks are on.
 ambiguityError ::
-  Mockable cls =>
-  Action cls name m a ->
+  (Mockable cls, MonadIO m) =>
+  Action cls name m r ->
   [String] ->
-  ExpectSet (Step m) ->
-  String
-ambiguityError a choices fullExpectations =
-  "Ambiguous action matched multiple expectations: "
-    ++ showAction a
-    ++ "\n\nMatches:\n - "
-    ++ intercalate "\n - " choices
-    ++ "\n\nFull expectations:\n"
-    ++ formatExpectSet fullExpectations
+  MockT m a
+ambiguityError a choices = do
+  fullExpectations <- describeExpectations
+  error $
+    "Ambiguous action matched multiple expectations: "
+      ++ showAction a
+      ++ "\n\nMatches:\n - "
+      ++ intercalate "\n - " choices
+      ++ "\n\nFull expectations:\n"
+      ++ fullExpectations
