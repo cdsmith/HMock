@@ -45,6 +45,9 @@ Implementation-wise, defaults are currently a list of (Bool, response).
 Instead, there should be two lists: one for matchers that can be unexpected
 (no responses there), and another for default responses (no Bool flag).
 
+Maybe should rename again to `allowUnexpected`, given that the response is
+secondary to the point of the method.
+
 ## Fix the API for TH generators
 
 * Priority: High
