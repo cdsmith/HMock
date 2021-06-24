@@ -30,6 +30,21 @@ far as how to delegate to the mock implementations, this might be handled by
 backpack, or by just creating a new module with an identical API and using CPP
 in the system under test to import one or the other module.
 
+## Response-less `onUnexpected`
+
+* Priority: High
+* Accept Patch: Yes
+* Complexity: Low
+
+`onUnexpected` takes an `Expectable`, but requires that it have one response.
+Instead, it should allow zero or one response.  The one-response variant should
+just be shorthand for combining the zero-response version and also calling
+`setDefault` for the same matcher.  This should be documented, once it's true.
+
+Implementation-wise, defaults are currently a list of (Bool, response).
+Instead, there should be two lists: one for matchers that can be unexpected
+(no responses there), and another for default responses (no Bool flag).
+
 ## Fix the API for TH generators
 
 * Priority: High
@@ -39,66 +54,6 @@ in the system under test to import one or the other module.
 20 variants based on combinatorial explosion is a lot!  I mean, using the record
 syntax for options is annoying, but so it looking through a list of 20 methods
 and wondering which variant does what you want.
-
-## Nested context
-
-* Priority: Medium
-* Accept Patch: Definitely
-* Complexity: Medium to Low
-
-The idea behind this is that sometimes you want to define expectations to be
-used in only a single part of your test.  When that part of the test
-is done, these expectations should be checked and removed immediately.
-
-The risk this solves is that you add an expectation intending for it to happen
-in one specific part of the test, but then it gets missed and later satisfied
-by accident elsewhere.  Also, you may want to ignore certain calls in a part of
-the test, which you could accomplish by pushing a `expectAny` rule and then
-popping it when you're done.
-
-Proposed API:
-
-``` haskell
-nestMockT :: MonadIO m => MockT m a -> MockT m a
-
-withNestedMockT ::
-  forall m b.
-  MonadIO m =>
-  ((forall a. MockT m a -> m a) -> MockT m b) ->
-  MockT m b
-
------------------
-
-test = do
-  expect $ DoSomething
-
-  nestMockT $ do
-    -- doSomething should be ignored in this part of the test.
-    expectAny $ DoSomething
-    doSomething
-    doSomething
-
-  -- Now doSomething is no longer ignored, and the first expectation can be
-  -- satisfied.
-  doSomething
-```
-
-The implementation should create a new `MockState` with a parent pointer, so
-other threads are still executing against the original state.  The
-`withNestedMockT` variant allows new threads to be injected into the nested
-context, just as `withMockT` does for the top-level runner.
-
-Open questions:
-
-1. When (if at all) should the parent context be used?  I could imagine several
-   answers here, ranging from "never, until the nested context returns" to
-   "it's always active alongside the nested one", and several things in between.
-2. What happens to defaults?  Probably they get priority over defaults in the
-   parent context, and are then popped when the context is popped.
-3. What happens with class initialization?  If the parent context is available
-   at all, then classes should probably not be re-initialized, preferring
-   instead to rely on their initialization in the parent context to bleed
-   through.
 
 ## Side effects?
 
