@@ -1,6 +1,6 @@
 # Revision history for hmock
 
-## 0.2.0.0 -- 2021-06-22
+## 0.2.0.0 -- 2021-06-24
 
 * Added ambiguity checking.
   * This is an optional feature, which is off by default.
