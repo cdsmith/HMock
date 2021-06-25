@@ -56,7 +56,7 @@ instance Default MakeMockableOptions where
    def = MakeMockableOptions
      { mockClass = error "Please specify which class to mock.",
        mockEmptySetup = True,
-       mockTInsgtance = True,
+       mockTInstance = True,
        mockSuffix = "",
        mockVerbose = False
      }
