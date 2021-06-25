@@ -1,6 +1,6 @@
 ## Instances for more systems
 
-* Priority: High
+* Priority: Very High
 * Accept Patch: Probably
 * Complexity: Very High
 
@@ -33,12 +33,53 @@ in the system under test to import one or the other module.
 ## Fix the API for TH generators
 
 * Priority: High
-* Accept Patch: Maybe (depends on UX concerns)
-* Complexity: Low
+* Accept Patch: Yes
+* Complexity: Medium
 
 20 variants based on combinatorial explosion is a lot!  I mean, using the record
 syntax for options is annoying, but so it looking through a list of 20 methods
 and wondering which variant does what you want.
+
+I'm thinking of having just one primary entry point, with an options class like
+this:
+
+``` haskell
+data MakeMockableOptions = MakeMockableOptions
+  { mockClass :: Either Name Type,
+    mockEmptySetup :: Bool,
+    mockTInstance :: Bool,
+    mockSuffix :: String,
+    mockVerbose :: Bool
+  }
+
+instance Default MakeMockableOptions where
+   def = MakeMockableOptions
+     { mockClass = error "Please specify which class to mock.",
+       mockEmptySetup = True,
+       mockTInsgtance = True,
+       mockSuffix = "",
+       mockVerbose = False
+     }
+
+makeMockableWith :: MakeMockableOptions -> Q [Dec]
+
+makeMockable :: Name -> Q [Dec]
+makeMockable name = MakeMockableWith def { mockClass = Left name }
+```
+
+It would be used like this:
+
+``` haskell
+makeMockableWith def
+  { mockName = Left ''MonadFoo,
+    mockEmptySetup = True
+  }
+```
+
+This covers everything but just deriving a `MockT` instance.  For that, I want
+TH to just check whether the `Mockable` instance is already defined, and omit it
+if so.  This means recovering certain options like the suffix by inspecting the
+`Mockable` instance, rather than relying on the user to pass consistent options.
 
 ## Side effects?
 
