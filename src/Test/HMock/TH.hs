@@ -1,8 +1,12 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ExplicitNamespaces #-}
+{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE StandaloneKindSignatures #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TypeOperators #-}
 
 -- | This module provides Template Haskell splices that can be used to derive
 -- boilerplate instances for HMock.
@@ -53,7 +57,7 @@ import qualified Data.Kind
 import Data.List (foldl', (\\))
 import Data.Typeable (Typeable)
 import GHC.Stack (HasCallStack)
-import GHC.TypeLits (Symbol)
+import GHC.TypeLits (ErrorMessage (Text, (:$$:), (:<>:)), Symbol, TypeError)
 import Language.Haskell.TH hiding (Match, match)
 import Language.Haskell.TH.Syntax (Lift (lift))
 import Test.HMock.Internal.State (MockT)
@@ -598,33 +602,58 @@ matchActionClause options method = do
 
 defineExpectableActions :: MockableOptions -> Instance -> Q [Dec]
 defineExpectableActions options inst =
-  concatMapM (defineExpectableAction options inst) (instMethods inst)
+  mapM (defineExpectableAction options inst) (instMethods inst)
 
-defineExpectableAction :: MockableOptions -> Instance -> Method -> Q [Dec]
+type ComplexExpectableMessage :: Symbol -> ErrorMessage
+
+type ComplexExpectableMessage name =
+  ( 'Text "Method " ':<>: 'Text name
+      ':<>: 'Text " is too complex to expect with an Action."
+  )
+    ':$$: 'Text "Suggested fix: Use a Matcher instead of an Action."
+
+defineExpectableAction :: MockableOptions -> Instance -> Method -> Q Dec
 defineExpectableAction options inst method = do
   maybeCxt <- wholeCxt (methodArgs method)
   argVars <- replicateM (length (methodArgs method)) (newName "a")
   case maybeCxt of
     Just cx -> do
-      (: [])
-        <$> instanceD
-          (pure (methodCxt method ++ cx))
-          ( appT
-              (withMethodParams inst method [t|Expectable|])
-              (withMethodParams inst method [t|Action|])
-          )
-          [ funD
-              'toRule
-              [ clause
-                  [conP (getActionName options method) (map varP argVars)]
-                  ( normalB $
-                      let matcherCon = conE (getMatcherName options method)
-                       in appE (varE 'toRule) (makeBody argVars matcherCon)
-                  )
-                  []
-              ]
-          ]
-    _ -> pure []
+      instanceD
+        (pure (methodCxt method ++ cx))
+        ( appT
+            (withMethodParams inst method [t|Expectable|])
+            (withMethodParams inst method [t|Action|])
+        )
+        [ funD
+            'toRule
+            [ clause
+                [conP (getActionName options method) (map varP argVars)]
+                ( normalB $
+                    let matcherCon = conE (getMatcherName options method)
+                     in appE (varE 'toRule) (makeBody argVars matcherCon)
+                )
+                []
+            ]
+        ]
+    _ -> do
+      checkExt UndecidableInstances
+      instanceD
+        ( (: [])
+            <$> [t|
+              TypeError
+                ( ComplexExpectableMessage
+                    $(litT $ strTyLit $ nameBase $ methodName method)
+                )
+              |]
+        )
+        ( appT
+            (withMethodParams inst method [t|Expectable|])
+            (withMethodParams inst method [t|Action|])
+        )
+        [ funD
+            'toRule
+            [clause [] (normalB [|undefined|]) []]
+        ]
   where
     makeBody [] e = e
     makeBody (v : vs) e = makeBody vs [|$e (eq $(varE v))|]
