@@ -3,7 +3,6 @@
 {-# LANGUAGE ExplicitNamespaces #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE StandaloneKindSignatures #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeOperators #-}
@@ -603,8 +602,6 @@ matchActionClause options method = do
 defineExpectableActions :: MockableOptions -> Instance -> Q [Dec]
 defineExpectableActions options inst =
   mapM (defineExpectableAction options inst) (instMethods inst)
-
-type ComplexExpectableMessage :: Symbol -> ErrorMessage
 
 type ComplexExpectableMessage name =
   ( 'Text "Method " ':<>: 'Text name
