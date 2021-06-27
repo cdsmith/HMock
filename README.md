@@ -323,13 +323,15 @@ Template Haskell.
 
 There are a few ways to do this:
 
-1. To catch all otherwise-unexpected calls to a method and specify their
-   behavior, use `expectAny` to add an expectation.
-2. To set a default response for expected methods that do not give an explicit
-   response, use `byDefault`.
-3. To set up defaults using `expectAny`, `byDefault`, etc. for all users of a
-   mock, replace your call to `makeMockable` or `deriveMockable` with a call to
-   `makeMockableBase` or `deriveMockableBase`.  Then write an instance for
+1. To just change the default behavior, use `byDefault`.  A method call must
+   still be expected or it will fail, but if you leave out the return value in
+   the expectation, this default will be used.
+2. To also make unexpected calls to a method suceed, use `allowUnexpected`.  If
+   you include a response in the argument, it will become the default in
+   addition to allowing an unexpected method.
+3. To set up defaults using `byDefault` or `allowUnexpected` for *all* users of
+   the mock, replace your call to `makeMockable` or `deriveMockable` with a call
+   to `makeMockableBase` or `deriveMockableBase`.  Then write an instance for
    `Mockable` and implement `setupMockable` to do whatever you like.  This setup
    will always run before the first time HMock touches your class from any test.
 
@@ -460,6 +462,22 @@ all code using the library, and try to limit reuse of these instances to code
 that follows the same conventions.  Reuse of mock code can be valuable, but it
 must be done carefully and deliberately, keeping in mind that you are
 responsible for preventing conflict between orphan instances.
+
+### Why does GHC complain about "No instance for Expectable ... (Action ...)"?
+
+When adding an expectation, you can only use an `Action` if the method is simple
+enough.  Specifically, all arguments must have `Eq` and `Show` instances, and no
+arguments may rely on type variables bound by the method.
+
+If your method isn't simple enough, the solution is to use add the expectation
+with a `Matcher` instead of an `Action`.  The arguments to `Matcher` are
+`Predicate`s that can inspect the value and decide whether to match.  You are
+now responsible for deciding how to match the complex argument.  Some options
+include:
+
+1. Using a polymorphic `Predicate` like `anything`.
+2. Ensuring that a `Typeable` constraint is available, and using the `typed`
+   predicate to cast the argument to a known type.
 
 ### How do I migrate from `monad-mock`?
 
