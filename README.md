@@ -469,15 +469,16 @@ When adding an expectation, you can only use an `Action` if the method is simple
 enough.  Specifically, all arguments must have `Eq` and `Show` instances, and no
 arguments may rely on type variables bound by the method.
 
-If your method isn't simple enough, the solution is to use add the expectation
-with a `Matcher` instead of an `Action`.  The arguments to `Matcher` are
-`Predicate`s that can inspect the value and decide whether to match.  You are
-now responsible for deciding how to match the complex argument.  Some options
-include:
+If your method isn't simple enough, the solution is to add the expectation with
+a `Matcher` instead of an `Action`.  The arguments to `Matcher` are `Predicate`s
+that can inspect the value and decide whether to match.  You are now responsible
+for deciding how to match the complex argument.  Some options include:
 
 1. Using a polymorphic `Predicate` like `anything`.
 2. Ensuring that a `Typeable` constraint is available, and using the `typed`
    predicate to cast the argument to a known type.
+3. Using the `is` or `with` `Predicate`s and your own code that's polymorphic in
+   the type and produces a monomorphic result type you can match on.
 
 ### How do I migrate from `monad-mock`?
 
