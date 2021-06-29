@@ -302,11 +302,13 @@ the method.  Variables bound by the instance work much the same as concrete
 types, but check out the question about multi-parameter type classes for some
 details.
 
-Unfortunately, you cannot use HMock to mock a method with a return type bound
-by the method.  HMock will not generate an `Action` or `Matcher` for this
-method.  Instead, you will need to write the instance for `MockT` on your own,
-as described in the question about partial mocks, and provide a fake
-implementation for the problematic method.
+To mock a method with a polymorphic return value bound by the method itself, the
+return value must have a `Typeable` constraint.  If it cannot be inferred, you
+will also need to add a type constraint to the return value you set for the
+method, so that GHC knows the type.  Note that you must add separate
+expectations to the method for each type at which it will be used; unfortunately
+you cannot add one expectation that will match uses with more than one different
+return type.
 
 ### Why do I need a Default instance for `mockMethod`?
 
