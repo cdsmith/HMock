@@ -183,8 +183,8 @@ allowUnexpected e = fromMockSetup $ case toRule e of
     state <- MockSetup ask
     mockSetupSTM $
       modifyTVar'
-        (mockDefaults state)
-        ((True, Step (locate callStack (m :-> listToMaybe r))) :)
+        (mockAllowUnexpected state)
+        (Step (locate callStack (m :-> listToMaybe r)) :)
 
 -- | Sets a default action for *expected* matching calls.  The new default only
 -- applies to calls for which an expectation exists, but it lacks an explicit
@@ -203,7 +203,7 @@ byDefault (m :=> [r]) = fromMockSetup $ do
   mockSetupSTM $
     modifyTVar'
       (mockDefaults state)
-      ((False, Step (locate callStack (m :-> Just r))) :)
+      (Step (locate callStack (m :-> Just r)) :)
 byDefault _ = error "Defaults must have exactly one response."
 
 -- | Adds a side-effect, which happens whenever a matching call occurs, in

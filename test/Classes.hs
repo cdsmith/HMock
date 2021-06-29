@@ -190,8 +190,6 @@ setupTests = describe "MonadWithSetup" $ do
   it "returns the customized default value" $ do
     example $
       runMockT $ do
-        expectAny WithSetup
-
         result <- withSetup
         liftIO (result `shouldBe` "custom default")
 
