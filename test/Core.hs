@@ -14,7 +14,7 @@ import Control.Monad (replicateM_)
 import Control.Monad.Reader (MonadReader (local), ask, runReaderT)
 import Control.Monad.State (execStateT, modify)
 import Control.Monad.Trans (liftIO)
-import Data.IORef (newIORef, readIORef, writeIORef, modifyIORef)
+import Data.IORef (modifyIORef, newIORef, readIORef, writeIORef)
 import Data.List (isInfixOf, isPrefixOf)
 import Test.HMock
 import Test.Hspec
@@ -212,6 +212,24 @@ coreTests = do
       example . runMockT $ do
         expect $ WriteFile_ (hasSubstr "bar") anything
         writeFile "bar.txt" "unknown contents"
+
+    it "matches with WholeMethodMatcher" $
+      example $ do
+        let setExpectations =
+              expect $
+                WriteFile_ anything anything
+                  `SuchThat` \(WriteFile f txt) -> txt `isInfixOf` f
+
+            success = runMockT $ do
+              setExpectations
+              writeFile "foo.txt" "foo"
+
+            failure = runMockT $ do
+              setExpectations
+              writeFile "foo.txt" "bar"
+
+        success
+        failure `shouldThrow` anyException
 
     it "stores source location in suchThat predicate" $
       example $ do

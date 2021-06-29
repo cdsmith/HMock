@@ -12,7 +12,11 @@ import GHC.Stack (CallStack, callStack)
 import GHC.TypeLits (Symbol)
 import Test.HMock.ExpectContext (ExpectContext (..), MockableMethod)
 import Test.HMock.Internal.ExpectSet (ExpectSet (..))
-import Test.HMock.Internal.Rule (Rule (..))
+import Test.HMock.Internal.Rule
+  ( Rule (..),
+    WholeMethodMatcher (..),
+    showWholeMatcher,
+  )
 import {-# SOURCE #-} Test.HMock.Internal.State (MockT)
 import Test.HMock.Internal.Util (Located (..), locate, withLoc)
 import Test.HMock.Mockable (MockableBase (..))
@@ -34,7 +38,7 @@ data
     (r :: Type)
   where
   (:->) ::
-    Matcher cls name m r ->
+    WholeMethodMatcher cls name m r ->
     Maybe (Action cls name m r -> MockT m r) ->
     SingleRule cls name m r
 
@@ -47,7 +51,7 @@ data Step m where
 
 instance Show (Step m) where
   show (Step l@(Loc _ (m :-> _))) =
-    withLoc (showMatcher Nothing m <$ l)
+    withLoc (showWholeMatcher Nothing m <$ l)
 
 -- | Expands a Rule into an expectation.  The expected multiplicity will be one
 -- if there are no responses; otherwise one call is expected per response.

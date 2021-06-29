@@ -6,9 +6,16 @@
 -- matching methods.  The 'Expectable' type class generalizes 'Rule', so that
 -- you can specify a bare 'Matcher' or 'Action' in most situations where a
 -- 'Rule' is needed but you don't want to specify the response.
-module Test.HMock.Rule (Rule, Expectable (..), (|->), (|=>)) where
+module Test.HMock.Rule
+  ( Rule,
+    Expectable (..),
+    (|->),
+    (|=>),
+    WholeMethodMatcher (SuchThat),
+  )
+where
 
-import Test.HMock.Internal.Rule (Rule (..))
+import Test.HMock.Internal.Rule (Rule (..), WholeMethodMatcher (..))
 import {-# SOURCE #-} Test.HMock.Internal.State (MockT)
 import Test.HMock.Mockable (MockableBase (Action, Matcher))
 
@@ -46,4 +53,7 @@ instance Expectable cls name m r (Rule cls name m r) where
   toRule = id
 
 instance Expectable cls name m r (Matcher cls name m r) where
+  toRule m = JustMatcher m :=> []
+
+instance Expectable cls name m r (WholeMethodMatcher cls name m r) where
   toRule m = m :=> []

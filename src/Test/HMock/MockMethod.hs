@@ -28,6 +28,7 @@ import Data.Typeable (cast)
 import GHC.Stack (HasCallStack, withFrozenCallStack)
 import Test.HMock.ExpectContext (MockableMethod)
 import Test.HMock.Internal.ExpectSet (ExpectSet, liveSteps)
+import Test.HMock.Internal.Rule (WholeMethodMatcher (..), showWholeMatcher)
 import Test.HMock.Internal.State
   ( MockContext (..),
     MockSetup (..),
@@ -41,6 +42,18 @@ import Test.HMock.Internal.Step (SingleRule ((:->)), Step (Step))
 import Test.HMock.Internal.Util (Located (Loc), withLoc)
 import Test.HMock.MockT (describeExpectations)
 import Test.HMock.Mockable (MatchResult (..), Mockable (..), MockableBase (..))
+
+matchWholeAction ::
+  MockableBase cls =>
+  WholeMethodMatcher cls name m a ->
+  Action cls name m a ->
+  MatchResult
+matchWholeAction (JustMatcher m) a = matchAction m a
+matchWholeAction (m `SuchThat` p) a = case matchAction m a of
+  NoMatch n -> NoMatch n
+  Match
+    | p a -> Match
+    | otherwise -> NoMatch 0
 
 -- | Implements mock delegation for actions.
 mockMethodImpl ::
@@ -61,8 +74,9 @@ mockMethodImpl surrogate action = join $
             (tryMatch (mockExpectSet state) <$> liveSteps expectSet)
     let orderedPartial = snd <$> sortBy (compare `on` fst) (catMaybes partial)
     defaults <- concatMapM (mockSetupSTM . readTVar . mockDefaults) states
-    sideEffect <- getSideEffect <$>
-      concatMapM (mockSetupSTM . readTVar . mockSideEffects) states
+    sideEffect <-
+      getSideEffect
+        <$> concatMapM (mockSetupSTM . readTVar . mockSideEffects) states
     checkAmbig <- mockSetupSTM $ readTVar . mockCheckAmbiguity . head $ states
     case (full, orderedPartial, findDefault defaults) of
       (opts@(_ : _ : _), _, _)
@@ -87,12 +101,12 @@ mockMethodImpl surrogate action = join $
         (String, MockSetup m (), Maybe (MockT m r))
     tryMatch tvar (Step expected, e)
       | Just lrule@(Loc _ (m :-> impl)) <- cast expected =
-        case matchAction m action of
+        case matchWholeAction m action of
           NoMatch n ->
-            Left (Just (n, withLoc (showMatcher (Just action) m <$ lrule)))
+            Left (Just (n, withLoc (showWholeMatcher (Just action) m <$ lrule)))
           Match ->
             Right
-              ( withLoc (lrule $> showMatcher (Just action) m),
+              ( withLoc (lrule $> showWholeMatcher (Just action) m),
                 mockSetupSTM $ writeTVar tvar e,
                 ($ action) <$> impl
               )
@@ -105,7 +119,7 @@ mockMethodImpl surrogate action = join $
         go allowed r ((thisAllowed, Step expected) : steps)
           | thisAllowed || isNothing r,
             Just (Loc _ (m :-> r')) <- cast expected,
-            Match <- matchAction m action =
+            Match <- matchWholeAction m action =
             go (allowed || thisAllowed) (r <|> (($ action) <$> r')) steps
           | otherwise = go allowed r steps
         go allowed r [] = (allowed, fromMaybe (return surrogate) r)
@@ -114,7 +128,7 @@ mockMethodImpl surrogate action = join $
     getSideEffect effects =
       forM_ effects $ \(Step expected) -> case cast expected of
         Just (Loc _ (m :-> Just impl))
-          | Match <- matchAction m action -> void (impl action)
+          | Match <- matchWholeAction m action -> void (impl action)
         _ -> return ()
 
 -- | Implements a method in a 'Mockable' monad by delegating to the mock

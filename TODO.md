@@ -91,27 +91,6 @@ Some predicates could do a better job explaining why they succeed or fail.  For
 example, `elemsAre` or `each` could explain which elements don't match.  This
 means expanding the API to `Predicate` to include an optional explanation.
 
-## Whole-method matching
-
-* Priority: Medium
-* Accept Patch: Yes
-* Complexity: Medium to High
-
-Sometimes you want to be able to define matching predicates that span multiple
-arguments to a method.  There are whole-method matchers in frameworks like gMock
-to handle this.  For example, I may want to require that two arguments are equal
-to each other.  HMock should have a way to do this.
-
-The way to do this would be to add an instance for
-`Expectable cls name m r (Predicate (Action cls name m r))`.  I think I have a
-grand vision here that `(Predicate (Action cls name m r))` should become the
-internal type used for matching actions.  But the problem is explainability and
-partial matching.  I need:
-* To be able to find the closest matches, so that I can suggest them when an
-  action fails to match.
-* To be able to explain why an action didn't match by referring to the specific
-  argument or arguments that failed.
-
 ## Wrappers to save responses from integration tests.
 
 * Priority: Medium

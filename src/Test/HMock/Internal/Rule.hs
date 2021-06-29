@@ -11,6 +11,23 @@ import GHC.TypeLits (Symbol)
 import {-# SOURCE #-} Test.HMock.Internal.State (MockT)
 import Test.HMock.Mockable (MockableBase (..))
 
+-- | A way to match an entire action, using conditions that might depend on the
+-- relationship between arguments.
+data WholeMethodMatcher cls name m r
+  = JustMatcher (Matcher cls name m r)
+  | Matcher cls name m r `SuchThat` (Action cls name m r -> Bool)
+
+-- | Displays a WholeMethodMatcher.  The predicate isn't showable, but we can at
+-- least indicate whether there is one present.
+showWholeMatcher ::
+  MockableBase cls =>
+  Maybe (Action cls name m a) ->
+  WholeMethodMatcher cls name m b ->
+  String
+showWholeMatcher a (JustMatcher m) = showMatcher a m
+showWholeMatcher a (m `SuchThat` _) =
+  showMatcher a m ++ " (with whole method matcher)"
+
 -- | A rule for matching a method and responding to it when it matches.
 --
 -- The method may be matched by providing either an 'Action' to match exactly,
@@ -40,6 +57,6 @@ data
     (r :: Type)
   where
   (:=>) ::
-    Matcher cls name m r ->
+    WholeMethodMatcher cls name m r ->
     [Action cls name m r -> MockT m r] ->
     Rule cls name m r

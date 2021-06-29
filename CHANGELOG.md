@@ -3,6 +3,7 @@
 ## 0.3.0.0 -- 2021-??-??
 
 * Added `whenever` to associate a side effect to a method.
+* Added `WholeMethodMatcher` to match entire method args at once.
 
 ## 0.2.0.0 -- 2021-06-24
 
