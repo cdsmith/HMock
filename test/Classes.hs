@@ -489,11 +489,35 @@ monadInArgTests = describe "MonadInArg" $ do
       success
       failure `shouldThrow` anyException
 
+class MonadPolyResult m where
+  polyResult :: Typeable a => a -> m a
+  nonTypeablePolyResult :: a -> m a
+
+deriveMockable ''MonadPolyResult
+
+instance (MonadIO m, Typeable m) => MonadPolyResult (MockT m) where
+  polyResult x = mockDefaultlessMethod (PolyResult x)
+  nonTypeablePolyResult x = return x
+
+polyResultTests :: SpecWith ()
+polyResultTests = describe "MonadPolyResult" $ do
+  it "generates mock impl" $
+    example $ do
+      decs <- runMockT $ do
+        $(onReify [|expectAny|] ''MonadPolyResult)
+        runQ (deriveMockable ''MonadPolyResult)
+      evaluate (rnf decs)
+
+  it "is mockable" $
+    example . runMockT $ do
+      expect $ PolyResult_ anything |=> \(PolyResult a) -> return (a :: Int)
+      x <- polyResult (3 :: Int)
+      liftIO $ x `shouldBe` 3
+
 class MonadExtraneousMembers m where
   data SomeDataType m
   favoriteNumber :: SomeDataType m -> Int
   wrongMonad :: Monad n => m Int -> n Int
-  polyResult :: a -> m a
   nestedRankN :: ((forall a. a -> Bool) -> Bool) -> m ()
 
   mockableMethod :: Int -> m ()
@@ -504,7 +528,6 @@ instance (Typeable m, MonadIO m) => MonadExtraneousMembers (MockT m) where
   data SomeDataType (MockT m) = SomeCon
   favoriteNumber SomeCon = 42
   wrongMonad _ = return 42
-  polyResult = return
   nestedRankN _ = return ()
 
   mockableMethod a = mockMethod (MockableMethod a)
@@ -522,15 +545,22 @@ extraneousMembersTests = describe "MonadExtraneousMembers" $ do
     example $ do
       decs <- runMockT $ do
         $(onReify [|expectAny|] ''MonadExtraneousMembers)
-        expect $ QReport False "A non-value member cannot be mocked."
-        expect $
-          QReport False "favoriteNumber can't be mocked: non-monadic result."
         expect $
           QReport
             False
-            "wrongMonad can't be mocked: return value in wrong monad."
+            "SomeDataType must be defined in manual MockT instance."
         expect $
-          QReport False "polyResult can't be mocked: polymorphic return value."
+          QReport
+            False
+            ( "favoriteNumber can't be mocked: "
+                ++ "return value not in the expected monad."
+            )
+        expect $
+          QReport
+            False
+            ( "wrongMonad can't be mocked: "
+                ++ "return value not in the expected monad."
+            )
         expect $
           QReport
             False

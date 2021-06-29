@@ -72,16 +72,15 @@ substTypeVars classVars = everywhere (mkT subst)
     subst (VarT x) | Just t <- lookup x classVars = t
     subst t = t
 
--- | Splits a function type into a list of bound type vars, context, and
--- parameters and return value.  The return value is the last element of the
--- list.
-splitType :: Type -> ([Name], Cxt, [Type])
+-- | Splits a function type into a list of bound type vars, context, parameter
+-- types, and return value type.
+splitType :: Type -> ([Name], Cxt, [Type], Type)
 splitType (ForallT tv cx b) =
-  let (tvs, cxs, parts) = splitType b
-   in (map tvName tv ++ tvs, cx ++ cxs, parts)
+  let (tvs, cxs, params, retval) = splitType b
+   in (map tvName tv ++ tvs, cx ++ cxs, params, retval)
 splitType (AppT (AppT ArrowT a) b) =
-  let (tvs, cx, parts) = splitType b in (tvs, cx, a : parts)
-splitType r = ([], [], [r])
+  let (tvs, cx, params, retval) = splitType b in (tvs, cx, a : params, retval)
+splitType r = ([], [], [], r)
 
 -- | Gets all free type variable 'Name's in the given 'Type'.
 freeTypeVars :: Type -> [Name]

@@ -323,48 +323,61 @@ makeInstance options ty cx tbl ps m members = do
         instExtraMembers = extraMembers
       }
   where
-    memberOrMethod :: Dec -> Either String Method -> Q (Either Dec Method)
-    memberOrMethod dec (Left warning) = do
-      when (mockVerbose options) $ reportWarning warning
+    memberOrMethod :: Dec -> Either [String] Method -> Q (Either Dec Method)
+    memberOrMethod dec (Left warnings) = do
+      when (mockVerbose options) $ mapM_ reportWarning warnings
       return (Left dec)
     memberOrMethod _ (Right method) = return (Right method)
 
-getMethod :: Type -> Name -> [(Name, Type)] -> Dec -> Q (Either String Method)
+getMethod :: Type -> Name -> [(Name, Type)] -> Dec -> Q (Either [String] Method)
 getMethod instTy m tbl (SigD name ty) = do
   simpleTy <- localizeMember instTy m (substTypeVars tbl ty)
+  let (tvs, cx, args, mretval) = splitType simpleTy
   return $ do
-    let (tvs, cx, argsAndReturn) = splitType simpleTy
-    (m', result) <- case last argsAndReturn of
-      AppT (VarT m') result -> return (m', result)
+    retval <- case mretval of
+      AppT (VarT m') retval | m' == m -> return retval
       _ ->
-        Left $
-          nameBase name
-            ++ " can't be mocked: non-monadic result."
-    when (m' /= m) $
-      Left $
-        nameBase name
-          ++ " can't be mocked: return value in wrong monad."
-    when (relevantContext result (tvs, cx) /= ([], [])) $
-      Left $
-        nameBase name
-          ++ " can't be mocked: polymorphic return value."
-    let argTypes =
-          map
-            (substTypeVar m (AppT (ConT ''MockT) (VarT m)))
-            (init argsAndReturn)
+        Left
+          [ nameBase name
+              ++ " can't be mocked: return value not in the expected monad."
+          ]
+    unless (all (isVarTypeable cx) (filter (`elem` tvs) (freeTypeVars retval))) $
+      Left
+        [ nameBase name
+            ++ " can't be mocked: return value not Typeable."
+        ]
+    let argTypes = map (substTypeVar m (AppT (ConT ''MockT) (VarT m))) args
     when (any hasNestedPolyType argTypes) $
-      Left $
-        nameBase name
-          ++ " can't be mocked: rank-n types nested in arguments."
+      Left
+        [ nameBase name
+            ++ " can't be mocked: rank-n types nested in arguments."
+        ]
+
     return $
       Method
         { methodName = name,
           methodTyVars = tvs,
           methodCxt = cx,
           methodArgs = argTypes,
-          methodResult = result
+          methodResult = retval
         }
-getMethod _ _ _ _ = return (Left "A non-value member cannot be mocked.")
+  where
+    isVarTypeable :: Cxt -> Name -> Bool
+    isVarTypeable cx v = AppT (ConT ''Typeable) (VarT v) `elem` cx
+
+getMethod _ _ _ (DataD _ name _ _ _ _) =
+  return (Left [nameBase name ++ " must be defined in manual MockT instance."])
+getMethod _ _ _ (NewtypeD _ name _ _ _ _) =
+  return (Left [nameBase name ++ " must be defined in manual MockT instance."])
+getMethod _ _ _ (TySynD name _ _) =
+  return (Left [nameBase name ++ " must be defined in manual MockT instance."])
+getMethod _ _ _ (DataFamilyD name _ _) =
+  return (Left [nameBase name ++ " must be defined in manual MockT instance."])
+getMethod _ _ _ (OpenTypeFamilyD (TypeFamilyHead name _ _ _)) =
+  return (Left [nameBase name ++ " must be defined in manual MockT instance."])
+getMethod _ _ _ (ClosedTypeFamilyD (TypeFamilyHead name _ _ _) _) =
+  return (Left [nameBase name ++ " must be defined in manual MockT instance."])
+getMethod _ _ _ _ = return (Left [])
 
 isKnownType :: Method -> Type -> Bool
 isKnownType method ty = null tyVars && null cx
