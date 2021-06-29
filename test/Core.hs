@@ -14,7 +14,7 @@ import Control.Monad (replicateM_)
 import Control.Monad.Reader (MonadReader (local), ask, runReaderT)
 import Control.Monad.State (execStateT, modify)
 import Control.Monad.Trans (liftIO)
-import Data.IORef (newIORef, readIORef, writeIORef)
+import Data.IORef (newIORef, readIORef, writeIORef, modifyIORef)
 import Data.List (isInfixOf, isPrefixOf)
 import Test.HMock
 import Test.Hspec
@@ -637,6 +637,20 @@ coreTests = do
               <*> readFile "baz.txt"
           liftIO (result `shouldBe` ("foo", "bar", ""))
 
+    it "performs side effects" $
+      example $
+        runMockT $ do
+          ref <- liftIO $ newIORef False
+
+          allowUnexpected $ WriteFile_ anything anything
+          whenever $
+            WriteFile_ anything anything
+              |=> const (liftIO (writeIORef ref True))
+
+          writeFile "foo.txt" "foo"
+
+          liftIO (readIORef ref `shouldReturn` True)
+
     it "doesn't adopt lax behavior for byDefault" $
       example $ do
         let test = runMockT $ do
@@ -698,6 +712,30 @@ coreTests = do
             liftIO (result `shouldBe` ("foo #1", "bar #1", "foo #2", "bar #2"))
 
       it "inherits defaults correctly" $
+        example $
+          runMockT $ do
+            allowUnexpected $ WriteFile_ anything anything
+
+            superCount <- liftIO $ newIORef (0 :: Int)
+            subCount <- liftIO $ newIORef (0 :: Int)
+
+            whenever $
+              WriteFile_ anything anything
+                |=> \_ -> liftIO $ modifyIORef superCount (+ 1)
+            writeFile "foo.txt" "foo"
+
+            nestMockT $ do
+              whenever $
+                WriteFile_ anything anything
+                  |=> \_ -> liftIO $ modifyIORef subCount (+ 1)
+              writeFile "foo.txt" "foo"
+
+            writeFile "foo.txt" "foo"
+
+            liftIO (readIORef superCount `shouldReturn` 3)
+            liftIO (readIORef subCount `shouldReturn` 1)
+
+      it "inherits side effects correctly" $
         example $
           runMockT $ do
             allowUnexpected $ ReadFile "foo.txt" |-> "foo"
