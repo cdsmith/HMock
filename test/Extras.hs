@@ -15,6 +15,11 @@ instance Arbitrary Multiplicity where
       <$> (fromInteger <$> arbitrary)
       <*> (fromInteger . getNonNegative <$> arbitrary)
 
+guessMultiplicity :: [Int] -> Multiplicity
+guessMultiplicity vals
+  | null vals = -1
+  | otherwise = between (fromIntegral (minimum vals)) (fromIntegral (maximum vals))
+
 multiplicityTests :: SpecWith ()
 multiplicityTests = do
   describe "Multiplicity" $ do
@@ -38,9 +43,20 @@ multiplicityTests = do
         \m1 m2 (NonNegative n) ->
           let natSums k = [(i, k - i) | i <- [0 .. k]]
            in meetsMultiplicity (m1 + m2) n
-                == any
+                === any
                   (\(j, k) -> meetsMultiplicity m1 j && meetsMultiplicity m2 k)
                   (natSums n)
+
+    it "correctly implements difference" $
+      property $ \m1 m2 ->
+        m1 - m2
+          === guessMultiplicity
+            [ i - j
+              | i <- [0 .. 100],
+                meetsMultiplicity m1 i,
+                j <- [0 .. 100],
+                meetsMultiplicity m2 j
+            ]
 
 predicateTests :: SpecWith ()
 predicateTests = do
