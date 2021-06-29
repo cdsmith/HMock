@@ -2,8 +2,11 @@
 
 ## 0.3.0.0 -- 2021-??-??
 
+* Methods with polymorphic return types can now be mocked if the return type has
+  a `Typeable` constraint.
 * Added `whenever` to associate a side effect to a method.
 * Added `WholeMethodMatcher` to match entire method args at once.
+* `allowUnexpected` no longer changes the default for expected calls.
 
 ## 0.2.0.0 -- 2021-06-24
 
