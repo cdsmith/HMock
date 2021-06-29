@@ -24,6 +24,7 @@ module Test.HMock.MockT
     MockContext,
     allowUnexpected,
     byDefault,
+    whenever,
   )
 where
 
@@ -33,6 +34,7 @@ import Control.Monad.Reader
   )
 import Control.Monad.Trans (lift)
 import Data.List (intercalate)
+import Data.Maybe (listToMaybe)
 import Data.Proxy (Proxy (Proxy))
 import GHC.Stack (callStack)
 import Test.HMock.ExpectContext (MockableMethod)
@@ -43,7 +45,6 @@ import Test.HMock.Internal.Step (SingleRule ((:->)), Step (Step))
 import Test.HMock.Internal.Util (locate)
 import Test.HMock.Rule (Expectable (toRule))
 import UnliftIO
-import Data.Maybe (listToMaybe)
 
 -- | Runs a test in the 'MockT' monad, handling all of the mocks.
 runMockT :: forall m a. MonadIO m => MockT m a -> m a
@@ -204,3 +205,27 @@ byDefault (m :=> [r]) = fromMockSetup $ do
       (mockDefaults state)
       ((False, Step (locate callStack (m :-> Just r))) :)
 byDefault _ = error "Defaults must have exactly one response."
+
+-- | Adds a side-effect, which happens whenever a matching call occurs, in
+-- addition to the usual response.  The return value is entirely ignored.
+--
+-- Be warned: using side effects makes it easy to break abstraction boundaries.
+-- Be aware that there may be other uses of a method besides the one which you
+-- intend to intercept here.  If possible, add the desired behavior to the
+-- response for the matching expectation instead.
+whenever ::
+  forall cls name m r ctx.
+  ( MonadIO m,
+    MockableMethod cls name m r,
+    MockContext ctx
+  ) =>
+  Rule cls name m r ->
+  ctx m ()
+whenever (m :=> [r]) = fromMockSetup $ do
+  initClassIfNeeded (Proxy :: Proxy cls)
+  state <- MockSetup ask
+  mockSetupSTM $
+    modifyTVar'
+      (mockSideEffects state)
+      (Step (locate callStack (m :-> Just r)) :)
+whenever _ = error "Side effects must have exactly one response."

@@ -50,6 +50,7 @@ import Control.Monad.Fail (MonadFail)
 data MockState m = MockState
   { mockExpectSet :: TVar (ExpectSet (Step m)),
     mockDefaults :: TVar [(Bool, Step m)],
+    mockSideEffects :: TVar [Step m],
     mockCheckAmbiguity :: TVar Bool,
     mockClasses :: TVar (Set TypeRep),
     mockParent :: Maybe (MockState m)
@@ -61,6 +62,7 @@ initMockState :: MonadIO m => Maybe (MockState m) -> m (MockState m)
 initMockState parent =
   MockState
     <$> newTVarIO ExpectNothing
+    <*> newTVarIO []
     <*> newTVarIO []
     <*> maybeM
       (newTVarIO False)

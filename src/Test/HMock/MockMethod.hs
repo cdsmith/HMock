@@ -10,8 +10,9 @@ module Test.HMock.MockMethod
   )
 where
 
+import Control.Applicative ((<|>))
 import Control.Concurrent.STM (TVar, readTVar, writeTVar)
-import Control.Monad (forM, join)
+import Control.Monad (forM, forM_, join, void)
 import Control.Monad.Extra (concatMapM)
 import Control.Monad.IO.Class (MonadIO)
 import Control.Monad.Reader (ask)
@@ -40,7 +41,6 @@ import Test.HMock.Internal.Step (SingleRule ((:->)), Step (Step))
 import Test.HMock.Internal.Util (Located (Loc), withLoc)
 import Test.HMock.MockT (describeExpectations)
 import Test.HMock.Mockable (MatchResult (..), Mockable (..), MockableBase (..))
-import Control.Applicative ((<|>))
 
 -- | Implements mock delegation for actions.
 mockMethodImpl ::
@@ -61,6 +61,8 @@ mockMethodImpl surrogate action = join $
             (tryMatch (mockExpectSet state) <$> liveSteps expectSet)
     let orderedPartial = snd <$> sortBy (compare `on` fst) (catMaybes partial)
     defaults <- concatMapM (mockSetupSTM . readTVar . mockDefaults) states
+    sideEffect <- getSideEffect <$>
+      concatMapM (mockSetupSTM . readTVar . mockSideEffects) states
     checkAmbig <- mockSetupSTM $ readTVar . mockCheckAmbiguity . head $ states
     case (full, orderedPartial, findDefault defaults) of
       (opts@(_ : _ : _), _, _)
@@ -69,12 +71,13 @@ mockMethodImpl surrogate action = join $
             ambiguityError
               action
               ((\(s, _, _) -> s) <$> opts)
-      ((_, choose, Just response) : _, _, _) -> choose >> return response
-      ((_, choose, Nothing) : _, _, (_, d)) -> choose >> return d
-      ([], _, (True, d)) -> return d
+      ((_, choose, Just response) : _, _, _) ->
+        choose >> return (sideEffect >> response)
+      ((_, choose, Nothing) : _, _, (_, d)) ->
+        choose >> return (sideEffect >> d)
+      ([], _, (True, d)) -> return (sideEffect >> d)
       ([], [], _) -> return (noMatchError action)
-      ([], _, _) ->
-        return (partialMatchError action orderedPartial)
+      ([], _, _) -> return (partialMatchError action orderedPartial)
   where
     tryMatch ::
       TVar (ExpectSet (Step m)) ->
@@ -97,14 +100,22 @@ mockMethodImpl surrogate action = join $
 
     findDefault :: [(Bool, Step m)] -> (Bool, MockT m r)
     findDefault defaults = go False Nothing defaults
-      where go True (Just r) _ = (True, r)
-            go allowed r ((thisAllowed, Step expected) : steps)
-              | thisAllowed || isNothing r,
-                Just (Loc _ (m :-> r')) <- cast expected,
-                Match <- matchAction m action =
-                  go (allowed || thisAllowed) (r <|> (($ action) <$> r')) steps
-              | otherwise = go allowed r steps
-            go allowed r [] = (allowed, fromMaybe (return surrogate) r)
+      where
+        go True (Just r) _ = (True, r)
+        go allowed r ((thisAllowed, Step expected) : steps)
+          | thisAllowed || isNothing r,
+            Just (Loc _ (m :-> r')) <- cast expected,
+            Match <- matchAction m action =
+            go (allowed || thisAllowed) (r <|> (($ action) <$> r')) steps
+          | otherwise = go allowed r steps
+        go allowed r [] = (allowed, fromMaybe (return surrogate) r)
+
+    getSideEffect :: [Step m] -> MockT m ()
+    getSideEffect effects =
+      forM_ effects $ \(Step expected) -> case cast expected of
+        Just (Loc _ (m :-> Just impl))
+          | Match <- matchAction m action -> void (impl action)
+        _ -> return ()
 
 -- | Implements a method in a 'Mockable' monad by delegating to the mock
 -- framework.  If the method is called unexpectedly, an exception will be

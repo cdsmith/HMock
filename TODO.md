@@ -81,29 +81,6 @@ TH to just check whether the `Mockable` instance is already defined, and omit it
 if so.  This means recovering certain options like the suffix by inspecting the
 `Mockable` instance, rather than relying on the user to pass consistent options.
 
-## Side effects?
-
-* Priority: Medium
-* Accept Patch: Probably
-* Complexity: Low
-
-Sometimes I want to add behavior (such as logging, new expectations, whatever)
-to an action, but without preventing that action from satisfying additional
-expectations.  What I want is effectively a side effect.  It's kind of like a
-response, but it:
-
-1. Is only run if the action is accepted without it.
-2. Doesn't have a return value.
-3. Doesn't fulfill the expectation.
-
-The perfect name for this operation is `whenever`.
-
-The counter-argument is that this feature breaks abstraction boundaries.  Since
-all methods are intercepted regardless of where they match in the expectation
-set, changes that aren't related to the part of code you're thinking about can
-nevertheless produce behavior in your test.  This is probably an acceptable
-disadvantage, though, provided that it's documented clearly.
-
 ## Better predicate descriptions
 
 * Priority: Medium

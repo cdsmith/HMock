@@ -1,8 +1,8 @@
 # Revision history for hmock
 
-## 0.x.0.0 -- 2021-??-??
+## 0.3.0.0 -- 2021-??-??
 
-* 
+* Added `whenever` to associate a side effect to a method.
 
 ## 0.2.0.0 -- 2021-06-24
 
