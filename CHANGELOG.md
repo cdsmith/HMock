@@ -1,6 +1,6 @@
 # Revision history for hmock
 
-## 0.3.0.0 -- 2021-??-??
+## 0.3.0.0 -- 2021-06-30
 
 * Methods with polymorphic return types can now be mocked if the return type has
   a `Typeable` constraint.
