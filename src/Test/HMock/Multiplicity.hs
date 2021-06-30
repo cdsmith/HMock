@@ -71,7 +71,7 @@ instance Num Multiplicity where
   (*) = error "Multiplicities are not closed under multiplication"
 
   abs = id
-  signum = id
+  signum x = if x == 0 then 0 else 1
 
 normalize :: Multiplicity -> Multiplicity
 normalize m@(Multiplicity a b)

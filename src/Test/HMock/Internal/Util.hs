@@ -9,7 +9,7 @@ import qualified Data.Sequences as Seq
 import GHC.Stack (CallStack, getCallStack, prettySrcLoc)
 
 -- | A value together with its source location.
-data Located a = Loc (Maybe String) a deriving (Eq, Ord, Functor)
+data Located a = Loc (Maybe String) a deriving (Functor)
 
 -- | Annotates a value with its source location from the call stack.
 locate :: CallStack -> a -> Located a

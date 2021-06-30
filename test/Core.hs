@@ -596,6 +596,10 @@ coreTests = do
     it "describes expectations when asked" $
       example . runMockT $ do
         expectAny $ ReadFile_ anything
+        expectAny $
+          WriteFile_ anything anything
+            `SuchThat` \(WriteFile a b) -> b `isInfixOf` a
+
         expectations <- describeExpectations
 
         -- Format is deliberately unspecified.  We're forcing it here so that
