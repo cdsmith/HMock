@@ -2,7 +2,7 @@
 
 ## 0.x.0.0 -- 2021-??-??
 
-* 
+* Allow `MockSetup` to add expectations.
 
 ## 0.3.0.0 -- 2021-06-30
 

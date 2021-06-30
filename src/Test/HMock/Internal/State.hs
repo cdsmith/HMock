@@ -171,13 +171,16 @@ instance MockContext MockT where
 
 -- | Adds an expectation to the 'MockState' for the given 'ExpectSet',
 -- interleaved with any existing expectations.
-expectThisSet :: MonadIO m => ExpectSet (Step m) -> MockT m ()
-expectThisSet e = fromMockSetup $ do
+expectThisSet :: MonadIO m => ExpectSet (Step m) -> MockSetup m ()
+expectThisSet e = do
   initClassesAsNeeded e
   state <- MockSetup ask
   mockSetupSTM $ modifyTVar (mockExpectSet state) (e `ExpectInterleave`)
 
-instance ExpectContext MockT where
+-- | This instance allows you to add expectations from 'MockSetup' actions.
+-- This is an unusual thing to do.  Consider using
+-- 'Test.HMock.MockT.allowUnexpected', instead.
+instance ExpectContext MockSetup where
   expect e =
     withFrozenCallStack $ expectThisSet $ unwrapExpected $ expect e
   expectN mult e =
@@ -195,3 +198,29 @@ instance ExpectContext MockT where
   consecutiveTimes mult es =
     withFrozenCallStack $
       expectThisSet $ unwrapExpected $ consecutiveTimes mult es
+
+instance ExpectContext MockT where
+  expect e =
+    withFrozenCallStack $
+      fromMockSetup $ expectThisSet $ unwrapExpected $ expect e
+  expectN mult e =
+    withFrozenCallStack $
+      fromMockSetup $ expectThisSet $ unwrapExpected $ expectN mult e
+  expectAny e =
+    withFrozenCallStack $
+      fromMockSetup $ expectThisSet $ unwrapExpected $ expectAny e
+  inSequence es =
+    withFrozenCallStack $
+      fromMockSetup $ expectThisSet $ unwrapExpected $ inSequence es
+  inAnyOrder es =
+    withFrozenCallStack $
+      fromMockSetup $ expectThisSet $ unwrapExpected $ inAnyOrder es
+  anyOf es =
+    withFrozenCallStack $
+      fromMockSetup $ expectThisSet $ unwrapExpected $ anyOf es
+  times mult es =
+    withFrozenCallStack $
+      fromMockSetup $ expectThisSet $ unwrapExpected $ times mult es
+  consecutiveTimes mult es =
+    withFrozenCallStack $
+      fromMockSetup $ expectThisSet $ unwrapExpected $ consecutiveTimes mult es
