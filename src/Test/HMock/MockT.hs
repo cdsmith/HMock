@@ -229,7 +229,6 @@ allowUnexpected e = fromMockSetup $ case toRule e of
   _ :=> (_ : _ : _) -> error "allowUnexpected may not have multiple responses."
   m :=> r -> do
     initClassIfNeeded (Proxy :: Proxy cls)
-    markInteresting (Proxy :: Proxy cls) (Proxy :: Proxy name)
     state <- MockSetup ask
     mockSetupSTM $
       modifyTVar'
@@ -249,7 +248,6 @@ byDefault ::
   ctx m ()
 byDefault (m :=> [r]) = fromMockSetup $ do
   initClassIfNeeded (Proxy :: Proxy cls)
-  markInteresting (Proxy :: Proxy cls) (Proxy :: Proxy name)
   state <- MockSetup ask
   mockSetupSTM $
     modifyTVar'
@@ -274,7 +272,6 @@ whenever ::
   ctx m ()
 whenever (m :=> [r]) = fromMockSetup $ do
   initClassIfNeeded (Proxy :: Proxy cls)
-  markInteresting (Proxy :: Proxy cls) (Proxy :: Proxy name)
   state <- MockSetup ask
   mockSetupSTM $
     modifyTVar'
