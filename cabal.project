@@ -1,4 +1,5 @@
-ignore-project: False
+packages: HMock.cabal
+
 coverage: True
 library-coverage: True
 tests: True
