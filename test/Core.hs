@@ -685,7 +685,7 @@ coreTests = do
         let setExpectations = do
               expect $ ReadFile_ anything
               expect $ ReadFile "foo.txt"
-              setAmbiguityCheck True
+              setAmbiguityCheck Error
 
             failure = runMockT $ do
               setExpectations
@@ -701,6 +701,31 @@ coreTests = do
 
         success
         failure `shouldThrow` errorWith ("Ambiguous action" `isInfixOf`)
+
+    it "ignores unexpected actions when asked" $
+      example. runMockT $ do
+        setUnexpectedActionCheck Ignore
+        writeFile "foo.txt" "unexpected"
+
+    it "ignores uninteresting actions when asked" $
+      example. runMockT $ do
+        setUninterestingActionCheck Ignore
+        writeFile "foo.txt" "unexpected"
+
+    it "still catches unexpected actions when ignoring uninteresting actions" $
+      example $ do
+        let test = runMockT $ do
+              setUninterestingActionCheck Ignore
+              expect $ WriteFile "bar.txt" ""
+
+              writeFile "foo.txt" "unexpected"
+
+        test `shouldThrow` anyException
+
+    it "ignores unmet expectations when asked" $
+      example. runMockT $ do
+        setUnmetExpectationCheck Ignore
+        expect $ ReadFile_ anything
 
     describe "nestMockT" $ do
       it "checks nested context early" $ do

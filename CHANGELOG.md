@@ -3,6 +3,7 @@
 ## 0.x.0.0 -- 2021-??-??
 
 * Allow `MockSetup` to add expectations.
+* Add a lot more configuration for severity of faults.
 
 ## 0.3.0.0 -- 2021-06-30
 

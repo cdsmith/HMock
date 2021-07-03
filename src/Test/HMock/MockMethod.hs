@@ -11,7 +11,7 @@ module Test.HMock.MockMethod
 where
 
 import Control.Concurrent.STM (TVar, readTVar, writeTVar)
-import Control.Monad (forM, forM_, join, void)
+import Control.Monad (forM, forM_, join, unless, void)
 import Control.Monad.Extra (concatMapM)
 import Control.Monad.IO.Class (MonadIO)
 import Control.Monad.Reader (ask)
@@ -21,7 +21,7 @@ import Data.Either (partitionEithers)
 import Data.Function (on)
 import Data.Functor (($>))
 import Data.List (intercalate, sortBy)
-import Data.Maybe (catMaybes)
+import Data.Maybe (catMaybes, fromMaybe)
 import Data.Proxy (Proxy (Proxy))
 import Data.Typeable (cast)
 import GHC.Stack (HasCallStack, withFrozenCallStack)
@@ -33,9 +33,11 @@ import Test.HMock.Internal.State
     MockSetup (..),
     MockState (..),
     MockT,
+    Severity (..),
     allStates,
     initClassIfNeeded,
     mockSetupSTM,
+    reportFault, isInteresting
   )
 import Test.HMock.Internal.Step (SingleRule ((:->)), Step (Step))
 import Test.HMock.Internal.Util (Located (Loc), withLoc)
@@ -80,23 +82,31 @@ mockMethodImpl surrogate action = join $
     sideEffect <-
       getSideEffect
         <$> concatMapM (mockSetupSTM . readTVar . mockSideEffects) states
-    checkAmbig <- mockSetupSTM $ readTVar . mockCheckAmbiguity . head $ states
+    ambigSev <- mockSetupSTM $ readTVar . mockAmbiguitySeverity . head $ states
+    unintSev <-
+      mockSetupSTM $ readTVar . mockUninterestingSeverity . head $ states
+    unexpSev <- mockSetupSTM $ readTVar . mockUnexpectedSeverity . head $ states
     case ( full,
            orderedPartial,
            allowedUnexpected unexpected,
            findDefault defaults
          ) of
-      (opts@(_ : _ : _), _, _, _)
-        | checkAmbig ->
-          return $ ambiguityError action ((\(s, _, _) -> s) <$> opts)
-      ((_, choose, Just response) : _, _, _, _) ->
-        choose >> return (sideEffect >> response)
-      ((_, choose, Nothing) : _, _, _, d) ->
-        choose >> return (sideEffect >> d)
-      ([], _, Just (Just resp), _) -> return (sideEffect >> resp)
-      ([], _, Just Nothing, d) -> return (sideEffect >> d)
-      ([], [], _, _) -> return (noMatchError action)
-      ([], _, _, _) -> return (partialMatchError action orderedPartial)
+      (opts@((_, choose, response) : rest), _, _, d) -> do
+        choose
+        return $ do
+          unless (null rest) $
+            ambiguityError ambigSev action ((\(s, _, _) -> s) <$> opts)
+          sideEffect
+          fromMaybe d response
+      ([], _, Just response, d) -> return (sideEffect >> fromMaybe d response)
+      ([], [], _, d) -> do
+        interesting <- isInteresting (Proxy :: Proxy cls) (Proxy :: Proxy name)
+        case (interesting, unintSev) of
+          (True, _) -> return (noMatchError unexpSev action >> d)
+          (False, Error) -> return (noMatchError unexpSev action >> d)
+          _ -> return (uninterestingError unintSev action >> d)
+      ([], _, _, d) ->
+        return (partialMatchError unexpSev action orderedPartial >> d)
   where
     tryMatch ::
       TVar (ExpectSet (Step m)) ->
@@ -170,12 +180,19 @@ mockDefaultlessMethod ::
 mockDefaultlessMethod action =
   withFrozenCallStack $ mockMethodImpl undefined action
 
+-- | An error for an action that matches no expectations at all.  This is only
+-- used if severity is Ignore or Warning.
+uninterestingError ::
+  (Mockable cls, MonadIO m) => Severity -> Action cls name m r -> MockT m ()
+uninterestingError severity a =
+  reportFault severity $ "Uninteresting action: " ++ showAction a
+
 -- | An error for an action that matches no expectations at all.
 noMatchError ::
-  (Mockable cls, MonadIO m) => Action cls name m r -> MockT m a
-noMatchError a = do
+  (Mockable cls, MonadIO m) => Severity -> Action cls name m r -> MockT m ()
+noMatchError severity a = do
   fullExpectations <- describeExpectations
-  error $
+  reportFault severity $
     "Unexpected action: " ++ showAction a
       ++ "\n\nFull expectations:\n"
       ++ fullExpectations
@@ -184,12 +201,13 @@ noMatchError a = do
 -- of the method's expectations.
 partialMatchError ::
   (Mockable cls, MonadIO m) =>
+  Severity ->
   Action cls name m r ->
   [String] ->
-  MockT m a
-partialMatchError a partials = do
+  MockT m ()
+partialMatchError severity a partials = do
   fullExpectations <- describeExpectations
-  error $
+  reportFault severity $
     "Wrong arguments: "
       ++ showAction a
       ++ "\n\nClosest matches:\n - "
@@ -201,12 +219,13 @@ partialMatchError a partials = do
 -- triggers an error if ambiguity checks are on.
 ambiguityError ::
   (Mockable cls, MonadIO m) =>
+  Severity ->
   Action cls name m r ->
   [String] ->
-  MockT m a
-ambiguityError a choices = do
+  MockT m ()
+ambiguityError severity a choices = do
   fullExpectations <- describeExpectations
-  error $
+  reportFault severity $
     "Ambiguous action matched multiple expectations: "
       ++ showAction a
       ++ "\n\nMatches:\n - "

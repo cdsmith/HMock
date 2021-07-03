@@ -5,6 +5,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE KindSignatures #-}
 
 -- | This module contains MockT and SetupMockT state functions.
 module Test.HMock.Internal.State where
@@ -15,6 +16,7 @@ import Control.Monad.Catch (MonadCatch, MonadMask, MonadThrow)
 import Control.Monad.Cont (MonadCont)
 import Control.Monad.Except (MonadError)
 import Control.Monad.Extra (maybeM)
+import Control.Monad.IO.Class (liftIO)
 import Control.Monad.RWS (MonadRWS)
 import Control.Monad.Reader (MonadReader (..), ReaderT, mapReaderT, runReaderT)
 import Control.Monad.State (MonadState)
@@ -25,6 +27,8 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Typeable (TypeRep, Typeable, typeRep)
 import GHC.Stack (withFrozenCallStack)
+import GHC.TypeLits (KnownSymbol, symbolVal)
+import System.IO (hPutStrLn, stderr)
 import Test.HMock.ExpectContext (ExpectContext (..))
 import Test.HMock.Internal.ExpectSet (ExpectSet (..), getSteps)
 import Test.HMock.Internal.Step (SingleRule, Step (..), unwrapExpected)
@@ -41,10 +45,20 @@ import UnliftIO
     readTVar,
     readTVarIO,
   )
+import Data.Kind (Type, Constraint)
 
 #if !MIN_VERSION_base(4, 13, 0)
 import Control.Monad.Fail (MonadFail)
 #endif
+
+-- | The severity for a possible problem.
+data Severity
+  = -- | Fail the test.
+    Error
+  | -- | Print a message, but continue the test.
+    Warning
+  | -- | Don't do anything.
+    Ignore
 
 -- | Full state of a mock.
 data MockState m = MockState
@@ -52,8 +66,12 @@ data MockState m = MockState
     mockDefaults :: TVar [Step m],
     mockAllowUnexpected :: TVar [Step m],
     mockSideEffects :: TVar [Step m],
-    mockCheckAmbiguity :: TVar Bool,
+    mockAmbiguitySeverity :: TVar Severity,
+    mockUnexpectedSeverity :: TVar Severity,
+    mockUninterestingSeverity :: TVar Severity,
+    mockUnmetSeverity :: TVar Severity,
     mockClasses :: TVar (Set TypeRep),
+    mockInterestingMethods :: TVar (Set (TypeRep, String)),
     mockParent :: Maybe (MockState m)
   }
 
@@ -67,10 +85,23 @@ initMockState parent =
     <*> newTVarIO []
     <*> newTVarIO []
     <*> maybeM
-      (newTVarIO False)
-      (newTVarIO <=< readTVarIO . mockCheckAmbiguity)
+      (newTVarIO Ignore)
+      (newTVarIO <=< readTVarIO . mockAmbiguitySeverity)
+      (return parent)
+    <*> maybeM
+      (newTVarIO Error)
+      (newTVarIO <=< readTVarIO . mockUnexpectedSeverity)
+      (return parent)
+    <*> maybeM
+      (newTVarIO Error)
+      (newTVarIO <=< readTVarIO . mockUninterestingSeverity)
+      (return parent)
+    <*> maybeM
+      (newTVarIO Error)
+      (newTVarIO <=< readTVarIO . mockUnmetSeverity)
       (return parent)
     <*> maybe (newTVarIO Set.empty) (return . mockClasses) parent
+    <*> maybe (newTVarIO Set.empty) (return . mockInterestingMethods) parent
     <*> pure parent
 
 -- | Gets a list of all states, starting with the innermost.
@@ -114,13 +145,41 @@ initClassIfNeeded proxy = runInRootState $ do
   where
     t = typeRep proxy
 
+-- | Marks a method as "interesting".  This can have implications for what
+-- happens to calls to that method.
+markInteresting ::
+  forall (cls :: (Type -> Type) -> Constraint) name m proxy1 proxy2.
+  (Typeable cls, KnownSymbol name) =>
+  proxy1 cls ->
+  proxy2 name ->
+  MockSetup m ()
+markInteresting proxyCls proxyName = runInRootState $ do
+  state <- MockSetup ask
+  mockSetupSTM $
+    modifyTVar
+      (mockInterestingMethods state)
+      (Set.insert (typeRep proxyCls, symbolVal proxyName))
+
+-- Determines whether a method is "interesting".
+isInteresting :: 
+  forall (cls :: (Type -> Type) -> Constraint) name m proxy1 proxy2.
+  (Typeable cls, KnownSymbol name) =>
+  proxy1 cls ->
+  proxy2 name ->
+  MockSetup m Bool
+isInteresting proxyCls proxyName = runInRootState $ do
+  state <- MockSetup ask
+  interesting <- mockSetupSTM $ readTVar (mockInterestingMethods state)
+  return ((typeRep proxyCls, symbolVal proxyName) `Set.member` interesting)
+
 -- | Runs class initialization for all uninitialized 'Mockable' classes in the
 -- given 'ExpectSet'.
 initClassesAsNeeded :: MonadIO m => ExpectSet (Step m) -> MockSetup m ()
 initClassesAsNeeded es = runInRootState $
   forM_ (getSteps es) $
-    \(Step (_ :: Located (SingleRule cls name m r))) ->
+    \(Step (_ :: Located (SingleRule cls name m r))) -> do
       initClassIfNeeded (Proxy :: Proxy cls)
+      markInteresting (Proxy :: Proxy cls) (Proxy :: Proxy name)
 
 -- | Monad transformer for running mocks.
 newtype MockT m a where
@@ -224,3 +283,9 @@ instance ExpectContext MockT where
   consecutiveTimes mult es =
     withFrozenCallStack $
       fromMockSetup $ expectThisSet $ unwrapExpected $ consecutiveTimes mult es
+
+reportFault :: MonadIO m => Severity -> String -> MockT m ()
+reportFault severity msg = case severity of
+  Ignore -> return ()
+  Warning -> liftIO $ hPutStrLn stderr msg
+  Error -> error msg

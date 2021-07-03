@@ -17,7 +17,11 @@ module Test.HMock.MockT
     withMockT,
     nestMockT,
     withNestedMockT,
+    Severity (..),
     setAmbiguityCheck,
+    setUninterestingActionCheck,
+    setUnexpectedActionCheck,
+    setUnmetExpectationCheck,
     describeExpectations,
     verifyExpectations,
     MockSetup,
@@ -28,6 +32,7 @@ module Test.HMock.MockT
   )
 where
 
+import Control.Monad (join)
 import Control.Monad.Reader
   ( MonadReader (..),
     runReaderT,
@@ -115,13 +120,52 @@ withNestedMockT nest = do
   where
     withState state = MockT . local (const state) . unMockT
 
--- | Sets whether to check for ambiguous actions.  If 'True', then actions that
--- match expectations in more than one way will fail.  If 'False', then the
--- most recently added action will take precedence.  This defaults to 'False'.
-setAmbiguityCheck :: MonadIO m => Bool -> MockT m ()
-setAmbiguityCheck flag = fromMockSetup $ do
+-- | Sets the severity for ambiguous actions.  An ambiguous action is one that
+-- matches expectations in more than one way.  If this is not set to `Error`,
+-- the most recently added expectation will take precedence.
+--
+-- This defaults to 'Ignore'.
+setAmbiguityCheck :: MonadIO m => Severity -> MockT m ()
+setAmbiguityCheck severity = fromMockSetup $ do
   state <- MockSetup ask
-  mockSetupSTM $ writeTVar (mockCheckAmbiguity state) flag
+  mockSetupSTM $ writeTVar (mockAmbiguitySeverity state) severity
+
+-- | Sets the severity for uninteresting actions.  An uninteresting action is
+-- one for which no expectations or other configuration have been added that
+-- mention the method at all.  If this is not set to `Error`, then uninteresting
+-- methods are treated just like unexpected methods.
+--
+-- Before you weaken this check, consider that the labeling of methods as
+-- "uninteresting" is non-compositional.  A change in one part of your test can
+-- result in a formerly uninteresting action being considered interesting in a
+-- different part of the test.
+--
+-- This defaults to 'Error'.
+setUninterestingActionCheck :: MonadIO m => Severity -> MockT m ()
+setUninterestingActionCheck severity = fromMockSetup $ do
+  state <- MockSetup ask
+  mockSetupSTM $ writeTVar (mockUninterestingSeverity state) severity
+
+-- | Sets the severity for unexpected actions.  An unexpected action is one that
+-- doesn't match any expectations *and* isn't explicitly allowed by
+-- `allowUnexpected`.  If this is not set to `Error`, the action returns its
+-- default response.
+--
+-- This defaults to 'Error'.
+setUnexpectedActionCheck :: MonadIO m => Severity -> MockT m ()
+setUnexpectedActionCheck severity = fromMockSetup $ do
+  state <- MockSetup ask
+  mockSetupSTM $ writeTVar (mockUnexpectedSeverity state) severity
+
+-- | Sets the severity for unmet expectations.  An unmet expectation happens
+-- when an expectation is added, but either the test (or nesting level) ends or
+-- 'verifyExpectations' is used before a matching action takes place.
+--
+-- This defaults to 'Error'.
+setUnmetExpectationCheck :: MonadIO m => Severity -> MockT m ()
+setUnmetExpectationCheck severity = fromMockSetup $ do
+  state <- MockSetup ask
+  mockSetupSTM $ writeTVar (mockUnmetSeverity state) severity
 
 -- | Fetches a 'String' that describes the current set of outstanding
 -- expectations.  This is sometimes useful for debugging test code.  The exact
@@ -144,12 +188,17 @@ describeExpectations = fromMockSetup $ do
 -- in a single test.  Consider splitting large tests into a separate test for
 -- each case.
 verifyExpectations :: MonadIO m => MockT m ()
-verifyExpectations = do
+verifyExpectations = join $ do
   fromMockSetup $ do
-    expectSet <- MockSetup ask >>= mockSetupSTM . readTVar . mockExpectSet
+    states <- MockSetup ask
+    expectSet <- mockSetupSTM $ readTVar $ mockExpectSet states
+    missingSev <- mockSetupSTM $ readTVar $ mockUnmetSeverity states
     case excess expectSet of
-      ExpectNothing -> return ()
-      missing -> error $ "Unmet expectations:\n" ++ formatExpectSet missing
+      ExpectNothing -> return (return ())
+      missing ->
+        return $
+          reportFault missingSev $
+            "Unmet expectations:\n" ++ formatExpectSet missing
 
 -- | Adds a handler for unexpected actions.  Matching calls will not fail, but
 -- will use a default response instead.  The rule passed in must have zero or
@@ -180,6 +229,7 @@ allowUnexpected e = fromMockSetup $ case toRule e of
   _ :=> (_ : _ : _) -> error "allowUnexpected may not have multiple responses."
   m :=> r -> do
     initClassIfNeeded (Proxy :: Proxy cls)
+    markInteresting (Proxy :: Proxy cls) (Proxy :: Proxy name)
     state <- MockSetup ask
     mockSetupSTM $
       modifyTVar'
@@ -199,6 +249,7 @@ byDefault ::
   ctx m ()
 byDefault (m :=> [r]) = fromMockSetup $ do
   initClassIfNeeded (Proxy :: Proxy cls)
+  markInteresting (Proxy :: Proxy cls) (Proxy :: Proxy name)
   state <- MockSetup ask
   mockSetupSTM $
     modifyTVar'
@@ -223,6 +274,7 @@ whenever ::
   ctx m ()
 whenever (m :=> [r]) = fromMockSetup $ do
   initClassIfNeeded (Proxy :: Proxy cls)
+  markInteresting (Proxy :: Proxy cls) (Proxy :: Proxy name)
   state <- MockSetup ask
   mockSetupSTM $
     modifyTVar'
