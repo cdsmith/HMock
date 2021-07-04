@@ -200,18 +200,17 @@ Here are a few tips for making the most of HMock.
 In the most general form, an HMock rule contains a response of the form
 `Action ... -> MockT m r`.  The action contains the parameters, and the `MockT`
 monad can be used to add expectations or do things in the base monad.  You can
-build such a rule from a `Matcher` and a response using `|=>`.
+build such a rule using `|=>`.
 
 However, it's very common that you don't need this flexibility, and just want
 to specify the return value.  In that case, you can use `|->` instead to keep
-things a bit more readable.  Basically, `m |-> r` is just a shorthand for
-`m |=> const (return r)`.
+things a bit more readable.  `m |-> r` is short for `m |=> const (return r)`.
 
 As a mnemonic device for remembering the distinction, you can think of:
 
 * `|->` as ASCII art for `↦`, which associates a function with a result in
   mathematical notation.
-* `|=>` as a relative of Haskell's `>>=`, which binds an operation to a Kleisli
+* `|=>` as a relative of Haskell's `>>=`, and binds an operation to a Kleisli
   arrow.
 
 ### What is the difference between `foo`, `Foo`, and `Foo_`?
@@ -258,7 +257,7 @@ instance (Monad m, Typeable m) => MonadFoo (MockT m) where
 If your class has methods that HMock cannot handle, then you **must** use
 `deriveMockable` instead of `makeMockable`.  These include things like
 associated types, methods that don't run in the monad, or methods with
-polymorphic return values.
+non-`Typeable` polymorphic return values.
 
 ### How do I mock methods with polymorphic arguments?
 
@@ -289,11 +288,10 @@ to match an exact call to `bar`.
 In order to write a more specific predicate, you'd need to add constraints to
 `bar` in the original class.  Understandably, you may be reluctant to modify
 your functional code for the sake of testing, but in this case there is no
-alternative.  If `bar` can be modified to add `Eq b` and `Show b` as
-constraints, then the corresponding `Action` type will get an `Expectable`
-instance, so you can match an exact call.  If `bar` can be modified to add a
+alternative.  Any constraints that you add to the method can be used in
+`Predicate`s in the `Matcher`.  For example, if `bar` can be modified to add a
 `Typeable` constraint, then you can use a predicate like `typed @Int (lt 5)`,
-which will only match calls where `b` is `Int` (and also less than 5).
+which will only match calls where `b` is `Int`, and also less than 5.
 
 ### How do I mock methods with polymorphic return types?
 
@@ -304,11 +302,10 @@ details.
 
 To mock a method with a polymorphic return value bound by the method itself, the
 return value must have a `Typeable` constraint.  If it cannot be inferred, you
-will also need to add a type constraint to the return value you set for the
-method, so that GHC knows the type.  Note that you must add separate
-expectations to the method for each type at which it will be used; unfortunately
-you cannot add one expectation that will match uses with more than one different
-return type.
+will also need to add a type annotation to the return value you set for the
+method, so that GHC knows the type.  If the method will be used at different
+return types, you must add separate expectations to the method for each type at
+which it will be used.
 
 ### Why do I need a Default instance for `mockMethod`?
 
@@ -336,6 +333,21 @@ There are a few ways to do this:
    to `makeMockableBase` or `deriveMockableBase`.  Then write an instance for
    `Mockable` and implement `setupMockable` to do whatever you like.  This setup
    will always run before the first time HMock touches your class from any test.
+
+### How do I stop unexpected actions I don't care about from failing my tests?
+
+* If there is a specific method that you don't care about, use `allowUnexpected`
+  to ignore occurrences of that method.
+* There's also a heuristic you can enable, where so-called "uninteresting"
+  methods are ignored.  An uninteresting method is one for which no expectations
+  are added in the entire test.  To allow these methods to succeed, use
+  `setUninterestingActionCheck Ignore` or `setUninterestingActionCheck Warning`.
+  This is similar to the behavior of gMock, which has a similar notion of
+  uninteresting calls.
+* Finally, the biggest hammer is to use `setUnexpectedActionCheck Warning`.
+  This will allow any unexpected action in your test.  You almost certainly
+  don't want to do this in your final test, but it can be useful during the
+  course of writing the test.
 
 ### What if there are two expectations that match the same method?
 
@@ -417,8 +429,10 @@ If your code uses `MonadUnliftIO` to create threads, you can test it directly
 with HMock.  Otherwise, you can use `withMockT` to manually inject each of your
 threads into the same `MockT` block.  Whichever way you do it, the expectations
 are shared between threads so that an expectation added in one thread can be
-fulfilled by the other.  (If you don't want this, then you can use `runMockT`
-once per thread to run each thread with its own set of expectations.)
+fulfilled by the other.
+
+If you don't want to share expectations, then you can use `runMockT` once per
+thread to run each thread with its own set of expectations.
 
 ### How do I test code with exceptions?
 
@@ -426,21 +440,17 @@ You can use either the `exceptions` or `unliftio` packages to throw and catch
 exceptions from code tested with `MockT`.
 
 The behavior of `HMock` is unspecified if you continue testing after throwing
-asynchronous exceptions to your threads using `throwTo`.  In particular, it's
-likely you'll end up with intermittent hangs in your tests in this case, because
-the asynchronous exceptions interfere with HMock.  This concern doesn't apply to
-synchronous exceptions thrown with `throwIO` or `throwM`.
+asynchronous exceptions to your threads using `throwTo`.  This concern doesn't
+apply to synchronous exceptions thrown with `throwIO` or `throwM`.
 
 ### How do I get better stack traces?
 
 HMock is compatible with stack traces using `HasCallStack`.  These can be very
 convenient for finding out where your code went wrong.  However, the stack
 traces are useless unless you add a `HasCallStack` constraint to the methods of
-your class.
-
-This is unfortunate, but not really avoidable with the current state of Haskell.
-You can add the constraint when troubleshooting, and remove it again when you
-are done.
+your class.  This is unfortunate, but not really avoidable with the current
+state of Haskell.  You can add the constraint when troubleshooting, and remove
+it again when you are done.
 
 ### What should I do about orphan instance warnings?
 
@@ -465,7 +475,7 @@ that follows the same conventions.  Reuse of mock code can be valuable, but it
 must be done carefully and deliberately, keeping in mind that you are
 responsible for preventing conflict between orphan instances.
 
-### Why does GHC complain about "No instance for Expectable ... (Action ...)"?
+### Why is my method "too complex to expect with an `Action`"?
 
 When adding an expectation, you can only use an `Action` if the method is simple
 enough.  Specifically, all arguments must have `Eq` and `Show` instances, and no

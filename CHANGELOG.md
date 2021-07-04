@@ -3,7 +3,11 @@
 ## 0.x.0.0 -- 2021-??-??
 
 * `MockSetup` can now add expectations.
-* Added a lot more configuration for severity of faults.
+* Added a lot more configuration for severity of faults:
+  * `setAmbiguityCheck` can now set to ignore, warning, or error.
+  * Added `setUninterestingActionCheck` for actions with no expectations.
+  * Added `setUnexpectedActionCheck` for actions that don't match expectations.
+  * Added `setUnmetExpectationCheck` for expectations that aren't met.
 
 ## 0.3.0.0 -- 2021-06-30
 
