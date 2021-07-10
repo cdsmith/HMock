@@ -359,7 +359,12 @@ p `andP` q =
     { showPredicate = showPredicate p ++ " and " ++ showPredicate q,
       showNegation = showNegation p ++ " or " ++ showNegation q,
       accept = \x -> accept p x && accept q x,
-      explain = const Nothing
+      explain = \x ->
+        if not (accept p x)
+          then explain p x
+          else if not (accept q x)
+            then explain q x
+            else (\a b -> a ++ " and " ++ b) <$> explain p x <*> explain q x
     }
 
 -- | A 'Predicate' that accepts anything accepted by either of its children.
