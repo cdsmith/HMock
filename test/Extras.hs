@@ -90,7 +90,7 @@ predicateTests = do
           `shouldBe` "< \"foo\" and > \"bar\""
         show (lt "bar" `orP` gt "foo")
           `shouldBe` "< \"bar\" or > \"foo\""
-        show (notP (gt "foo")) `shouldBe` "not > \"foo\""
+        show (notP (gt "foo")) `shouldBe` "≤ \"foo\""
         show (startsWith "fun") `shouldBe` "starts with \"fun\""
         show (endsWith "ing") `shouldBe` "ends with \"ing\""
         show (hasSubstr "i") `shouldBe` "has substring \"i\""
@@ -109,7 +109,7 @@ predicateTests = do
         show (containsCaseInsensitiveRegex "foo" :: Predicate String)
           `shouldBe` "contains /foo/i"
         show (isEmpty :: Predicate [()]) `shouldBe` "empty"
-        show (nonEmpty :: Predicate [()]) `shouldBe` "nonempty"
+        show (nonEmpty :: Predicate [()]) `shouldBe` "non-empty"
         show (sizeIs (gt 5) :: Predicate [()]) `shouldBe` "size > 5"
         show (elemsAre [gt 5, eq 5] :: Predicate [Int]) `shouldBe` "[> 5,5]"
         show (unorderedElemsAre [gt 5, eq 5] :: Predicate [Int])

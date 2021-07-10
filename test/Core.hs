@@ -303,13 +303,13 @@ coreTests = do
         failure1 `shouldThrow` anyException
         failure2 `shouldThrow` anyException
 
-    it "describes argument predicates in failure" $
+    it "describes argument predicates that don't match" $
       example $ do
         let test = runMockT $ do
               expect $ WriteFile_ (eq "foo.txt") (hasSubstr "foo")
               _ <- writeFile "foo.txt" "bar"
               return ()
-        test `shouldThrow` errorWith ("Arg #2: Does not match" `isInfixOf`)
+        test `shouldThrow` errorWith ("Arg #2: does not match" `isInfixOf`)
 
     it "enforces nested sequences" $
       example $ do

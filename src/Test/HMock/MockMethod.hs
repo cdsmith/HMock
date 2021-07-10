@@ -24,16 +24,10 @@ import Data.List (intercalate, sortBy)
 import Data.Maybe (catMaybes, fromMaybe)
 import Data.Proxy (Proxy (Proxy))
 import Data.Typeable (cast)
-import GHC.Stack
-  ( HasCallStack,
-    withFrozenCallStack,
-  )
+import GHC.Stack (HasCallStack, withFrozenCallStack)
 import Test.HMock.ExpectContext (MockableMethod)
 import Test.HMock.Internal.ExpectSet (ExpectSet, liveSteps)
-import Test.HMock.Internal.Rule
-  ( WholeMethodMatcher (..),
-    showWholeMatcher,
-  )
+import Test.HMock.Internal.Rule (WholeMethodMatcher (..), showWholeMatcher)
 import Test.HMock.Internal.State
   ( MockContext (..),
     MockSetup (..),
@@ -227,12 +221,21 @@ partialMatchError severity a partials = do
       ++ fullExpectations
   where
     formatPartial :: ([(Int, Maybe String)], String) -> String
-    formatPartial (mismatches, matcher) =
-      matcher ++ "\n   * "
-        ++ intercalate "\n   * " (map (\(i, mm) -> "Arg #" ++ show i ++ ": " ++ fromMaybe defval mm) mismatches)
+    formatPartial (mismatches, matcher)
+      | null mismatches = matcher ++ "\n   * Failed whole-method matcher"
+      | otherwise =
+        matcher ++ "\n   * "
+          ++ intercalate
+            "\n   * "
+            ( map
+                ( \(i, mm) ->
+                    "Arg #" ++ show i ++ ": " ++ fromMaybe defaultMsg mm
+                )
+                mismatches
+            )
 
-    defval :: String
-    defval = "Does not match"
+    defaultMsg :: String
+    defaultMsg = "does not match"
 
 -- | An error for an 'Action' that matches more than one 'Matcher'.  This only
 -- triggers an error if ambiguity checks are on.

@@ -54,24 +54,16 @@ import Data.Default (Default (..))
 import Data.Either (partitionEithers)
 import qualified Data.Kind
 import Data.List (foldl', (\\))
-import Data.Maybe
+import Data.Maybe (catMaybes)
 import Data.Typeable (Typeable)
 import GHC.Stack (HasCallStack)
-import GHC.TypeLits
-  ( ErrorMessage (Text, (:$$:), (:<>:)),
-    Symbol,
-    TypeError,
-  )
+import GHC.TypeLits (ErrorMessage (Text, (:$$:), (:<>:)), Symbol, TypeError)
 import Language.Haskell.TH hiding (Match, match)
 import Language.Haskell.TH.Syntax (Lift (lift))
 import Test.HMock.Internal.State (MockT)
 import Test.HMock.Internal.TH
 import Test.HMock.MockMethod (mockDefaultlessMethod, mockMethod)
-import Test.HMock.Mockable
-  ( MatchResult (..),
-    Mockable,
-    MockableBase (..),
-  )
+import Test.HMock.Mockable (MatchResult (..), Mockable, MockableBase (..))
 import Test.HMock.Predicates (Predicate (..), eq)
 import Test.HMock.Rule (Expectable (..))
 
@@ -350,8 +342,12 @@ getMethod instTy m tbl (SigD name ty) = do
           [ nameBase name
               ++ " can't be mocked: return value not in the expected monad."
           ]
-    unless (all (isVarTypeable cx) (filter (`elem` tvs) (freeTypeVars retval))) $
-      Left
+    unless
+      ( all
+          (isVarTypeable cx)
+          (filter (`elem` tvs) (freeTypeVars retval))
+      )
+      $ Left
         [ nameBase name
             ++ " can't be mocked: return value not Typeable."
         ]
@@ -614,7 +610,15 @@ matchActionClause options method = do
     )
     [ valD
         (varP mmVar)
-        (normalB [|catMaybes $ zipWith (\i mm -> fmap (\x -> (i, x)) mm) [1 ..] $(listE (mkAccept <$> argVars))|])
+        ( normalB
+            [|
+              catMaybes $
+                zipWith
+                  (\i mm -> fmap (\x -> (i, x)) mm)
+                  [1 ..]
+                  $(listE (mkAccept <$> argVars))
+              |]
+        )
         []
     ]
   where
