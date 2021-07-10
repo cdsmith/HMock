@@ -59,7 +59,7 @@ class (Typeable cls) => MockableBase (cls :: (Type -> Type) -> Constraint) where
 -- the 'Monad' subclass for the first time.  The default implementation does
 -- nothing, but you can derive your own instances that add setup behavior.
 class MockableBase cls => Mockable (cls :: (Type -> Type) -> Constraint) where
-  -- An action to run and set up defaults for this class.  The action will be
+  -- | An action to run and set up defaults for this class.  The action will be
   -- run before HMock touches the class, either to add expectations or to
   -- delegate a method.
   --
@@ -68,14 +68,10 @@ class MockableBase cls => Mockable (cls :: (Type -> Type) -> Constraint) where
   -- 'undefined' if there is none.  You can change this on a per-class or
   -- per-test basis.
   --
-
   -- * To change defaults on a per-class basis, you should use
-
   --   'Test.HMock.MockT.allowUnexpected' and/or 'Test.HMock.MockT.byDefault'
   --   to perform the setup you need here.
-
   -- * To change defaults on a per-test basis, you should use
-
   --   'Test.HMock.MockT.allowUnexpected' and/or 'Test.HMock.MockT.byDefault'
   --   directly from the test.
   setupMockable :: (MonadIO m, Typeable m) => proxy cls -> MockSetup m ()

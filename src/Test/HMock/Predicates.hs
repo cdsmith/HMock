@@ -153,7 +153,11 @@ gt x =
     { showPredicate = "> " ++ show x,
       showNegation = "≤ " ++ show x,
       accept = (> x),
-      explain = const Nothing
+      explain = \y ->
+        Just $
+          if y > x
+            then show y ++ " > " ++ show x
+            else show y ++ " ≤ " ++ show x
     }
 
 -- | A 'Predicate' that accepts anything greater than or equal to the given
@@ -171,7 +175,11 @@ geq x =
     { showPredicate = "≥ " ++ show x,
       showNegation = "< " ++ show x,
       accept = (>= x),
-      explain = const Nothing
+      explain = \y ->
+        Just $
+          if y >= x
+            then show y ++ " ≥ " ++ show x
+            else show y ++ " < " ++ show x
     }
 
 -- | A 'Predicate' that accepts anything less than the given value.
@@ -211,7 +219,7 @@ just p =
     { showPredicate = "Just (" ++ showPredicate p ++ ")",
       showNegation = "not Just (" ++ showPredicate p ++ ")",
       accept = \case Just x -> accept p x; _ -> False,
-      explain = const Nothing
+      explain = \case Just x -> explain p x; _ -> Just "Nothing ≠ Just _"
     }
 
 nothing :: Predicate (Maybe a)
@@ -220,7 +228,7 @@ nothing =
     { showPredicate = "Nothing",
       showNegation = "Just anything",
       accept = isNothing,
-      explain = const Nothing
+      explain = \case Nothing -> Just "is Nothing"; _ -> Just "Just _ ≠ Nothing"
     }
 
 -- | A 'Predicate' that accepts an 'Either' value of @'Left' x@, where @x@
@@ -238,7 +246,7 @@ left p =
     { showPredicate = "Left (" ++ showPredicate p ++ ")",
       showNegation = "not Left (" ++ showPredicate p ++ ")",
       accept = \case Left x -> accept p x; _ -> False,
-      explain = const Nothing
+      explain = \case Left x -> explain p x; _ -> Just "Right _ ≠ Left _"
     }
 
 -- | A 'Predicate' that accepts an 'Either' value of @'Right' x@, where @x@
@@ -256,7 +264,7 @@ right p =
     { showPredicate = "Right (" ++ showPredicate p ++ ")",
       showNegation = "not Right (" ++ showPredicate p ++ ")",
       accept = \case Right x -> accept p x; _ -> False,
-      explain = const Nothing
+      explain = \case Right x -> explain p x; _ -> Just "Left _ ≠ Right _"
     }
 
 -- | A 'Predicate' that accepts pairs whose elements satisfy the corresponding
@@ -469,7 +477,7 @@ caseInsensitive p s =
     { showPredicate = "(case insensitive) " ++ show (p s),
       showNegation = "(case insensitive) " ++ show (notP (p s)),
       accept = accept capP . omap toUpper,
-      explain = const Nothing
+      explain = explain capP . omap toUpper
     }
   where
     capP = p (omap toUpper s)
