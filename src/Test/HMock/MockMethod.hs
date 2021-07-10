@@ -24,10 +24,16 @@ import Data.List (intercalate, sortBy)
 import Data.Maybe (catMaybes, fromMaybe)
 import Data.Proxy (Proxy (Proxy))
 import Data.Typeable (cast)
-import GHC.Stack (HasCallStack, withFrozenCallStack)
+import GHC.Stack
+  ( HasCallStack,
+    withFrozenCallStack,
+  )
 import Test.HMock.ExpectContext (MockableMethod)
 import Test.HMock.Internal.ExpectSet (ExpectSet, liveSteps)
-import Test.HMock.Internal.Rule (WholeMethodMatcher (..), showWholeMatcher)
+import Test.HMock.Internal.Rule
+  ( WholeMethodMatcher (..),
+    showWholeMatcher,
+  )
 import Test.HMock.Internal.State
   ( MockContext (..),
     MockSetup (..),
@@ -36,13 +42,18 @@ import Test.HMock.Internal.State
     Severity (..),
     allStates,
     initClassIfNeeded,
+    isInteresting,
     mockSetupSTM,
-    reportFault, isInteresting
+    reportFault,
   )
 import Test.HMock.Internal.Step (SingleRule ((:->)), Step (Step))
 import Test.HMock.Internal.Util (Located (Loc), withLoc)
 import Test.HMock.MockT (describeExpectations)
-import Test.HMock.Mockable (MatchResult (..), Mockable (..), MockableBase (..))
+import Test.HMock.Mockable
+  ( MatchResult (..),
+    Mockable (..),
+    MockableBase (..),
+  )
 
 matchWholeAction ::
   MockableBase cls =>
@@ -54,7 +65,7 @@ matchWholeAction (m `SuchThat` p) a = case matchAction m a of
   NoMatch n -> NoMatch n
   Match
     | p a -> Match
-    | otherwise -> NoMatch 0
+    | otherwise -> NoMatch []
 
 -- | Implements mock delegation for actions.
 mockMethodImpl ::
@@ -73,7 +84,7 @@ mockMethodImpl surrogate action = join $
         return $
           partitionEithers
             (tryMatch (mockExpectSet state) <$> liveSteps expectSet)
-    let orderedPartial = snd <$> sortBy (compare `on` fst) (catMaybes partial)
+    let orderedPartial = sortBy (compare `on` (length . fst)) (catMaybes partial)
     defaults <- concatMapM (mockSetupSTM . readTVar . mockDefaults) states
     unexpected <-
       concatMapM
@@ -112,7 +123,7 @@ mockMethodImpl surrogate action = join $
       TVar (ExpectSet (Step m)) ->
       (Step m, ExpectSet (Step m)) ->
       Either
-        (Maybe (Int, String))
+        (Maybe ([(Int, Maybe String)], String))
         (String, MockSetup m (), Maybe (MockT m r))
     tryMatch tvar (Step expected, e)
       | Just lrule@(Loc _ (m :-> impl)) <- cast expected =
@@ -203,7 +214,7 @@ partialMatchError ::
   (Mockable cls, MonadIO m) =>
   Severity ->
   Action cls name m r ->
-  [String] ->
+  [([(Int, Maybe String)], String)] ->
   MockT m ()
 partialMatchError severity a partials = do
   fullExpectations <- describeExpectations
@@ -211,9 +222,17 @@ partialMatchError severity a partials = do
     "Wrong arguments: "
       ++ showAction a
       ++ "\n\nClosest matches:\n - "
-      ++ intercalate "\n - " (take 5 partials)
+      ++ intercalate "\n - " (map formatPartial $ take 5 partials)
       ++ "\n\nFull expectations:\n"
       ++ fullExpectations
+  where
+    formatPartial :: ([(Int, Maybe String)], String) -> String
+    formatPartial (mismatches, matcher) =
+      matcher ++ "\n   * "
+        ++ intercalate "\n   * " (map (\(i, mm) -> "Arg #" ++ show i ++ ": " ++ fromMaybe defval mm) mismatches)
+
+    defval :: String
+    defval = "Does not match"
 
 -- | An error for an 'Action' that matches more than one 'Matcher'.  This only
 -- triggers an error if ambiguity checks are on.

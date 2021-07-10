@@ -14,7 +14,12 @@ import Control.Monad (replicateM_)
 import Control.Monad.Reader (MonadReader (local), ask, runReaderT)
 import Control.Monad.State (execStateT, modify)
 import Control.Monad.Trans (liftIO)
-import Data.IORef (modifyIORef, newIORef, readIORef, writeIORef)
+import Data.IORef
+  ( modifyIORef,
+    newIORef,
+    readIORef,
+    writeIORef,
+  )
 import Data.List (isInfixOf, isPrefixOf)
 import Test.HMock
 import Test.Hspec
@@ -297,6 +302,14 @@ coreTests = do
         success4
         failure1 `shouldThrow` anyException
         failure2 `shouldThrow` anyException
+
+    it "describes argument predicates in failure" $
+      example $ do
+        let test = runMockT $ do
+              expect $ WriteFile_ (eq "foo.txt") (hasSubstr "foo")
+              _ <- writeFile "foo.txt" "bar"
+              return ()
+        test `shouldThrow` errorWith ("Arg #2: Does not match" `isInfixOf`)
 
     it "enforces nested sequences" $
       example $ do
@@ -703,12 +716,12 @@ coreTests = do
         failure `shouldThrow` errorWith ("Ambiguous action" `isInfixOf`)
 
     it "ignores unexpected actions when asked" $
-      example. runMockT $ do
+      example . runMockT $ do
         setUnexpectedActionCheck Ignore
         writeFile "foo.txt" "unexpected"
 
     it "ignores uninteresting actions when asked" $
-      example. runMockT $ do
+      example . runMockT $ do
         setUninterestingActionCheck Ignore
         writeFile "foo.txt" "unexpected"
 
@@ -723,7 +736,7 @@ coreTests = do
         test `shouldThrow` anyException
 
     it "ignores unmet expectations when asked" $
-      example. runMockT $ do
+      example . runMockT $ do
         setUnmetExpectationCheck Ignore
         expect $ ReadFile_ anything
 

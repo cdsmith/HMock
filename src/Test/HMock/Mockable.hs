@@ -27,8 +27,8 @@ import {-# SOURCE #-} Test.HMock.Internal.State (MockSetup)
 -- types should already guarantee that the methods match, all that's left is to
 -- match arguments.
 data MatchResult where
-  -- | No match.  The int is the number of arguments that don't match.
-  NoMatch :: Int -> MatchResult
+  -- | No match.  The arg is explanations of mismatch.
+  NoMatch :: [(Int, Maybe String)] -> MatchResult
   -- | Match. Stores a witness to the equality of return types.
   Match :: MatchResult
 
@@ -68,10 +68,14 @@ class MockableBase cls => Mockable (cls :: (Type -> Type) -> Constraint) where
   -- 'undefined' if there is none.  You can change this on a per-class or
   -- per-test basis.
   --
+
   -- * To change defaults on a per-class basis, you should use
+
   --   'Test.HMock.MockT.allowUnexpected' and/or 'Test.HMock.MockT.byDefault'
   --   to perform the setup you need here.
+
   -- * To change defaults on a per-test basis, you should use
+
   --   'Test.HMock.MockT.allowUnexpected' and/or 'Test.HMock.MockT.byDefault'
   --   directly from the test.
   setupMockable :: (MonadIO m, Typeable m) => proxy cls -> MockSetup m ()
