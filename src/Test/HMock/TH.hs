@@ -54,15 +54,24 @@ import Data.Default (Default (..))
 import Data.Either (partitionEithers)
 import qualified Data.Kind
 import Data.List (foldl', (\\))
+import Data.Maybe
 import Data.Typeable (Typeable)
 import GHC.Stack (HasCallStack)
-import GHC.TypeLits (ErrorMessage (Text, (:$$:), (:<>:)), Symbol, TypeError)
+import GHC.TypeLits
+  ( ErrorMessage (Text, (:$$:), (:<>:)),
+    Symbol,
+    TypeError,
+  )
 import Language.Haskell.TH hiding (Match, match)
 import Language.Haskell.TH.Syntax (Lift (lift))
 import Test.HMock.Internal.State (MockT)
 import Test.HMock.Internal.TH
 import Test.HMock.MockMethod (mockDefaultlessMethod, mockMethod)
-import Test.HMock.Mockable (MatchResult (..), Mockable, MockableBase (..))
+import Test.HMock.Mockable
+  ( MatchResult (..),
+    Mockable,
+    MockableBase (..),
+  )
 import Test.HMock.Predicates (Predicate (..), eq)
 import Test.HMock.Rule (Expectable (..))
 
@@ -364,7 +373,6 @@ getMethod instTy m tbl (SigD name ty) = do
   where
     isVarTypeable :: Cxt -> Name -> Bool
     isVarTypeable cx v = AppT (ConT ''Typeable) (VarT v) `elem` cx
-
 getMethod _ _ _ (DataD _ name _ _ _ _) =
   return (Left [nameBase name ++ " must be defined in manual MockT instance."])
 getMethod _ _ _ (NewtypeD _ name _ _ _ _) =
@@ -600,17 +608,22 @@ matchActionClause options method = do
       conP (getActionName options method) (varP . snd <$> argVars)
     ]
     ( guardedB
-        [ (,) <$> normalG [|$(varE mmVar) == 0|] <*> [|Match|],
+        [ (,) <$> normalG [|null $(varE mmVar)|] <*> [|Match|],
           (,) <$> normalG [|otherwise|] <*> [|NoMatch $(varE mmVar)|]
         ]
     )
     [ valD
         (varP mmVar)
-        (normalB [|length (filter not $(listE (mkAccept <$> argVars)))|])
+        (normalB [|catMaybes $ zipWith (\i mm -> fmap (\x -> (i, x)) mm) [1 ..] $(listE (mkAccept <$> argVars))|])
         []
     ]
   where
-    mkAccept (p, a) = [|accept $(return (VarE p)) $(return (VarE a))|]
+    mkAccept (p, a) =
+      [|
+        if accept $(return (VarE p)) $(return (VarE a))
+          then Nothing
+          else Just $ explain $(return (VarE p)) $(return (VarE a))
+        |]
 
 defineExpectableActions :: MockableOptions -> Instance -> Q [Dec]
 defineExpectableActions options inst =

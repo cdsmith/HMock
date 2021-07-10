@@ -66,19 +66,31 @@ import Data.Char (toUpper)
 import Data.Maybe (isJust)
 import Data.MonoTraversable
 import qualified Data.Sequences as Seq
-import Data.Typeable (Proxy (..), Typeable, cast, typeRep)
+import Data.Typeable
+  ( Proxy (..),
+    Typeable,
+    cast,
+    typeRep,
+  )
 import GHC.Exts (IsList (Item, toList))
 import GHC.Stack (HasCallStack, callStack)
 import Language.Haskell.TH (ExpQ, PatQ, pprint)
 import Language.Haskell.TH.Syntax (lift)
 import Test.HMock.Internal.TH (removeModNames)
-import Test.HMock.Internal.Util (choices, isSubsequenceOf, locate, withLoc)
+import Test.HMock.Internal.Util
+  ( choices,
+    isSubsequenceOf,
+    locate,
+    withLoc,
+  )
 import Text.Regex.TDFA hiding (match)
 
 -- $setup
 -- >>> :set -XTemplateHaskell
 -- >>> :set -XTypeApplications
 -- >>> :set -Wno-type-defaults
+
+-- TODO: find a library that does diff on long texts
 
 -- | A predicate, which tests values and either accepts or rejects them.  This
 -- is similar to @a -> 'Bool'@, but also has a 'Show' instance to describe what
@@ -88,7 +100,8 @@ import Text.Regex.TDFA hiding (match)
 -- accept.
 data Predicate a = Predicate
   { showPredicate :: String,
-    accept :: a -> Bool
+    accept :: a -> Bool,
+    explain :: a -> Maybe String
   }
 
 instance Show (Predicate a) where show = showPredicate
@@ -103,7 +116,8 @@ anything :: Predicate a
 anything =
   Predicate
     { showPredicate = "anything",
-      accept = const True
+      accept = const True,
+      explain = const Nothing
     }
 
 -- | A 'Predicate' that accepts only the given value.
@@ -116,7 +130,8 @@ eq :: (Show a, Eq a) => a -> Predicate a
 eq x =
   Predicate
     { showPredicate = show x,
-      accept = (== x)
+      accept = (== x),
+      explain = \y -> Just $ if y == x then show y ++ " = " ++ show x else show y ++ " ≠ " ++ show x
     }
 
 -- | A 'Predicate' that accepts anything but the given value.
@@ -129,7 +144,8 @@ neq :: (Show a, Eq a) => a -> Predicate a
 neq x =
   Predicate
     { showPredicate = "≠ " ++ show x,
-      accept = (/= x)
+      accept = (/= x),
+      explain = explain (eq x)
     }
 
 -- | A 'Predicate' that accepts anything greater than the given value.
@@ -144,7 +160,8 @@ gt :: (Show a, Ord a) => a -> Predicate a
 gt x =
   Predicate
     { showPredicate = "> " ++ show x,
-      accept = (> x)
+      accept = (> x),
+      explain = const Nothing
     }
 
 -- | A 'Predicate' that accepts anything greater than or equal to the given
@@ -160,7 +177,8 @@ geq :: (Show a, Ord a) => a -> Predicate a
 geq x =
   Predicate
     { showPredicate = "≥ " ++ show x,
-      accept = (>= x)
+      accept = (>= x),
+      explain = const Nothing
     }
 
 -- | A 'Predicate' that accepts anything less than the given value.
@@ -175,7 +193,8 @@ lt :: (Show a, Ord a) => a -> Predicate a
 lt x =
   Predicate
     { showPredicate = "< " ++ show x,
-      accept = (< x)
+      accept = (< x),
+      explain = const Nothing
     }
 
 -- | A 'Predicate' that accepts anything less than or equal to the given value.
@@ -190,7 +209,8 @@ leq :: (Show a, Ord a) => a -> Predicate a
 leq x =
   Predicate
     { showPredicate = "≤ " ++ show x,
-      accept = (<= x)
+      accept = (<= x),
+      explain = const Nothing
     }
 
 -- | A 'Predicate' that accepts 'Maybe' values of @'Just' x@, where @x@ matches
@@ -206,7 +226,8 @@ just :: Predicate a -> Predicate (Maybe a)
 just p =
   Predicate
     { showPredicate = "Just (" ++ showPredicate p ++ ")",
-      accept = \case Just x -> accept p x; _ -> False
+      accept = \case Just x -> accept p x; _ -> False,
+      explain = const Nothing
     }
 
 -- | A 'Predicate' that accepts an 'Either' value of @'Left' x@, where @x@
@@ -222,7 +243,8 @@ left :: Predicate a -> Predicate (Either a b)
 left p =
   Predicate
     { showPredicate = "Left (" ++ showPredicate p ++ ")",
-      accept = \case Left x -> accept p x; _ -> False
+      accept = \case Left x -> accept p x; _ -> False,
+      explain = const Nothing
     }
 
 -- | A 'Predicate' that accepts an 'Either' value of @'Right' x@, where @x@
@@ -238,7 +260,8 @@ right :: Predicate b -> Predicate (Either a b)
 right p =
   Predicate
     { showPredicate = "Right (" ++ showPredicate p ++ ")",
-      accept = \case Right x -> accept p x; _ -> False
+      accept = \case Right x -> accept p x; _ -> False,
+      explain = const Nothing
     }
 
 -- | A 'Predicate' that accepts pairs whose elements satisfy the corresponding
@@ -252,7 +275,8 @@ zipP :: Predicate a -> Predicate b -> Predicate (a, b)
 zipP p q =
   Predicate
     { showPredicate = show (p, q),
-      accept = \(x, y) -> accept p x && accept q y
+      accept = \(x, y) -> accept p x && accept q y,
+      explain = const Nothing
     }
 
 -- | A 'Predicate' that accepts 3-tuples whose elements satisfy the
@@ -266,7 +290,8 @@ zip3P :: Predicate a -> Predicate b -> Predicate c -> Predicate (a, b, c)
 zip3P p1 p2 p3 =
   Predicate
     { showPredicate = show (p1, p2, p3),
-      accept = \(x1, x2, x3) -> accept p1 x1 && accept p2 x2 && accept p3 x3
+      accept = \(x1, x2, x3) -> accept p1 x1 && accept p2 x2 && accept p3 x3,
+      explain = const Nothing
     }
 
 -- | A 'Predicate' that accepts 3-tuples whose elements satisfy the
@@ -286,7 +311,8 @@ zip4P p1 p2 p3 p4 =
   Predicate
     { showPredicate = show (p1, p2, p3, p4),
       accept = \(x1, x2, x3, x4) ->
-        accept p1 x1 && accept p2 x2 && accept p3 x3 && accept p4 x4
+        accept p1 x1 && accept p2 x2 && accept p3 x3 && accept p4 x4,
+      explain = const Nothing
     }
 
 -- | A 'Predicate' that accepts 3-tuples whose elements satisfy the
@@ -308,7 +334,8 @@ zip5P p1 p2 p3 p4 p5 =
     { showPredicate = show (p1, p2, p3, p4, p5),
       accept = \(x1, x2, x3, x4, x5) ->
         accept p1 x1 && accept p2 x2 && accept p3 x3 && accept p4 x4
-          && accept p5 x5
+          && accept p5 x5,
+      explain = const Nothing
     }
 
 -- | A 'Predicate' that accepts anything accepted by both of its children.
@@ -323,7 +350,8 @@ andP :: Predicate a -> Predicate a -> Predicate a
 p `andP` q =
   Predicate
     { showPredicate = showPredicate p ++ " and " ++ showPredicate q,
-      accept = \x -> accept p x && accept q x
+      accept = \x -> accept p x && accept q x,
+      explain = const Nothing
     }
 
 -- | A 'Predicate' that accepts anything accepted by either of its children.
@@ -338,7 +366,8 @@ orP :: Predicate a -> Predicate a -> Predicate a
 p `orP` q =
   Predicate
     { showPredicate = showPredicate p ++ " or " ++ showPredicate q,
-      accept = \x -> accept p x || accept q x
+      accept = \x -> accept p x || accept q x,
+      explain = const Nothing
     }
 
 -- | A 'Predicate' that inverts another 'Predicate', accepting whatever its
@@ -352,7 +381,8 @@ notP :: Predicate a -> Predicate a
 notP p =
   Predicate
     { showPredicate = "not " ++ showPredicate p,
-      accept = not . accept p
+      accept = not . accept p,
+      explain = explain p
     }
 
 -- | A 'Predicate' that accepts sequences that start with the given prefix.
@@ -365,7 +395,8 @@ startsWith :: (Show t, Seq.IsSequence t, Eq (Element t)) => t -> Predicate t
 startsWith pfx =
   Predicate
     { showPredicate = "starts with " ++ show pfx,
-      accept = (pfx `Seq.isPrefixOf`)
+      accept = (pfx `Seq.isPrefixOf`),
+      explain = const Nothing
     }
 
 -- | A 'Predicate' that accepts sequences that end with the given suffix.
@@ -378,7 +409,8 @@ endsWith :: (Show t, Seq.IsSequence t, Eq (Element t)) => t -> Predicate t
 endsWith sfx =
   Predicate
     { showPredicate = "ends with " ++ show sfx,
-      accept = (sfx `Seq.isSuffixOf`)
+      accept = (sfx `Seq.isSuffixOf`),
+      explain = const Nothing
     }
 
 -- | A 'Predicate' that accepts sequences that contain the given (consecutive)
@@ -392,7 +424,8 @@ hasSubstr :: (Show t, Seq.IsSequence t, Eq (Element t)) => t -> Predicate t
 hasSubstr s =
   Predicate
     { showPredicate = "has substring " ++ show s,
-      accept = (s `Seq.isInfixOf`)
+      accept = (s `Seq.isInfixOf`),
+      explain = const Nothing
     }
 
 -- | A 'Predicate' that accepts sequences that contain the given (not
@@ -408,7 +441,8 @@ hasSubsequence :: (Show t, Seq.IsSequence t, Eq (Element t)) => t -> Predicate t
 hasSubsequence s =
   Predicate
     { showPredicate = "has subsequence " ++ show s,
-      accept = (s `isSubsequenceOf`)
+      accept = (s `isSubsequenceOf`),
+      explain = const Nothing
     }
 
 -- | Transforms a 'Predicate' on 'String's or string-like types to match without
@@ -433,7 +467,8 @@ caseInsensitive ::
 caseInsensitive p s =
   Predicate
     { showPredicate = "(case insensitive) " ++ show (p s),
-      accept = accept capP . omap toUpper
+      accept = accept capP . omap toUpper,
+      explain = const Nothing
     }
   where
     capP = p (omap toUpper s)
@@ -457,7 +492,8 @@ matchesRegex s =
     { showPredicate = "/" ++ init (tail $ show s) ++ "/",
       accept = \x -> case matchOnceText r x of
         Just (a, _, b) -> a == empty && b == empty
-        Nothing -> False
+        Nothing -> False,
+      explain = const Nothing
     }
   where
     r = makeRegexOpts comp exec s :: Regex
@@ -485,7 +521,8 @@ matchesCaseInsensitiveRegex s =
     { showPredicate = "/" ++ init (tail $ show s) ++ "/i",
       accept = \x -> case matchOnceText r x of
         Just (a, _, b) -> a == empty && b == empty
-        Nothing -> False
+        Nothing -> False,
+      explain = const Nothing
     }
   where
     r = makeRegexOpts comp exec s :: Regex
@@ -515,7 +552,8 @@ containsRegex :: (RegexLike Regex a, Eq a) => String -> Predicate a
 containsRegex s =
   Predicate
     { showPredicate = "contains /" ++ init (tail $ show s) ++ "/",
-      accept = isJust . matchOnce r
+      accept = isJust . matchOnce r,
+      explain = const Nothing
     }
   where
     r = makeRegexOpts comp exec s :: Regex
@@ -541,7 +579,8 @@ containsCaseInsensitiveRegex ::
 containsCaseInsensitiveRegex s =
   Predicate
     { showPredicate = "contains /" ++ init (tail $ show s) ++ "/i",
-      accept = isJust . matchOnce r
+      accept = isJust . matchOnce r,
+      explain = const Nothing
     }
   where
     r = makeRegexOpts comp exec s :: Regex
@@ -567,7 +606,8 @@ isEmpty :: MonoFoldable t => Predicate t
 isEmpty =
   Predicate
     { showPredicate = "empty",
-      accept = onull
+      accept = onull,
+      explain = const Nothing
     }
 
 -- | A 'Predicate' that accepts non-empty data structures.
@@ -584,7 +624,8 @@ nonEmpty :: MonoFoldable t => Predicate t
 nonEmpty =
   Predicate
     { showPredicate = "nonempty",
-      accept = not . onull
+      accept = not . onull,
+      explain = const Nothing
     }
 
 -- | A 'Predicate' that accepts data structures whose number of elements match
@@ -598,7 +639,8 @@ sizeIs :: MonoFoldable t => Predicate Int -> Predicate t
 sizeIs p =
   Predicate
     { showPredicate = "size " ++ showPredicate p,
-      accept = accept p . olength
+      accept = accept p . olength,
+      explain = const Nothing
     }
 
 -- | A 'Predicate' that accepts data structures whose contents each match the
@@ -616,7 +658,8 @@ elemsAre ps =
     { showPredicate = show ps,
       accept = \xs ->
         olength xs == olength ps
-          && and (zipWith accept ps (otoList xs))
+          && and (zipWith accept ps (otoList xs)),
+      explain = const Nothing
     }
 
 -- | A 'Predicate' that accepts data structures whose contents each match the
@@ -635,7 +678,8 @@ unorderedElemsAre ps =
   Predicate
     { showPredicate =
         "(any order) " ++ show ps,
-      accept = matches ps . otoList
+      accept = matches ps . otoList,
+      explain = const Nothing
     }
   where
     matches (q : qs) xs = or [matches qs ys | (y, ys) <- choices xs, accept q y]
@@ -654,7 +698,8 @@ each :: MonoFoldable t => Predicate (Element t) -> Predicate t
 each p =
   Predicate
     { showPredicate = "each (" ++ showPredicate p ++ ")",
-      accept = oall (accept p)
+      accept = oall (accept p),
+      explain = const Nothing
     }
 
 -- | A 'Predicate' that accepts data structures which contain at least one
@@ -670,7 +715,8 @@ contains :: MonoFoldable t => Predicate (Element t) -> Predicate t
 contains p =
   Predicate
     { showPredicate = "contains (" ++ showPredicate p ++ ")",
-      accept = oany (accept p)
+      accept = oany (accept p),
+      explain = const Nothing
     }
 
 -- | A 'Predicate' that accepts data structures which contain an element
@@ -688,7 +734,8 @@ containsAll :: MonoFoldable t => [Predicate (Element t)] -> Predicate t
 containsAll ps =
   Predicate
     { showPredicate = "contains all of " ++ show ps,
-      accept = \xs -> all (flip oany xs . accept) ps
+      accept = \xs -> all (flip oany xs . accept) ps,
+      explain = const Nothing
     }
 
 -- | A 'Predicate' that accepts data structures whose elements all satisfy at
@@ -705,7 +752,8 @@ containsOnly :: MonoFoldable t => [Predicate (Element t)] -> Predicate t
 containsOnly ps =
   Predicate
     { showPredicate = "contains only " ++ show ps,
-      accept = oall (\x -> any (`accept` x) ps)
+      accept = oall (\x -> any (`accept` x) ps),
+      explain = const Nothing
     }
 
 -- | A 'Predicate' that accepts map-like structures which contain a key matching
@@ -719,7 +767,8 @@ containsKey :: (IsList t, Item t ~ (k, v)) => Predicate k -> Predicate t
 containsKey p =
   Predicate
     { showPredicate = "contains key " ++ show p,
-      accept = \m -> any (accept p) (fst <$> toList m)
+      accept = \m -> any (accept p) (fst <$> toList m),
+      explain = const Nothing
     }
 
 -- | A 'Predicate' that accepts map-like structures which contain a key/value
@@ -737,7 +786,8 @@ containsEntry ::
 containsEntry p q =
   Predicate
     { showPredicate = "contains entry " ++ show (p, q),
-      accept = any (\(x, y) -> accept p x && accept q y) . toList
+      accept = any (\(x, y) -> accept p x && accept q y) . toList,
+      explain = const Nothing
     }
 
 -- | A 'Predicate' that accepts map-like structures whose keys are exactly those
@@ -756,7 +806,8 @@ keysAre ::
 keysAre ps =
   Predicate
     { showPredicate = "keys are " ++ show ps,
-      accept = matches ps . map fst . toList
+      accept = matches ps . map fst . toList,
+      explain = const Nothing
     }
   where
     matches (q : qs) xs = or [matches qs ys | (y, ys) <- choices xs, accept q y]
@@ -778,7 +829,8 @@ entriesAre ::
 entriesAre ps =
   Predicate
     { showPredicate = "entries are " ++ show ps,
-      accept = matches ps . toList
+      accept = matches ps . toList,
+      explain = const Nothing
     }
   where
     matches ((p, q) : pqs) xs =
@@ -807,7 +859,8 @@ approxEq :: (RealFloat a, Show a) => a -> Predicate a
 approxEq x =
   Predicate
     { showPredicate = "≈ " ++ show x,
-      accept = \y -> abs (x - y) < diff
+      accept = \y -> abs (x - y) < diff,
+      explain = const Nothing
     }
   where
     diff = encodeFloat 1 (snd (decodeFloat x) + floatDigits x `div` 2)
@@ -824,7 +877,8 @@ finite :: RealFloat a => Predicate a
 finite =
   Predicate
     { showPredicate = "finite",
-      accept = \x -> not (isInfinite x) && not (isNaN x)
+      accept = \x -> not (isInfinite x) && not (isNaN x),
+      explain = const Nothing
     }
 
 -- | A 'Predicate' that accepts infinite numbers of any 'RealFloat' type.
@@ -839,7 +893,8 @@ infinite :: RealFloat a => Predicate a
 infinite =
   Predicate
     { showPredicate = "infinite",
-      accept = isInfinite
+      accept = isInfinite,
+      explain = const Nothing
     }
 
 -- | A 'Predicate' that accepts NaN values of any 'RealFloat' type.
@@ -854,7 +909,8 @@ nAn :: RealFloat a => Predicate a
 nAn =
   Predicate
     { showPredicate = "NaN",
-      accept = isNaN
+      accept = isNaN,
+      explain = const Nothing
     }
 
 -- | A conversion from @a -> 'Bool'@ to 'Predicate'.  This is a fallback that
@@ -869,7 +925,8 @@ is :: HasCallStack => (a -> Bool) -> Predicate a
 is f =
   Predicate
     { showPredicate = withLoc (locate callStack "custom predicate"),
-      accept = f
+      accept = f,
+      explain = const Nothing
     }
 
 -- | A Template Haskell splice that acts like 'is', but receives a quoted
@@ -888,7 +945,8 @@ qIs f =
   [|
     Predicate
       { showPredicate = $(lift . pprint . removeModNames =<< f),
-        accept = $f
+        accept = $f,
+        explain = const Nothing
       }
     |]
 
@@ -908,7 +966,8 @@ with f p =
   Predicate
     { showPredicate =
         withLoc (locate callStack "property") ++ ": " ++ show p,
-      accept = accept p . f
+      accept = accept p . f,
+      explain = const Nothing
     }
 
 -- | A Template Haskell splice that acts like 'is', but receives a quoted typed
@@ -933,7 +992,8 @@ qWith f =
       Predicate
         { showPredicate =
             $(lift . pprint . removeModNames =<< f) ++ ": " ++ show p,
-          accept = accept p . $f
+          accept = accept p . $f,
+          explain = const Nothing
         }
     |]
 
@@ -955,8 +1015,9 @@ qMatch qpat =
     Predicate
       { showPredicate = $(lift . pprint . removeModNames =<< qpat),
         accept = \case
-          $(qpat) -> True
-          _ -> False
+          $qpat -> True
+          _ -> False,
+        explain = const Nothing
       }
     |]
 
@@ -976,5 +1037,6 @@ typed p =
         showPredicate p ++ " :: " ++ show (typeRep (Proxy :: Proxy a)),
       accept = \x -> case cast x of
         Nothing -> False
-        Just y -> accept p y
+        Just y -> accept p y,
+      explain = const Nothing
     }
