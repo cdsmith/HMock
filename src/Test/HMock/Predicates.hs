@@ -635,7 +635,7 @@ containsCaseInsensitiveRegex s =
 
 -- | A 'Predicate' that accepts empty data structures.
 --
--- >>> accept isEmpty []
+-- >>> accept isEmpty ([] :: [Int])
 -- True
 -- >>> accept isEmpty [1, 2, 3]
 -- False
@@ -658,7 +658,7 @@ isEmpty =
 
 -- | A 'Predicate' that accepts non-empty data structures.
 --
--- >>> accept nonEmpty []
+-- >>> accept nonEmpty ([] :: [Int])
 -- False
 -- >>> accept nonEmpty [1, 2, 3]
 -- True
