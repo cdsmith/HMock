@@ -362,9 +362,10 @@ p `andP` q =
       explain = \x ->
         if not (accept p x)
           then explain p x
-          else if not (accept q x)
-            then explain q x
-            else (\a b -> a ++ " and " ++ b) <$> explain p x <*> explain q x
+          else
+            if not (accept q x)
+              then explain q x
+              else (\a b -> a ++ " and " ++ b) <$> explain p x <*> explain q x
     }
 
 -- | A 'Predicate' that accepts anything accepted by either of its children.
@@ -500,17 +501,23 @@ caseInsensitive p s =
 -- False
 -- >>> accept (matchesRegex "x{2,5}y?") "wxxxyz"
 -- False
-matchesRegex :: (RegexLike Regex a, Eq a) => String -> Predicate a
+matchesRegex :: (RegexLike Regex a, Eq a, Show a) => String -> Predicate a
 matchesRegex s =
   Predicate
-    { showPredicate = "/" ++ init (tail $ show s) ++ "/",
-      showNegation = "not /" ++ init (tail $ show s) ++ "/",
-      accept = \x -> case matchOnceText r x of
-        Just (a, _, b) -> a == empty && b == empty
-        Nothing -> False,
-      explain = const Nothing
+    { showPredicate = pat,
+      showNegation = "not " ++ pat,
+      accept = accepts,
+      explain = \x ->
+        Just $
+          if accepts x
+            then show x ++ " matches " ++ pat
+            else show x ++ " doesn't match " ++ pat
     }
   where
+    pat = "/" ++ init (tail $ show s) ++ "/"
+    accepts x = case matchOnceText r x of
+      Just (a, _, b) -> a == empty && b == empty
+      Nothing -> False
     r = makeRegexOpts comp exec s :: Regex
     comp = defaultCompOpt {newSyntax = True, lastStarGreedy = True}
     exec = defaultExecOpt {captureGroups = False}
@@ -530,17 +537,23 @@ matchesRegex s =
 -- >>> accept (matchesCaseInsensitiveRegex "x{2,5}y?") "WXXXYZ"
 -- False
 matchesCaseInsensitiveRegex ::
-  (RegexLike Regex a, Eq a) => String -> Predicate a
+  (RegexLike Regex a, Eq a, Show a) => String -> Predicate a
 matchesCaseInsensitiveRegex s =
   Predicate
-    { showPredicate = "/" ++ init (tail $ show s) ++ "/i",
-      showNegation = "not /" ++ init (tail $ show s) ++ "/i",
-      accept = \x -> case matchOnceText r x of
-        Just (a, _, b) -> a == empty && b == empty
-        Nothing -> False,
-      explain = const Nothing
+    { showPredicate = pat,
+      showNegation = "not " ++ pat,
+      accept = accepts,
+      explain = \x ->
+        Just $
+          if accepts x
+            then show x ++ " matches " ++ pat
+            else show x ++ " doesn't match " ++ pat
     }
   where
+    pat = "/" ++ init (tail $ show s) ++ "/i"
+    accepts x = case matchOnceText r x of
+      Just (a, _, b) -> a == empty && b == empty
+      Nothing -> False
     r = makeRegexOpts comp exec s :: Regex
     comp =
       defaultCompOpt
@@ -564,15 +577,20 @@ matchesCaseInsensitiveRegex s =
 -- False
 -- >>> accept (containsRegex "x{2,5}y?") "wxxxyz"
 -- True
-containsRegex :: (RegexLike Regex a, Eq a) => String -> Predicate a
+containsRegex :: (RegexLike Regex a, Eq a, Show a) => String -> Predicate a
 containsRegex s =
   Predicate
-    { showPredicate = "contains /" ++ init (tail $ show s) ++ "/",
-      showNegation = "doesn't contain /" ++ init (tail $ show s) ++ "/",
+    { showPredicate = "contains " ++ pat,
+      showNegation = "doesn't contain " ++ pat,
       accept = isJust . matchOnce r,
-      explain = const Nothing
+      explain = \x ->
+        Just $
+          if isJust (matchOnce r x)
+            then show x ++ " matches " ++ pat
+            else show x ++ " doesn't match " ++ pat
     }
   where
+    pat = "/" ++ init (tail $ show s) ++ "/"
     r = makeRegexOpts comp exec s :: Regex
     comp = defaultCompOpt {newSyntax = True, lastStarGreedy = True}
     exec = defaultExecOpt {captureGroups = False}
@@ -592,15 +610,20 @@ containsRegex s =
 -- >>> accept (containsCaseInsensitiveRegex "x{2,5}y?") "WXXXYZ"
 -- True
 containsCaseInsensitiveRegex ::
-  (RegexLike Regex a, Eq a) => String -> Predicate a
+  (RegexLike Regex a, Eq a, Show a) => String -> Predicate a
 containsCaseInsensitiveRegex s =
   Predicate
-    { showPredicate = "contains /" ++ init (tail $ show s) ++ "/i",
-      showNegation = "doesn't contain /" ++ init (tail $ show s) ++ "/i",
+    { showPredicate = "contains " ++ pat,
+      showNegation = "doesn't contain " ++ pat,
       accept = isJust . matchOnce r,
-      explain = const Nothing
+      explain = \y ->
+        Just $
+          if isJust (matchOnce r y)
+            then show y ++ " matches " ++ pat
+            else show y ++ " doesn't match " ++ pat
     }
   where
+    pat = "/" ++ init (tail $ show s) ++ "/i"
     r = makeRegexOpts comp exec s :: Regex
     comp =
       defaultCompOpt
@@ -620,13 +643,17 @@ containsCaseInsensitiveRegex s =
 -- True
 -- >>> accept isEmpty "gas tank"
 -- False
-isEmpty :: MonoFoldable t => Predicate t
+isEmpty :: (MonoFoldable t, Show t) => Predicate t
 isEmpty =
   Predicate
     { showPredicate = "empty",
       showNegation = "non-empty",
       accept = onull,
-      explain = const Nothing
+      explain = \y ->
+        Just $
+          if onull y
+            then show y ++ " is empty"
+            else show y ++ " is non-empty"
     }
 
 -- | A 'Predicate' that accepts non-empty data structures.
@@ -639,7 +666,7 @@ isEmpty =
 -- False
 -- >>> accept nonEmpty "gas tank"
 -- True
-nonEmpty :: MonoFoldable t => Predicate t
+nonEmpty :: (MonoFoldable t, Show t) => Predicate t
 nonEmpty = notP isEmpty
 
 -- | A 'Predicate' that accepts data structures whose number of elements match
@@ -649,13 +676,16 @@ nonEmpty = notP isEmpty
 -- False
 -- >>> accept (sizeIs (lt 3)) ['a' .. 'b']
 -- True
-sizeIs :: MonoFoldable t => Predicate Int -> Predicate t
+sizeIs :: (MonoFoldable t, Show t) => Predicate Int -> Predicate t
 sizeIs p =
   Predicate
     { showPredicate = "size " ++ showPredicate p,
       showNegation = "size " ++ showNegation p,
       accept = accept p . olength,
-      explain = const Nothing
+      explain = \y ->
+        Just $
+          show y ++ " has length " ++ show (olength y) ++ ", which is "
+            ++ if accept p (olength y) then showPredicate p else showNegation p
     }
 
 -- | A 'Predicate' that accepts data structures whose contents each match the
