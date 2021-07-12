@@ -64,6 +64,7 @@ module Test.HMock.Predicates
 where
 
 import Data.Char (toUpper)
+import Data.List (intercalate)
 import Data.Maybe (isJust, isNothing)
 import Data.MonoTraversable
 import qualified Data.Sequences as Seq
@@ -108,7 +109,7 @@ anything =
     { showPredicate = "anything",
       showNegation = "nothing",
       accept = const True,
-      explain = const Nothing
+      explain = const (Just "always matches")
     }
 
 -- | A 'Predicate' that accepts only the given value.
@@ -275,12 +276,20 @@ right p =
 -- >>> accept (zipP (eq "foo") (eq "bar")) ("bar", "foo")
 -- False
 zipP :: Predicate a -> Predicate b -> Predicate (a, b)
-zipP p q =
+zipP p1 p2 =
   Predicate
-    { showPredicate = show (p, q),
-      showNegation = "not " ++ show (p, q),
-      accept = \(x, y) -> accept p x && accept q y,
-      explain = const Nothing
+    { showPredicate = show (p1, p2),
+      showNegation = "not " ++ show (p1, p2),
+      accept = \(x1, x2) -> accept p1 x1 && accept p2 x2,
+      explain = \(x1, x2) ->
+        let results =
+              [ (accept p1 x1, explain p1 x1),
+                (accept p2 x2, explain p2 x2)
+              ]
+            significant
+              | all fst results = results
+              | otherwise = filter (not . fst) results
+         in intercalate " and " <$> mapM snd significant
     }
 
 -- | A 'Predicate' that accepts 3-tuples whose elements satisfy the
@@ -296,7 +305,16 @@ zip3P p1 p2 p3 =
     { showPredicate = show (p1, p2, p3),
       showNegation = "not " ++ show (p1, p2, p3),
       accept = \(x1, x2, x3) -> accept p1 x1 && accept p2 x2 && accept p3 x3,
-      explain = const Nothing
+      explain = \(x1, x2, x3) ->
+        let results =
+              [ (accept p1 x1, explain p1 x1),
+                (accept p2 x2, explain p2 x2),
+                (accept p3 x3, explain p3 x3)
+              ]
+            significant
+              | all fst results = results
+              | otherwise = filter (not . fst) results
+         in intercalate " and " <$> mapM snd significant
     }
 
 -- | A 'Predicate' that accepts 3-tuples whose elements satisfy the
@@ -318,7 +336,17 @@ zip4P p1 p2 p3 p4 =
       showNegation = "not " ++ show (p1, p2, p3, p4),
       accept = \(x1, x2, x3, x4) ->
         accept p1 x1 && accept p2 x2 && accept p3 x3 && accept p4 x4,
-      explain = const Nothing
+      explain = \(x1, x2, x3, x4) ->
+        let results =
+              [ (accept p1 x1, explain p1 x1),
+                (accept p2 x2, explain p2 x2),
+                (accept p3 x3, explain p3 x3),
+                (accept p4 x4, explain p4 x4)
+              ]
+            significant
+              | all fst results = results
+              | otherwise = filter (not . fst) results
+         in intercalate " and " <$> mapM snd significant
     }
 
 -- | A 'Predicate' that accepts 3-tuples whose elements satisfy the
@@ -342,7 +370,18 @@ zip5P p1 p2 p3 p4 p5 =
       accept = \(x1, x2, x3, x4, x5) ->
         accept p1 x1 && accept p2 x2 && accept p3 x3 && accept p4 x4
           && accept p5 x5,
-      explain = const Nothing
+      explain = \(x1, x2, x3, x4, x5) ->
+        let results =
+              [ (accept p1 x1, explain p1 x1),
+                (accept p2 x2, explain p2 x2),
+                (accept p3 x3, explain p3 x3),
+                (accept p4 x4, explain p4 x4),
+                (accept p5 x5, explain p5 x5)
+              ]
+            significant
+              | all fst results = results
+              | otherwise = filter (not . fst) results
+         in intercalate " and " <$> mapM snd significant
     }
 
 -- | A 'Predicate' that accepts anything accepted by both of its children.
