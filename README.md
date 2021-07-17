@@ -191,6 +191,69 @@ You can also set up default behaviors for your mocks by implementing the
 `Mockable` class manually, bundling sensible defaults with your derived mock
 implementations for all users.
 
+## Configurable Severity
+
+HMock allows you to control the severity of several situations that can arise
+during testing.  You can modify each of these situations to be `Ignore`d,
+trigger a `Warning` but continue the test, or throw an `Error`, by passing the
+severity to a `MockT` action as explained below.
+
+These conditions whose severity you can adjust are:
+
+1. **Ambiguous expectations**
+
+   Ambiguious expectations happen when one action matches more than one
+   expectation.  By default, this is `Ignore`d, and the most recently added
+   expectation is chosen.
+
+   Svenningsson, et al. argue that ambiguity resolution rules are non-composable
+   and that enforcing ambiguity is therefore necessary for composability.  If
+   you agree, you may want to set a higher severity for ambiguous expectations.
+   To do so, use `setAmbiguityCheck`.
+
+   Note that unlike Svenningsson, et al., HMock verifies ambiguity dynamically
+   at runtime, so failures only occur when an actual action matches more than
+   one expectation., and not when it's merely possible for this to occur.
+
+2. **Uninteresting actions**
+
+   An uninteresting action occurs when a method is called, but no expectations
+   have been added for that method at all.  By default, this is an `Error`.
+   However, some other mock frameworks (for example, gMock) allow you to ignore
+   uninteresting actions.  To do so in HMock, use `setUninterestingActionCheck`
+   to change this severity.
+
+   Ignoring uninteresting methods is non-composable.  Adding an expectation for
+   a method in one part of your test will cause the method to be considered
+   "interesting", which can cause an unrelated part of the test to fail.
+
+   Note that `setUninterestingActionCheck Error` (the default) actually treats
+   uninteresting methods as unexpected.  If you set a weaker severity for
+   unexpected actions, uninteresting actions will also follow that severity.
+
+3. **Unexpected actions**
+
+   An unexpected action occurs when an action is called that has no
+   corresponding expectation.  By default, this is an `Error`.  Note that unless
+   uninteresting actions are also set to `Error`, an action is only unexpected
+   if there is at least one expectation added for the method.  To change the
+   severity of unexpected actions, use `setUnexpectedActionCheck`.
+
+   This is generally intended as a temporary technique for collecting
+   information about which expectations are needed for a test.  You should be
+   careful about leaving it this way.  Prefer `allowUnexpected` if you just want
+   to ignore some specific unexpected actions.
+
+4. **Unmatched expectations**
+
+   An unmatched expectation is an expectation that is not matched by any action
+   that occurs during the test.  By default, this is an `Error`.  You can change
+   this severity by calling `setUnmetExpectationCheck`.
+
+   This is generally intended as a temporary technique for collecting
+   information about which expectations are needed for a test.  You should be
+   careful about leaving it this way.
+
 ## FAQ
 
 Here are a few tips for making the most of HMock.
