@@ -191,7 +191,7 @@ You can also set up default behaviors for your mocks by implementing the
 `Mockable` class manually, bundling sensible defaults with your derived mock
 implementations for all users.
 
-## Configurable Severity
+### Configurable Severity
 
 HMock allows you to control the severity of several situations that can arise
 during testing.  You can modify each of these situations to be `Ignore`d,
