@@ -201,9 +201,10 @@ resolveInstance cls t = do
 -- | Simplifies a context with complex types (requiring FlexibleContexts) to try
 -- to obtain one with all constraints applied to variables.
 simplifyContext :: Cxt -> Q (Maybe Cxt)
-simplifyContext (AppT (ConT cls) t : preds) = resolveInstance cls t >>= \case
-  Just cxt' -> fmap (cxt' ++) <$> simplifyContext preds
-  Nothing -> return Nothing
+simplifyContext (AppT (ConT cls) t : preds) =
+  resolveInstance cls t >>= \case
+    Just cxt' -> fmap (cxt' ++) <$> simplifyContext preds
+    Nothing -> return Nothing
 simplifyContext (otherPred : preds) = fmap (otherPred :) <$> simplifyContext preds
 simplifyContext [] = return (Just [])
 
