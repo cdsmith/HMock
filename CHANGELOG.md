@@ -33,7 +33,7 @@
   * This is an optional feature, which is off by default.
   * To make it easier to avoid ambiguity, there is now an `allowUnexpected` that
   * causes unexpected calls to be ignored and optionally provide a response, but
-    doesn't comflict with expectations that override it.  Ambiuguous uses of
+    doesn't conflict with expectations that override it.  Ambiuguous uses of
     `expectAny` can often be replaced with `allowUnexpected`.
 * Restricted mockable setup to defaults to avoid race conditions.
   * Setup handlers now run in the `MockSetup` monad.
