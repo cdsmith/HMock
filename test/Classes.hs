@@ -54,7 +54,6 @@ simpleTests = describe "MonadSimple" $ do
     example . runMockT $ do
       allowUnexpected $ QReifyInstances_ anything anything |-> []
       $(onReify [|expectAny|] ''MonadSimple)
-      expectAny $ QIsExtEnabled ScopedTypeVariables |-> False
       expectAny $ QIsExtEnabled RankNTypes |-> False
 
       _ <- runQ (makeMockable [t|MonadSimple|])
@@ -113,6 +112,20 @@ simpleTests = describe "MonadSimple" $ do
               QReport_
                 anything
                 (hasSubstr "Please enable MultiParamTypeClasses")
+
+            _ <- runQ (makeMockable [t|MonadSimple|])
+            return ()
+
+      missingDataKinds `shouldThrow` anyException
+
+  it "fails when ScopedTypeVariables is disabled" $
+    example $ do
+      let missingDataKinds = runMockT $ do
+            expectAny $ QIsExtEnabled ScopedTypeVariables |-> False
+            expect $
+              QReport_
+                anything
+                (hasSubstr "Please enable ScopedTypeVariables")
 
             _ <- runQ (makeMockable [t|MonadSimple|])
             return ()
@@ -411,19 +424,6 @@ polyArgTests = describe "MonadPolyArg" $ do
         $(onReify [|expectAny|] ''MonadPolyArg)
         runQ (makeMockable [t|MonadPolyArg|])
       evaluate (rnf decs)
-
-  it "fails without ScopedTypeVariables" $
-    example $ do
-      let missingScopedTypeVariables = runMockT $ do
-            $(onReify [|expectAny|] ''MonadPolyArg)
-            expectAny $ QIsExtEnabled ScopedTypeVariables |-> False
-            expect $
-              QReport_ anything (hasSubstr "Please enable ScopedTypeVariables")
-
-            _ <- runQ (makeMockable [t|MonadPolyArg|])
-            return ()
-
-      missingScopedTypeVariables `shouldThrow` anyException
 
   it "fails without RankNTypes" $
     example $ do

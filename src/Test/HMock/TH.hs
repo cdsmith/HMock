@@ -29,7 +29,8 @@ import Data.Either (partitionEithers)
 import qualified Data.Kind
 import Data.List (foldl', (\\))
 import Data.Maybe (catMaybes, isNothing)
-import Data.Typeable (Typeable)
+import Data.Proxy (Proxy)
+import Data.Typeable (Typeable, typeRep)
 import GHC.Stack (HasCallStack)
 import GHC.TypeLits (ErrorMessage (Text, (:$$:), (:<>:)), Symbol, TypeError)
 import Language.Haskell.TH hiding (Match, match)
@@ -276,6 +277,7 @@ makeMockableImpl options qtype = do
   checkExt FlexibleInstances
   checkExt GADTs
   checkExt MultiParamTypeClasses
+  checkExt ScopedTypeVariables
   checkExt TypeFamilies
 
   ty <- qtype
@@ -430,15 +432,37 @@ showActionClause options method = do
     )
     []
   where
+    isLocalPoly ty =
+      not . null . fst $
+        relevantContext ty (methodTyVars method, methodCxt method)
+
     canShow ty
-      | not (null (freeTypeVars ty)) = return False
-      | otherwise = isInstance ''Show [ty]
-    argPattern ty v = canShow ty >>= bool wildP (varP v)
-    showArg ty var =
-      canShow ty
-        >>= bool
-          (lift ("(_ :: " ++ pprint (removeModNames ty) ++ ")"))
-          [|showsPrec 11 $(varE var) ""|]
+      | hasPolyType ty = return False
+      | isLocalPoly ty = (`elem` methodCxt method) <$> [t|Show $(pure ty)|]
+      | null (freeTypeVars ty) = isInstance ''Show [ty]
+      | otherwise = return False
+
+    canType ty
+      | hasPolyType ty = return False
+      | isLocalPoly ty =
+        (`elem` methodCxt method)
+          <$> [t|Typeable $(pure ty)|]
+      | otherwise = return (null (freeTypeVars ty))
+
+    argPattern ty v = canShow ty >>= flip sigP (pure ty) . bool wildP (varP v)
+
+    showArg ty var = do
+      showable <- canShow ty
+      typeable <- canType ty
+      case (showable, typeable) of
+        (True, _) -> [|showsPrec 11 $(varE var) ""|]
+        (_, True) ->
+          [|
+            "(_ :: "
+              ++ show (typeRep (undefined :: Proxy $(return ty)))
+              ++ ")"
+            |]
+        _ -> lift ("(_  :: " ++ pprint (removeModNames ty) ++ ")")
 
 defineShowMatcher :: MakeMockableOptions -> [Method] -> Q Dec
 defineShowMatcher options methods = do
@@ -472,7 +496,7 @@ showMatcherClauses options method = do
   where
     actionArg t ty
       | isKnownType method ty = wildP
-      | otherwise = checkExt ScopedTypeVariables >> sigP wildP (varT t)
+      | otherwise = sigP wildP (varT t)
 
     matcherArg p ty
       | isKnownType method ty = varP p
