@@ -26,7 +26,7 @@ import Data.Proxy (Proxy (Proxy))
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Typeable (TypeRep, Typeable, typeRep)
-import GHC.Stack (withFrozenCallStack)
+import GHC.Stack (withFrozenCallStack, HasCallStack)
 import GHC.TypeLits (KnownSymbol, symbolVal)
 import System.IO (hPutStrLn, stderr)
 import Test.HMock.ExpectContext (ExpectContext (..))
@@ -284,7 +284,7 @@ instance ExpectContext MockT where
     withFrozenCallStack $
       fromMockSetup $ expectThisSet $ unwrapExpected $ consecutiveTimes mult es
 
-reportFault :: MonadIO m => Severity -> String -> MockT m ()
+reportFault :: (HasCallStack, MonadIO m) => Severity -> String -> MockT m ()
 reportFault severity msg = case severity of
   Ignore -> return ()
   Warning -> liftIO $ hPutStrLn stderr msg

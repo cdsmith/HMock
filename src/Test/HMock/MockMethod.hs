@@ -205,7 +205,7 @@ noMatchError severity a = do
 -- | An error for an action that doesn't match the argument predicates for any
 -- of the method's expectations.
 partialMatchError ::
-  (Mockable cls, MonadIO m) =>
+  (HasCallStack, Mockable cls, MonadIO m) =>
   Severity ->
   Action cls name m r ->
   [([(Int, Maybe String)], String)] ->
@@ -240,7 +240,7 @@ partialMatchError severity a partials = do
 -- | An error for an 'Action' that matches more than one 'Matcher'.  This only
 -- triggers an error if ambiguity checks are on.
 ambiguityError ::
-  (Mockable cls, MonadIO m) =>
+  (HasCallStack, Mockable cls, MonadIO m) =>
   Severity ->
   Action cls name m r ->
   [String] ->
