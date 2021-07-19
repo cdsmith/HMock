@@ -38,24 +38,26 @@ deriveRecursive (Just AnyclassStrategy) ''NFData ''Dec
 class MonadSimple m where
   simple :: String -> m ()
 
-makeMockable ''MonadSimple
+makeMockable [t|MonadSimple|]
 
 simpleTests :: SpecWith ()
 simpleTests = describe "MonadSimple" $ do
   it "generates mock impl" $
     example $ do
       decs <- runMockT $ do
+        allowUnexpected $ QReifyInstances_ anything anything |-> []
         $(onReify [|expectAny|] ''MonadSimple)
-        runQ (makeMockable ''MonadSimple)
+        runQ (makeMockable [t|MonadSimple|])
       evaluate (rnf decs)
 
   it "doesn't require unnecessary extensions for simple cases" $
     example . runMockT $ do
+      allowUnexpected $ QReifyInstances_ anything anything |-> []
       $(onReify [|expectAny|] ''MonadSimple)
       expectAny $ QIsExtEnabled ScopedTypeVariables |-> False
       expectAny $ QIsExtEnabled RankNTypes |-> False
 
-      _ <- runQ (makeMockable ''MonadSimple)
+      _ <- runQ (makeMockable [t|MonadSimple|])
       return ()
 
   it "fails when GADTs is disabled" $
@@ -64,10 +66,10 @@ simpleTests = describe "MonadSimple" $ do
             expectAny $ QIsExtEnabled GADTs |-> False
             expect $ QReport_ anything (hasSubstr "Please enable GADTs")
 
-            _ <- runQ (makeMockable ''MonadSimple)
+            _ <- runQ (makeMockable [t|MonadSimple|])
             return ()
 
-      missingGADTs `shouldThrow` anyIOException
+      missingGADTs `shouldThrow` anyException
 
   it "fails when TypeFamilies is disabled" $
     example $ do
@@ -75,10 +77,10 @@ simpleTests = describe "MonadSimple" $ do
             expectAny $ QIsExtEnabled TypeFamilies |-> False
             expect $ QReport_ anything (hasSubstr "Please enable TypeFamilies")
 
-            _ <- runQ (makeMockable ''MonadSimple)
+            _ <- runQ (makeMockable [t|MonadSimple|])
             return ()
 
-      missingTypeFamilies `shouldThrow` anyIOException
+      missingTypeFamilies `shouldThrow` anyException
 
   it "fails when DataKinds is disabled" $
     example $ do
@@ -86,10 +88,10 @@ simpleTests = describe "MonadSimple" $ do
             expectAny $ QIsExtEnabled DataKinds |-> False
             expect $ QReport_ anything (hasSubstr "Please enable DataKinds")
 
-            _ <- runQ (makeMockable ''MonadSimple)
+            _ <- runQ (makeMockable [t|MonadSimple|])
             return ()
 
-      missingDataKinds `shouldThrow` anyIOException
+      missingDataKinds `shouldThrow` anyException
 
   it "fails when FlexibleInstances is disabled" $
     example $ do
@@ -98,10 +100,10 @@ simpleTests = describe "MonadSimple" $ do
             expect $
               QReport_ anything (hasSubstr "Please enable FlexibleInstances")
 
-            _ <- runQ (makeMockable ''MonadSimple)
+            _ <- runQ (makeMockable [t|MonadSimple|])
             return ()
 
-      missingDataKinds `shouldThrow` anyIOException
+      missingDataKinds `shouldThrow` anyException
 
   it "fails when MultiParamTypeClasses is disabled" $
     example $ do
@@ -112,10 +114,10 @@ simpleTests = describe "MonadSimple" $ do
                 anything
                 (hasSubstr "Please enable MultiParamTypeClasses")
 
-            _ <- runQ (makeMockable ''MonadSimple)
+            _ <- runQ (makeMockable [t|MonadSimple|])
             return ()
 
-      missingDataKinds `shouldThrow` anyIOException
+      missingDataKinds `shouldThrow` anyException
 
   it "fails when too many params are given" $
     example $ do
@@ -124,10 +126,10 @@ simpleTests = describe "MonadSimple" $ do
             expect $
               QReport_ anything (hasSubstr "is applied to too many arguments")
 
-            _ <- runQ (makeMockableType [t|MonadSimple IO|])
+            _ <- runQ (makeMockable [t|MonadSimple IO|])
             return ()
 
-      tooManyParams `shouldThrow` anyIOException
+      tooManyParams `shouldThrow` anyException
 
   it "is mockable" $
     example $ do
@@ -145,15 +147,17 @@ simpleTests = describe "MonadSimple" $ do
 class MonadSuffix m where
   suffix :: String -> m ()
 
-makeMockableWithOptions def {mockSuffix = "Blah"} ''MonadSuffix
+makeMockableWithOptions [t|MonadSuffix|] def {mockSuffix = "Blah"}
 
 suffixTests :: SpecWith ()
 suffixTests = describe "MonadSuffix" $ do
   it "generates mock impl" $
     example $ do
       decs <- runMockT $ do
+        allowUnexpected $ QReifyInstances_ anything anything |-> []
         $(onReify [|expectAny|] ''MonadSuffix)
-        runQ (makeMockableWithOptions def {mockSuffix = "Blah"} ''MonadSuffix)
+        runQ $
+          makeMockableWithOptions [t|MonadSuffix|] def {mockSuffix = "Blah"}
       evaluate (rnf decs)
 
   it "is mockable" $
@@ -172,7 +176,7 @@ suffixTests = describe "MonadSuffix" $ do
 class MonadWithSetup m where
   withSetup :: m String
 
-makeMockableBase ''MonadWithSetup
+makeMockableWithOptions [t|MonadWithSetup|] def {mockEmptySetup = False}
 
 instance Mockable MonadWithSetup where
   setupMockable _ = do
@@ -183,8 +187,12 @@ setupTests = describe "MonadWithSetup" $ do
   it "generates mock impl" $ do
     example $ do
       decs <- runMockT $ do
+        allowUnexpected $ QReifyInstances_ anything anything |-> []
         $(onReify [|expectAny|] ''MonadWithSetup)
-        runQ (makeMockableBase ''MonadWithSetup)
+        runQ $
+          makeMockableWithOptions
+            [t|MonadWithSetup|]
+            def {mockEmptySetup = False}
       evaluate (rnf decs)
 
   it "returns the customized default value" $ do
@@ -217,13 +225,14 @@ instance SuperClass m
 class (SuperClass m, Monad m, Typeable m) => MonadSuper m where
   withSuper :: m ()
 
-makeMockable ''MonadSuper
+makeMockable [t|MonadSuper|]
 
 superTests :: SpecWith ()
 superTests = describe "MonadSuper" $ do
   it "generated mock impl" $
     example $ do
       decs <- runMockT $ do
+        allowUnexpected $ QReifyInstances_ anything anything |-> []
         $(onReify [|expectAny|] ''MonadSuper)
         expectAny $
           QReifyInstances_
@@ -234,7 +243,7 @@ superTests = describe "MonadSuper" $ do
                      [AppT (ConT ''MockT) (VarT (mkName "v"))]
                  )
 
-        runQ (makeMockable ''MonadSuper)
+        runQ (makeMockable [t|MonadSuper|])
       evaluate (rnf decs)
 
   it "is mockable" $
@@ -252,15 +261,16 @@ class MonadMPTC a m where
   mptc :: a -> m ()
   mptcList :: [a] -> m ()
 
-makeMockable ''MonadMPTC
+makeMockable [t|MonadMPTC|]
 
 mptcTests :: SpecWith ()
 mptcTests = describe "MonadMPTC" $ do
   it "generates mock impl" $
     example $ do
       decs <- runMockT $ do
+        allowUnexpected $ QReifyInstances_ anything anything |-> []
         $(onReify [|expectAny|] ''MonadMPTC)
-        runQ (makeMockable ''MonadMPTC)
+        runQ (makeMockable [t|MonadMPTC|])
       evaluate (rnf decs)
 
   it "is mockable" $
@@ -279,15 +289,16 @@ mptcTests = describe "MonadMPTC" $ do
 class MonadFDSpecialized a m | m -> a where
   fdSpecialized :: a -> m a
 
-makeMockableType [t|MonadFDSpecialized String|]
+makeMockable [t|MonadFDSpecialized String|]
 
 fdSpecializedTests :: SpecWith ()
 fdSpecializedTests = describe "MonadFDSpecialized" $ do
   it "generates mock impl" $
     example $ do
       decs <- runMockT $ do
+        allowUnexpected $ QReifyInstances_ anything anything |-> []
         $(onReify [|expectAny|] ''MonadFDSpecialized)
-        runQ (makeMockableType [t|MonadFDSpecialized String|])
+        runQ (makeMockable [t|MonadFDSpecialized String|])
       evaluate (rnf decs)
 
   it "is mockable" $
@@ -307,7 +318,7 @@ fdSpecializedTests = describe "MonadFDSpecialized" $ do
 class MonadFDGeneral a m | m -> a where
   fdGeneral :: a -> m a
 
-deriveMockable ''MonadFDGeneral
+makeMockableWithOptions [t|MonadFDGeneral|] def {mockDeriveForMockT = False}
 
 newtype MyBase m a = MyBase {runMyBase :: m a}
   deriving newtype (Functor, Applicative, Monad, MonadIO)
@@ -323,8 +334,12 @@ fdGeneralTests = describe "MonadFDGeneral" $ do
   it "generates mock impl" $
     example $ do
       decs <- runMockT $ do
+        allowUnexpected $ QReifyInstances_ anything anything |-> []
         $(onReify [|expectAny|] ''MonadFDGeneral)
-        runQ (deriveMockable ''MonadFDGeneral)
+        runQ $
+          makeMockableWithOptions
+            [t|MonadFDGeneral|]
+            def {mockDeriveForMockT = False}
       evaluate (rnf decs)
 
   it "is mockable" $
@@ -344,30 +359,38 @@ fdGeneralTests = describe "MonadFDGeneral" $ do
 class MonadFDMixed a b c d m | m -> a b c d where
   fdMixed :: a -> b -> c -> m d
 
-deriveMockableType [t|MonadFDMixed String Int|]
-deriveTypeForMockT [t|MonadFDMixed String Int String String|]
+makeMockableWithOptions
+  [t|MonadFDMixed String Int|]
+  def {mockDeriveForMockT = False}
+
+makeMockable [t|MonadFDMixed String Int String String|]
 
 fdMixedTests :: SpecWith ()
 fdMixedTests = describe "MonadFDMixed" $ do
   it "generates mock impl" $
     example . runMockT $ do
+      allowUnexpected $ QReifyInstances_ anything anything |-> []
       $(onReify [|expectAny|] ''MonadFDMixed)
 
-      decs1 <- runQ (deriveMockableType [t|MonadFDMixed String Int|])
+      decs1 <-
+        runQ $
+          makeMockableWithOptions
+            [t|MonadFDMixed String Int|]
+            def {mockDeriveForMockT = False}
       decs2 <-
-        runQ (deriveTypeForMockT [t|MonadFDMixed String Int String Int|])
+        runQ (makeMockable [t|MonadFDMixed String Int String Int|])
       _ <- liftIO $ evaluate (rnf (decs1 ++ decs2))
       return ()
 
   it "is mockable" $
     example $ do
       let success = runMockT $ do
-            expect $ FdMixed "foo" 1 "bar" |-> "qux"
+            expect $ FdMixed "foo" (1 :: Int) "bar" |-> "qux"
             r <- fdMixed "foo" 1 "bar"
             liftIO $ r `shouldBe` "qux"
 
           failure = runMockT $ do
-            expect $ FdMixed "foo" 1 "bar" |-> "qux"
+            expect $ FdMixed "foo" (1 :: Int) "bar" |-> "qux"
             _ <- fdMixed "bar" 1 "foo"
             return ()
 
@@ -377,15 +400,16 @@ fdMixedTests = describe "MonadFDMixed" $ do
 class MonadPolyArg m where
   polyArg :: Enum a => String -> a -> b -> m ()
 
-makeMockable ''MonadPolyArg
+makeMockable [t|MonadPolyArg|]
 
 polyArgTests :: SpecWith ()
 polyArgTests = describe "MonadPolyArg" $ do
   it "generates mock impl" $
     example $ do
       decs <- runMockT $ do
+        allowUnexpected $ QReifyInstances_ anything anything |-> []
         $(onReify [|expectAny|] ''MonadPolyArg)
-        runQ (makeMockable ''MonadPolyArg)
+        runQ (makeMockable [t|MonadPolyArg|])
       evaluate (rnf decs)
 
   it "fails without ScopedTypeVariables" $
@@ -396,7 +420,7 @@ polyArgTests = describe "MonadPolyArg" $ do
             expect $
               QReport_ anything (hasSubstr "Please enable ScopedTypeVariables")
 
-            _ <- runQ (makeMockable ''MonadPolyArg)
+            _ <- runQ (makeMockable [t|MonadPolyArg|])
             return ()
 
       missingScopedTypeVariables `shouldThrow` anyException
@@ -409,7 +433,7 @@ polyArgTests = describe "MonadPolyArg" $ do
             expect $
               QReport_ anything (hasSubstr "Please enable RankNTypes")
 
-            _ <- runQ (makeMockable ''MonadPolyArg)
+            _ <- runQ (makeMockable [t|MonadPolyArg|])
             return ()
 
       missingRankNTypes `shouldThrow` anyException
@@ -432,15 +456,16 @@ polyArgTests = describe "MonadPolyArg" $ do
 class MonadUnshowableArg m where
   unshowableArg :: (Int -> Int) -> m ()
 
-makeMockable ''MonadUnshowableArg
+makeMockable [t|MonadUnshowableArg|]
 
 unshowableArgTests :: SpecWith ()
 unshowableArgTests = describe "MonadUnshowableArg" $ do
   it "generates mock impl" $
     example $ do
       decs <- runMockT $ do
+        allowUnexpected $ QReifyInstances_ anything anything |-> []
         $(onReify [|expectAny|] ''MonadUnshowableArg)
-        runQ (makeMockable ''MonadUnshowableArg)
+        runQ (makeMockable [t|MonadUnshowableArg|])
       evaluate (rnf decs)
 
   it "is mockable" $
@@ -461,15 +486,16 @@ unshowableArgTests = describe "MonadUnshowableArg" $ do
 class MonadInArg m where
   monadInArg :: (Int -> m ()) -> m ()
 
-makeMockable ''MonadInArg
+makeMockable [t|MonadInArg|]
 
 monadInArgTests :: SpecWith ()
 monadInArgTests = describe "MonadInArg" $ do
   it "generates mock impl" $
     example $ do
       decs <- runMockT $ do
+        allowUnexpected $ QReifyInstances_ anything anything |-> []
         $(onReify [|expectAny|] ''MonadInArg)
-        runQ (makeMockable ''MonadInArg)
+        runQ (makeMockable [t|MonadInArg|])
       evaluate (rnf decs)
 
   it "is mockable" $
@@ -491,7 +517,7 @@ class MonadPolyResult m where
   polyResult :: Typeable a => a -> m a
   nonTypeablePolyResult :: a -> m a
 
-deriveMockable ''MonadPolyResult
+makeMockableWithOptions [t|MonadPolyResult|] def {mockDeriveForMockT = False}
 
 instance (MonadIO m, Typeable m) => MonadPolyResult (MockT m) where
   polyResult x = mockDefaultlessMethod (PolyResult x)
@@ -502,8 +528,12 @@ polyResultTests = describe "MonadPolyResult" $ do
   it "generates mock impl" $
     example $ do
       decs <- runMockT $ do
+        allowUnexpected $ QReifyInstances_ anything anything |-> []
         $(onReify [|expectAny|] ''MonadPolyResult)
-        runQ (deriveMockable ''MonadPolyResult)
+        runQ $
+          makeMockableWithOptions
+            [t|MonadPolyResult|]
+            def {mockDeriveForMockT = False}
       evaluate (rnf decs)
 
   it "is mockable" $
@@ -520,7 +550,9 @@ class MonadExtraneousMembers m where
 
   mockableMethod :: Int -> m ()
 
-deriveMockable ''MonadExtraneousMembers
+makeMockableWithOptions
+  [t|MonadExtraneousMembers|]
+  def {mockDeriveForMockT = False}
 
 instance (Typeable m, MonadIO m) => MonadExtraneousMembers (MockT m) where
   data SomeDataType (MockT m) = SomeCon
@@ -535,18 +567,23 @@ extraneousMembersTests = describe "MonadExtraneousMembers" $ do
   it "generates mock impl" $
     example $ do
       decs <- runMockT $ do
+        allowUnexpected $ QReifyInstances_ anything anything |-> []
         $(onReify [|expectAny|] ''MonadExtraneousMembers)
-        runQ (deriveMockable ''MonadExtraneousMembers)
+        runQ $
+          makeMockableWithOptions
+            [t|MonadExtraneousMembers|]
+            def {mockDeriveForMockT = False}
       evaluate (rnf decs)
 
   it "warns about non-methods" $
     example $ do
       decs <- runMockT $ do
+        allowUnexpected $ QReifyInstances_ anything anything |-> []
         $(onReify [|expectAny|] ''MonadExtraneousMembers)
         expect $
           QReport
             False
-            "SomeDataType must be defined in manual MockT instance."
+            "SomeDataType must be defined manually in MockT instance."
         expect $
           QReport
             False
@@ -565,9 +602,9 @@ extraneousMembersTests = describe "MonadExtraneousMembers" $ do
             "nestedRankN can't be mocked: rank-n types nested in arguments."
 
         runQ
-          ( deriveMockableWithOptions
-              def {mockVerbose = True}
-              ''MonadExtraneousMembers
+          ( makeMockableWithOptions
+              [t|MonadExtraneousMembers|]
+              def {mockDeriveForMockT = False, mockVerbose = True}
           )
       evaluate (rnf decs)
 
@@ -578,10 +615,10 @@ extraneousMembersTests = describe "MonadExtraneousMembers" $ do
             expect $
               QReport_ anything (hasSubstr "has unmockable methods")
 
-            _ <- runQ (makeMockable ''MonadExtraneousMembers)
+            _ <- runQ (makeMockable [t|MonadExtraneousMembers|])
             return ()
 
-      unmockableMethods `shouldThrow` anyIOException
+      unmockableMethods `shouldThrow` anyException
 
   it "is mockable" $
     example $ do
@@ -599,15 +636,16 @@ extraneousMembersTests = describe "MonadExtraneousMembers" $ do
 class MonadRankN m where
   rankN :: (forall a. a -> Bool) -> Bool -> m ()
 
-makeMockable ''MonadRankN
+makeMockable [t|MonadRankN|]
 
 rankNTests :: SpecWith ()
 rankNTests = describe "MonadRankN" $ do
   it "generates mock impl" $
     example $ do
       decs <- runMockT $ do
+        allowUnexpected $ QReifyInstances_ anything anything |-> []
         $(onReify [|expectAny|] ''MonadRankN)
-        runQ (deriveMockable ''MonadRankN)
+        runQ (makeMockable [t|MonadRankN|])
       evaluate (rnf decs)
 
   it "is mockable" $
@@ -633,7 +671,7 @@ class MonadManyReturns m where
   returnsMaybe :: m (Maybe Bool)
   returnsNoDefault :: m NoDefault
 
-makeMockable ''MonadManyReturns
+makeMockable [t|MonadManyReturns|]
 
 defaultReturnTests :: SpecWith ()
 defaultReturnTests = do
@@ -641,10 +679,11 @@ defaultReturnTests = do
     it "generates mock impl" $
       example $ do
         decs <- runMockT $ do
+          allowUnexpected $ QReifyInstances_ anything anything |-> []
           $(onReify [|expectAny|] ''MonadManyReturns)
           $(onReifyInstances [|expectAny|] ''Default [ConT ''NoDefault])
 
-          runQ (makeMockable ''MonadManyReturns)
+          runQ (makeMockable [t|MonadManyReturns|])
         evaluate (rnf decs)
 
     it "fails when there's an unexpected method" $
@@ -689,20 +728,21 @@ defaultReturnTests = do
 class MonadNestedNoDef m where
   nestedNoDef :: m (NoDefault, String)
 
-$(return []) -- Hack to get types into the TH environment.
+makeMockable [t|MonadNestedNoDef|]
 
 nestedNoDefTests :: SpecWith ()
 nestedNoDefTests = describe "MonadNestedNoDef" $ do
   it "generates mock impl" $
     example $ do
       decs <- runMockT $ do
+        allowUnexpected $ QReifyInstances_ anything anything |-> []
         $(onReify [|expectAny|] ''MonadNestedNoDef)
         $( [t|(NoDefault, String)|]
              >>= onReifyInstances [|expectAny|] ''Default . (: [])
          )
         $(onReifyInstances [|expectAny|] ''Default [ConT ''NoDefault])
 
-        runQ (makeMockable ''MonadNestedNoDef)
+        runQ (makeMockable [t|MonadNestedNoDef|])
       evaluate (rnf decs)
 
 class ClassWithNoParams
@@ -719,20 +759,20 @@ errorTests = describe "errors" $ do
                 anything
                 (hasSubstr "Expected GHC.Types.Int to be a class")
 
-            _ <- runQ (makeMockable ''Int)
+            _ <- runQ (makeMockable [t|Int|])
             return ()
 
-      wrongKind `shouldThrow` anyIOException
+      wrongKind `shouldThrow` anyException
 
-  it "fails when given an unexpected type construct" $
+  it "fails when given an unexpected type constructor" $
     example $ do
       let notClass = runMockT $ do
             expect $ QReport_ anything (hasSubstr "Expected a class")
 
-            _ <- runQ (makeMockableType [t|(Int, String)|])
+            _ <- runQ (makeMockable [t|(Int, String)|])
             return ()
 
-      notClass `shouldThrow` anyIOException
+      notClass `shouldThrow` anyException
 
   it "fails when class has no params" $
     example $ do
@@ -743,20 +783,20 @@ errorTests = describe "errors" $ do
                 anything
                 (hasSubstr "ClassWithNoParams has no type parameters")
 
-            _ <- runQ (makeMockable ''ClassWithNoParams)
+            _ <- runQ (makeMockable [t|ClassWithNoParams|])
             return ()
 
-      tooManyParams `shouldThrow` anyIOException
+      tooManyParams `shouldThrow` anyException
 
   it "fails when class has no mockable methods" $
     example $ do
       let noMockableMethods = runMockT $ do
             $(onReify [|expectAny|] ''Show)
             expect $ QReport_ anything (hasSubstr "has no mockable methods")
-            _ <- runQ (deriveMockable ''Show)
+            _ <- runQ (makeMockable [t|Show|])
             return ()
 
-      noMockableMethods `shouldThrow` anyIOException
+      noMockableMethods `shouldThrow` anyException
 
 classTests :: SpecWith ()
 classTests = describe "makeMockable" $ do

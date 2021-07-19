@@ -37,7 +37,7 @@ instance MonadFilesystem IO where
   readFile = Prelude.readFile
   writeFile = Prelude.writeFile
 
-makeMockable ''MonadFilesystem
+makeMockable [t|MonadFilesystem|]
 
 newtype SocketHandle = Handle Int deriving (Eq, Show)
 
@@ -45,7 +45,7 @@ class Monad m => MonadSocket m where
   openSocket :: Int -> m SocketHandle
   closeSocket :: SocketHandle -> m ()
 
-makeMockable ''MonadSocket
+makeMockable [t|MonadSocket|]
 
 coreTests :: SpecWith ()
 coreTests = do

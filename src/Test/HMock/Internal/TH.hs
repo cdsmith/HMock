@@ -18,6 +18,7 @@ module Test.HMock.Internal.TH
     hasPolyType,
     hasNestedPolyType,
     resolveInstance,
+    resolveInstanceType,
     simplifyContext,
     localizeMember,
   )
@@ -30,6 +31,7 @@ import Data.Maybe (catMaybes, fromMaybe)
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax (NameFlavour (..))
 import Test.HMock.Internal.Util (choices)
+import Data.Foldable (foldl')
 
 #if MIN_VERSION_template_haskell(2,17,0)
 
@@ -72,6 +74,13 @@ substTypeVars classVars = everywhere (mkT subst)
     subst (VarT x) | Just t <- lookup x classVars = t
     subst t = t
 
+-- | Splits a type application into a top-level constructor and a list of its
+-- type arguments.
+splitTypeApp :: Type -> Maybe (Name, [Type])
+splitTypeApp (ConT name) = Just (name, [])
+splitTypeApp (AppT a b) = fmap (++ [b]) <$> splitTypeApp a
+splitTypeApp _ = Nothing
+
 -- | Splits a function type into a list of bound type vars, context, parameter
 -- types, and return value type.
 splitType :: Type -> ([Name], Cxt, [Type], Type)
@@ -109,19 +118,20 @@ relevantContext ty (tvs, cx) = (filter needsTv tvs, filteredCx)
 -- for the variables of the left type that obtain the right one.
 unifyTypes :: Type -> Type -> Q (Maybe [(Name, Type)])
 unifyTypes = unifyTypesWith []
-  where
-    unifyTypesWith :: [(Name, Type)] -> Type -> Type -> Q (Maybe [(Name, Type)])
-    unifyTypesWith tbl (VarT v) t2
-      | Just t1 <- lookup v tbl = unifyTypesWith tbl t1 t2
-      | otherwise = return (Just ((v, t2) : tbl))
-    unifyTypesWith tbl (ConT a) (ConT b) | a == b = return (Just tbl)
-    unifyTypesWith tbl a b = do
-      mbA <- replaceSyn a
-      mbB <- replaceSyn b
-      case (mbA, mbB) of
-        (Nothing, Nothing) -> unifyGen tbl a b
-        _ -> unifyTypesWith tbl (fromMaybe a mbA) (fromMaybe b mbB)
 
+-- | Unify types, but starting with a table of substitutions.
+unifyTypesWith :: [(Name, Type)] -> Type -> Type -> Q (Maybe [(Name, Type)])
+unifyTypesWith tbl (VarT v) t2
+  | Just t1 <- lookup v tbl = unifyTypesWith tbl t1 t2
+  | otherwise = return (Just ((v, t2) : tbl))
+unifyTypesWith tbl (ConT a) (ConT b) | a == b = return (Just tbl)
+unifyTypesWith tbl a b = do
+  mbA <- replaceSyn a
+  mbB <- replaceSyn b
+  case (mbA, mbB) of
+    (Nothing, Nothing) -> unifyWithin tbl a b
+    _ -> unifyTypesWith tbl (fromMaybe a mbA) (fromMaybe b mbB)
+  where
     replaceSyn :: Type -> Q (Maybe Type)
     replaceSyn (ConT n) = do
       info <- reify n
@@ -130,19 +140,21 @@ unifyTypes = unifyTypesWith []
         _ -> return Nothing
     replaceSyn _ = return Nothing
 
-    unifyGen ::
-      (Data a, Data b) => [(Name, Type)] -> a -> b -> Q (Maybe [(Name, Type)])
-    unifyGen tbl a b
-      | toConstr a == toConstr b =
-        compose (gzipWithQ (\a' b' tbl' -> unify tbl' a' b') a b) tbl
-      | otherwise = return Nothing
-
+-- Unifies the types that occur within the arguments, starting with a table of
+-- substitutions.
+unifyWithin ::
+  (Data a, Data b) => [(Name, Type)] -> a -> b -> Q (Maybe [(Name, Type)])
+unifyWithin tbl a b
+  | toConstr a == toConstr b =
+    compose (gzipWithQ (\a' b' tbl' -> unify tbl' a' b') a b) tbl
+  | otherwise = return Nothing
+  where
     unify ::
       (Data a, Data b) => [(Name, Type)] -> a -> b -> Q (Maybe [(Name, Type)])
-    unify tbl a b = do
-      case (cast a, cast b) of
-        (Just a', Just b') -> unifyTypesWith tbl a' b'
-        _ -> unifyGen tbl a b
+    unify tbl' a' b' = do
+      case (cast a', cast b') of
+        (Just a'', Just b'') -> unifyTypesWith tbl' a'' b''
+        _ -> unifyWithin tbl' a' b'
 
     compose :: Monad m => [t -> m (Maybe t)] -> t -> m (Maybe t)
     compose [] x = return (Just x)
@@ -175,37 +187,50 @@ hasPolyType = everything (||) (mkQ False isPolyType)
 
 -- | Attempts to produce sufficient constraints for the given 'Type' to be an
 -- instance of the given class 'Name'.
-resolveInstance :: Name -> Type -> Q (Maybe Cxt)
-resolveInstance cls t@(VarT _) = return (Just [AppT (ConT cls) t])
-resolveInstance cls t = do
-  decs <- reifyInstances cls [t]
-  result <- traverse (tryInstance t) decs
+resolveInstance :: Name -> [Type] -> Q (Maybe Cxt)
+resolveInstance cls args
+  | all isTypeVar args = return (Just [foldl' AppT (ConT cls) args])
+  where
+    isTypeVar :: Type -> Bool
+    isTypeVar (VarT _) = True
+    isTypeVar _ = False
+resolveInstance cls args = do
+  decs <- reifyInstances cls args
+  result <- traverse (tryInstance args) decs
   case catMaybes result of
     [cx] -> return (Just (filter (not . null . freeTypeVars) cx))
     _ -> return Nothing
   where
-    tryInstance :: Type -> InstanceDec -> Q (Maybe Cxt)
-    tryInstance actualTy (InstanceD _ cx (AppT (ConT cls') genTy) _)
-      | cls' == cls =
-        unifyTypes genTy actualTy >>= \case
-          Just tbl ->
-            let cx' = substTypeVars tbl <$> cx
-             in fmap concat . sequence <$> mapM resolveInstanceType cx'
-          Nothing -> return Nothing
+    tryInstance :: [Type] -> InstanceDec -> Q (Maybe Cxt)
+    tryInstance actualArgs (InstanceD _ cx instType _) =
+      case splitTypeApp instType of
+        Just (cls', instArgs) | cls' == cls ->
+          unifyWithin [] instArgs actualArgs >>= \case
+            Just tbl ->
+              let cx' = substTypeVars tbl <$> cx
+              in fmap concat . sequence <$> mapM resolveInstanceType cx'
+            Nothing -> return Nothing
+        _ -> return Nothing
     tryInstance _ _ = return Nothing
 
-    resolveInstanceType :: Type -> Q (Maybe Cxt)
-    resolveInstanceType (AppT (ConT cls') t') = resolveInstance cls' t'
-    resolveInstanceType _ = return Nothing
+-- | Attempts to produce sufficient constraints for the given 'Type' to be a
+-- satisfied constraint.  The type should be a class applied to its type
+-- parameters.
+resolveInstanceType :: Type -> Q (Maybe Cxt)
+resolveInstanceType t = case splitTypeApp t of
+  Just (cls, args) -> resolveInstance cls args
+  Nothing -> return Nothing
 
 -- | Simplifies a context with complex types (requiring FlexibleContexts) to try
 -- to obtain one with all constraints applied to variables.
 simplifyContext :: Cxt -> Q (Maybe Cxt)
-simplifyContext (AppT (ConT cls) t : preds) =
-  resolveInstance cls t >>= \case
-    Just cxt' -> fmap (cxt' ++) <$> simplifyContext preds
-    Nothing -> return Nothing
-simplifyContext (otherPred : preds) = fmap (otherPred :) <$> simplifyContext preds
+simplifyContext (p : preds) =
+  case splitTypeApp p of
+    Just (cls, args) ->
+      resolveInstance cls args >>= \case
+        Just cxt' -> fmap (cxt' ++) <$> simplifyContext preds
+        Nothing -> return Nothing
+    _ -> fmap (p :) <$> simplifyContext preds
 simplifyContext [] = return (Just [])
 
 -- | Remove instance context from a method.

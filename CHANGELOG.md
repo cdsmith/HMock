@@ -2,6 +2,16 @@
 
 ## 0.x.0.0 -- 2021-??-??
 
+* Dramatically simplified the Template Haskell API.
+  * `makeMockable` now expects a Type instead of a Name.  Use `[t|MyClass|]`.
+  * Most other variants of `makeMockable` have been removed.  Use
+    `makeMockableWithOptions` instead.
+  * `makeMockable` will now detect when instances already exist and won't
+    redefine them.
+  * `makeMockable [t|MyClass ConcreteType|]` now defines `Mockable` and
+    `MockableBase` for any `MyClass` type.  Only `MockT` instances use the
+    concrete type.  In some cases, you may need to add type annotations to your
+    expectations.
 * `MockSetup` can now add expectations.
 * Added a lot more configuration for severity of faults:
   * `setAmbiguityCheck` can now set to ignore, warning, or error.

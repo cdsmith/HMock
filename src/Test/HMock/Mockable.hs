@@ -34,8 +34,8 @@ data MatchResult where
 
 -- | A base class for 'Monad' subclasses whose methods can be mocked.  You
 -- usually want to generate this instance using 'Test.HMock.TH.makeMockable',
--- 'Test.HMock.TH.makeMockableBase', 'Test.HMock.TH.deriveMockable', or
--- 'Test.HMock.TH.deriveMockableBase'.  It's just boilerplate.
+-- 'Test.HMock.TH.makeMockable', or 'Test.HMock.TH.makeMockableWithOptions',
+-- since it's just boilerplate.
 class (Typeable cls) => MockableBase (cls :: (Type -> Type) -> Constraint) where
   -- | An action that is performed.  This data type will have one constructor
   -- for each method.

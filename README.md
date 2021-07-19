@@ -42,7 +42,7 @@ API.
 3.  Make the class `Mockable` using the provided Template Haskell splices.
 
     ``` haskell
-    makeMockable ''MonadFilesystem
+    makeMockable [t|MonadFilesystem|]
     ```
 
 4.  Set up expectations and run your code.
@@ -169,7 +169,8 @@ other unusual behavior as exceptions to the fake implementation.
 ### Composable mocking primitives
 
 HMock's expectations expand on the ideas from Svenningsson, et al. in [An
-Expressive Semantics of Mocking](https://link.springer.com/content/pdf/10.1007%2F978-3-642-54804-8_27.pdf).
+Expressive Semantics of Mocking](
+https://link.springer.com/content/pdf/10.1007%2F978-3-642-54804-8_27.pdf).
 The key idea is to offer compositional primitives.  Anything you can do to a
 single call, you can also do to an entire sequence of calls.  You can express
 repeated sequences of calls, choice between two options, etc.  Because the core
@@ -299,9 +300,10 @@ Yes!
 The `makeMockable` splice is the simple way to set up mocks for a class, and
 delegates everything in the class to HMock to match with expectations.  However,
 sometimes you either can't or don't want to delegate all of your methods to
-HMock.  In that case, use the `deriveMockable` splice, instead.  This implements
-most of the deeper boilerplate for HMock, but doesn't define the instance for
-`MockT`.  You will define that yourself using `mockMethod` and friends.
+HMock.  In that case, use the `makeMockableWithOptions` splice, instead, and set
+`mockDeriveForMockT` to `False`.  This implements most of the deeper boilerplate
+for HMock, but doesn't define the instance for `MockT`.  You will define that
+yourself using `mockMethod` and friends.
 
 For example:
 
@@ -310,17 +312,16 @@ class MonadFoo m where
   mockThis :: String -> m ()
   butNotThis :: Int -> m String
 
-deriveMockable ''MonadFoo
+makeMockableWithOptions ''MonadFoo def { mockDeriveForMockT = False }
 
 instance (Monad m, Typeable m) => MonadFoo (MockT m) where
   mockThis x = mockMethod (MockThis x)
   butNotThis _ = return "fake, not mock"
 ```
 
-If your class has methods that HMock cannot handle, then you **must** use
-`deriveMockable` instead of `makeMockable`.  These include things like
-associated types, methods that don't run in the monad, or methods with
-non-`Typeable` polymorphic return values.
+If your class has methods that HMock cannot handle, then you **must** do this.
+These include things like associated types, methods that don't run in the monad,
+or methods with non-`Typeable` polymorphic return values.
 
 ### How do I mock methods with polymorphic arguments?
 
@@ -391,11 +392,11 @@ There are a few ways to do this:
 2. To also make unexpected calls to a method suceed, use `allowUnexpected`.  If
    you include a response in the argument, it will become the default in
    addition to allowing an unexpected method.
-3. To set up defaults using `byDefault` or `allowUnexpected` for *all* users of
-   the mock, replace your call to `makeMockable` or `deriveMockable` with a call
-   to `makeMockableBase` or `deriveMockableBase`.  Then write an instance for
-   `Mockable` and implement `setupMockable` to do whatever you like.  This setup
-   will always run before the first time HMock touches your class from any test.
+3. To set up defaults for *all* users of the mock, replace your call to
+   `makeMockable` with a call to `makeMockableWithOptions` and set
+   `mockEmptySetup` to `False`.  Then write an instance for `Mockable` and
+   implement `setupMockable` to do whatever you like.  This setup will always
+   run before the first time HMock touches your class from any test.
 
 ### How do I stop unexpected actions I don't care about from failing my tests?
 
@@ -437,41 +438,38 @@ We will consider classes of the form
 class MonadMPTC a b c m | m -> a b c
 ```
 
-If you try to use `makeMockable ''MonadMPTC` or `deriveForMockT ''MonadMTPC`, it
-will fail.  The functional dependency requires that `a`, `b`, and `c` are
-determined by `m`, but we cannot determine them for the `MockT` instance.
+If you try to use `makeMockable ''MonadMPTC`, it will fail.  The functional
+dependency requires that `a`, `b`, and `c` are determined by `m`, but we cannot
+determine them for the `MockT` instance.
 
-Our recommendation is that you run both derive steps separately:
+The recommended way to handle this case is to pass a concrete type to
+`makeMockable`, like this:
 
 ``` haskell
-deriveMockable ''MonadMPTC
-
--- And elsewhere...
-deriveTypeForMockT [t| MonadMPTC Int String Int |]
+makeMockable [t| MonadMPTC Int String Int |]
 ```
 
-Here, `deriveMockable` sets up the `Mockable` boilerplate so that you can write
-expectations involving `MonadMPTC`.  This is enough to do everything but
-actually call `runMockT`.  For that, you need the `deriveTypeForMockT`.  This
-part of the code is anti-moduler, because you cannot import (even indirectly)
-two different instances for `MockT` with different types in the same module.
-These instances would be *incoherent*, which Haskell doesn't typically allow.
-You can minimize the risk by moving the `deriveTypeForMockT` splice to top-level
-test modules which are never imported elsewhere.
+This will define the same `Mockable` instance for `MonadMPTC`, but the instance
+for `MockT` will be defined with concrete types as required by the functional
+dependency.
 
-You can also just write `makeMockableType [t| MonadMPTC Int String Int |]` and
-derive all instances for the specialized types.  However, your expectations now
-depend on the concrete choice of types, so this is strictly less powerful.  You
-should limit use of `makeMockableType` in the same way you would
-`deriveTypeForMockT` to avoid problems with incoherence.
+Note that the `MockT` instance is anti-modular, because you cannot import (even
+indirectly) two different instances for `MockT` with different types in the same
+module.  These instances would be *incoherent*, which Haskell doesn't typically
+allow.  You can minimize the risk by using `makeMockable` in top-level test
+modules which are never imported elsewhere.  If you want to share the
+expectation code, you can use `makeMockableWithOptions` and set
+`mockDeriveForMockT` to `False` in your library code, and then use
+`makeMockable` again in your top-level test module to define the `MockT`
+instance.
 
-If you do need to write multiple tests in the same module with different type
-parameters, you will need to use a wrapper around the base monad for `MockT` to
-disambiguate the instances.  That is a bit more involved, and requires that you
-implement the `MockT` instance by hand.  Here's an example:
+If you absolutely need to write multiple tests in the same module with different
+type parameters, you will need to use a wrapper around the base monad for
+`MockT` to disambiguate the instances.  That is a bit more involved.  Here's an
+example:
 
 ``` haskell
-deriveMockable ''MonadMPTC
+makeMockableWithOptions [t|MonadMPTC|] def {mockDeriveForMockT = False}
 
 newtype MyBase m a = MyBase {runMyBase :: m a}
   deriving (Functor, Applicative, Monad)
@@ -482,9 +480,6 @@ instance
   where
   foo x = mockMethod (Foo x)
 ```
-
-Obviously, this is a lot of boilerplate, and best to avoid unless it's
-necessary.
 
 ### How do I test multithreaded code?
 
@@ -518,8 +513,8 @@ it again when you are done.
 ### What should I do about orphan instance warnings?
 
 If you have the warning enabled, GHC will usually warn about orphan instances
-when you use `makeMockable` or other splices.  We recommend disabling this
-warning for the modules that use `makeMockable`, by adding the line
+when you use `makeMockable`.  We recommend disabling this warning for the
+modules that use `makeMockable`, by adding the line
 `{-# OPTIONS_GHC -Wno-orphans #-}` to the top of these modules.
 
 Prohibiting orphan instances is just a *heuristic* to make it less likely that
@@ -532,11 +527,8 @@ code.
 Since the orphan heuristic doesn't work, you must take responsibility for
 managing the risk of multiple instances.  The easiest way to do so is to avoid
 defining these instances in libraries.  If you do define instances in libraries,
-try to choose a canonical location for each instance that is consistent across
-all code using the library, and try to limit reuse of these instances to code
-that follows the same conventions.  Reuse of mock code can be valuable, but it
-must be done carefully and deliberately, keeping in mind that you are
-responsible for preventing conflict between orphan instances.
+you must choose a canonical location for each instance that is consistent across
+all code using the library.
 
 ### Why is my method "too complex to expect with an `Action`"?
 
@@ -572,8 +564,8 @@ makeAction ''MyAction [ts| MonadFilesystem, MonadDB |]
 You will now write:
 
 ``` haskell
-makeMockable ''MonadFilesystem
-makeMockable ''MonadDB
+makeMockable [t|MonadFilesystem|]
+makeMockable [t|MonadDB|]
 ```
 
 To convert a test that uses `monad-mock` into a test using HMock, move
@@ -642,14 +634,12 @@ Template Haskell.
 
 As part of HMock's own test suite, the `Quasi` monad is made mockable (in
 `test/QuasiMock.hs`), and then used (in `test/Classes.hs`) to test HMock's
-Template Haskell based code generation splices such as `makeMockable` and
-`deriveMockable`.
+Template Haskell-based code generation.
 
 At first glance, this might seem unnecessary.  After all, the unit tests make
-use of `makeMockable` and `deriveMockable` for tests of the core HMock
-functionality, so surely any problems in that code that matter would cause one
-of the core tests to fail, as well.  However, writing these tests with mocks had
-two significant benefits:
+use of `makeMockable` for tests of the core HMock functionality, so surely any
+problems in that code that matter would cause one of the core tests to fail, as
+well.  However, writing these tests with mocks had two significant benefits:
 
 1. Because Template Haskell runs at compile time, test coverage cannot be
    measured.  Template Haskell code at runtime generates accurate test coverage
@@ -673,9 +663,9 @@ The implementation of the `Quasi` mock was not difficult, but there are a few
 places where it was illuminating:
 
 * Several methods of the `Quasi` type class could not be mocked by HMock because
-  they have polymorphic return types.  This did not prevent using HMock, but it
-  did make it necessary to combine `deriveMockable` with a hand-written `MockT`
-  instance, rather than using `makeMockable` to generate everything.
+  they have polymorphic return types without `Typeable` constraints.  This did
+  not prevent using HMock, but it did make it necessary to use a hand-written
+  `MockT` instance, rather than using `makeMockable` to generate everything.
 
 * One method, `qNewName`, could have been mocked, but it wasn't the right
   choice to do so.  Template Haskell already provides an implementation in the

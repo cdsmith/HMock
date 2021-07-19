@@ -13,9 +13,10 @@
 
 module QuasiMockBase where
 
+import Data.Default (def)
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax
-import Test.HMock.TH (deriveMockableBase)
+import Test.HMock (MakeMockableOptions (..), makeMockableWithOptions)
 import Util.DeriveRecursive (deriveRecursive)
 
 #if MIN_VERSION_template_haskell(2, 16, 0)
@@ -25,7 +26,12 @@ instance Lift Bytes where lift = undefined; liftTyped = undefined
 
 deriveRecursive Nothing ''Lift ''Info
 
-deriveMockableBase ''Quasi
+makeMockableWithOptions
+  [t|Quasi|]
+  def
+    { mockEmptySetup = False,
+      mockDeriveForMockT = False
+    }
 
 reifyStatic :: Name -> Q Exp
 reifyStatic n = reify n >>= lift
@@ -33,7 +39,7 @@ reifyStatic n = reify n >>= lift
 onReify :: Q Exp -> Name -> Q Exp
 onReify handler n = do
   result <- reify n
-  [| $handler (QReify $(lift n) |-> $(lift result))|]
+  [|$handler (QReify $(lift n) |-> $(lift result))|]
 
 deriveRecursive Nothing ''Lift ''InstanceDec
 

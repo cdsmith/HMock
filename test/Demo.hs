@@ -16,14 +16,16 @@ import Control.Exception (Exception)
 import Control.Monad (unless, when)
 import Control.Monad.Catch (MonadMask, catch, finally, throwM)
 import Data.Char (isLetter)
+import Data.Default (def)
 import Test.HMock
-  ( Mockable (..),
-    anything,
+  ( MakeMockableOptions (..),
+    Mockable (..),
     allowUnexpected,
+    anything,
     expect,
     expectAny,
     makeMockable,
-    makeMockableBase,
+    makeMockableWithOptions,
     runMockT,
     (|->),
     (|=>),
@@ -145,14 +147,14 @@ banIfAdmin room user = do
 
 -- Since there is no setup for MonadBugReport, it's easiest to use makeMockable
 -- to derive all instances needed to mock this class.
-makeMockable ''MonadBugReport
+makeMockable [t|MonadBugReport|]
 
 -- For MonadAuth and MonadChat, we have default behaviors we'd like to offer
 -- to all tests.  So instead of makeMockable, we use makeMockableBase to derive
 -- MockableBase, which contains all the boilerplate.  We can then write a
 -- Mockable instance with setup steps.
 
-makeMockableBase ''MonadAuth
+makeMockableWithOptions [t|MonadAuth|] def {mockEmptySetup = False}
 
 instance Mockable MonadAuth where
   setupMockable _ = do
@@ -168,7 +170,7 @@ instance Mockable MonadAuth where
     -- can override this assumption.
     allowUnexpected $ HasPermission_ anything |-> True
 
-makeMockableBase ''MonadChat
+makeMockableWithOptions [t|MonadChat|] def {mockEmptySetup = False}
 
 instance Mockable MonadChat where
   setupMockable _ = do

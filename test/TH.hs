@@ -52,14 +52,14 @@ thUtilSpec = do
     it "finds unrestricted instances" $
       example $
         runMockT $ do
-          result <- runQ $ resolveInstance ''Show (ConT ''String)
+          result <- runQ $ resolveInstance ''Show [ConT ''String]
           liftIO $ result `shouldBe` Just []
 
     it "finds context on nested vars" $
       example $
         runMockT $ do
           v <- runQ $ newName "a"
-          result <- runQ $ resolveInstance ''Show (AppT ListT (VarT v))
+          result <- runQ $ resolveInstance ''Show [AppT ListT (VarT v)]
           liftIO $ result `shouldBe` Just [AppT (ConT ''Show) (VarT v)]
 
     it "recognizes when a nested type lacks instance" $
@@ -72,5 +72,5 @@ thUtilSpec = do
            )
 
           t <- runQ [t|(Int, NotShowable)|]
-          result <- runQ $ resolveInstance ''Show t
+          result <- runQ $ resolveInstance ''Show [t]
           liftIO $ result `shouldBe` Nothing
