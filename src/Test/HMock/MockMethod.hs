@@ -188,13 +188,19 @@ mockDefaultlessMethod action =
 -- | An error for an action that matches no expectations at all.  This is only
 -- used if severity is Ignore or Warning.
 uninterestingError ::
-  (Mockable cls, MonadIO m) => Severity -> Action cls name m r -> MockT m ()
+  (HasCallStack, Mockable cls, MonadIO m) =>
+  Severity ->
+  Action cls name m r ->
+  MockT m ()
 uninterestingError severity a =
   reportFault severity $ "Uninteresting action: " ++ showAction a
 
 -- | An error for an action that matches no expectations at all.
 noMatchError ::
-  (Mockable cls, MonadIO m) => Severity -> Action cls name m r -> MockT m ()
+  (HasCallStack, Mockable cls, MonadIO m) =>
+  Severity ->
+  Action cls name m r ->
+  MockT m ()
 noMatchError severity a = do
   fullExpectations <- describeExpectations
   reportFault severity $
