@@ -13,9 +13,12 @@ import Test.HMock.Mockable (MockableBase (..))
 
 -- | A way to match an entire action, using conditions that might depend on the
 -- relationship between arguments.
-data WholeMethodMatcher cls name m r
-  = JustMatcher (Matcher cls name m r)
-  | Matcher cls name m r `SuchThat` (Action cls name m r -> Bool)
+data WholeMethodMatcher cls name m r where
+  JustMatcher :: Matcher cls name m r -> WholeMethodMatcher cls name m r
+  SuchThat ::
+    Matcher cls name m r ->
+    (Action cls name m r -> Bool) ->
+    WholeMethodMatcher cls name m r
 
 -- | Displays a WholeMethodMatcher.  The predicate isn't showable, but we can at
 -- least indicate whether there is one present.
