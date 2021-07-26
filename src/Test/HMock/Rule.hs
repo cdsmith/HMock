@@ -2,10 +2,10 @@
 {-# LANGUAGE FunctionalDependencies #-}
 
 -- | This module defines the 'Rule' type, which describes a matcher for methods
--- and a possibly-empty list of responses to use for successive calls to
+-- and a (possibly empty) list of responses to use for successive calls to
 -- matching methods.  The 'Expectable' type class generalizes 'Rule', so that
 -- you can specify a bare 'Matcher' or 'Action' in most situations where a
--- 'Rule' is needed but you don't want to specify the response.
+-- 'Rule' is needed but you don't want to provide a response.
 module Test.HMock.Rule
   ( Rule,
     Expectable (..),
