@@ -18,6 +18,13 @@
   * Added `setUninterestingActionCheck` for actions with no expectations.
   * Added `setUnexpectedActionCheck` for actions that don't match expectations.
   * Added `setUnmetExpectationCheck` for expectations that aren't met.
+* Predicates have undergone major updates.
+  * Predicates now show more detailed messages when they fail.
+  * New `keys` and `values` predicates accept any child predicate.
+  * Removed `containsKey`, `containsEntry`, `keysAre`, and `entriesAre`
+    * Instead of `containsEntry` or `entriesAre`, use `contains` or
+      `unorderedElemsAre` with `zipP`.
+  * New predicates: `positive`, `negative`, `nonPositive`, `nonNegative`.
 
 ## 0.3.0.0 -- 2021-06-30
 

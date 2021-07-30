@@ -117,7 +117,7 @@ mockMethodImpl surrogate action = join $
       TVar (ExpectSet (Step m)) ->
       (Step m, ExpectSet (Step m)) ->
       Either
-        (Maybe ([(Int, Maybe String)], String))
+        (Maybe ([(Int, String)], String))
         (String, MockSetup m (), Maybe (MockT m r))
     tryMatch tvar (Step expected, e)
       | Just lrule@(Loc _ (m :-> impl)) <- cast expected =
@@ -214,7 +214,7 @@ partialMatchError ::
   (HasCallStack, Mockable cls, MonadIO m) =>
   Severity ->
   Action cls name m r ->
-  [([(Int, Maybe String)], String)] ->
+  [([(Int, String)], String)] ->
   MockT m ()
 partialMatchError severity a partials = do
   fullExpectations <- describeExpectations
@@ -226,7 +226,7 @@ partialMatchError severity a partials = do
       ++ "\n\nFull expectations:\n"
       ++ fullExpectations
   where
-    formatPartial :: ([(Int, Maybe String)], String) -> String
+    formatPartial :: ([(Int, String)], String) -> String
     formatPartial (mismatches, matcher)
       | null mismatches = matcher ++ "\n   * Failed whole-method matcher"
       | otherwise =
@@ -235,13 +235,10 @@ partialMatchError severity a partials = do
             "\n   * "
             ( map
                 ( \(i, mm) ->
-                    "Arg #" ++ show i ++ ": " ++ fromMaybe defaultMsg mm
+                    "Arg #" ++ show i ++ ": " ++ mm
                 )
                 mismatches
             )
-
-    defaultMsg :: String
-    defaultMsg = "does not match"
 
 -- | An error for an 'Action' that matches more than one 'Matcher'.  This only
 -- triggers an error if ambiguity checks are on.

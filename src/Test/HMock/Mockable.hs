@@ -28,7 +28,7 @@ import {-# SOURCE #-} Test.HMock.Internal.State (MockSetup)
 -- match arguments.
 data MatchResult where
   -- | No match.  The arg is explanations of mismatch.
-  NoMatch :: [(Int, Maybe String)] -> MatchResult
+  NoMatch :: [(Int, String)] -> MatchResult
   -- | Match. Stores a witness to the equality of return types.
   Match :: MatchResult
 

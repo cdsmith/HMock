@@ -310,7 +310,9 @@ coreTests = do
               expect $ WriteFile_ (eq "foo.txt") (hasSubstr "foo")
               _ <- writeFile "foo.txt" "bar"
               return ()
-        test `shouldThrow` errorWith ("Arg #2: does not match" `isInfixOf`)
+        test
+          `shouldThrow` errorWith
+            ("Arg #2: \"bar\" doesn't have substring \"foo\"" `isInfixOf`)
 
     it "enforces nested sequences" $
       example $ do

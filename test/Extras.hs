@@ -120,23 +120,28 @@ predicateTests = do
           `shouldBe` "contains all of [> 5]"
         show (containsOnly [gt 5] :: Predicate [Int])
           `shouldBe` "contains only [> 5]"
-        show (containsKey (eq "foo") :: Predicate [(String, String)])
-          `shouldBe` "contains key \"foo\""
+        show (keys (contains (eq "foo")) :: Predicate [(String, String)])
+          `shouldBe` "keys (contains (\"foo\"))"
         show
-          ( containsEntry (eq "foo") (eq "bar") ::
+          ( contains (eq "foo" `zipP` eq "bar") ::
               Predicate [(String, String)]
           )
-          `shouldBe` "contains entry (\"foo\",\"bar\")"
-        show (keysAre [eq 1, eq 2, eq 3] :: Predicate [(Int, String)])
-          `shouldBe` "keys are [1,2,3]"
+          `shouldBe` "contains ((\"foo\",\"bar\"))"
         show
-          ( entriesAre [(eq 1, eq "one"), (eq 2, eq "two")] ::
+          ( keys (unorderedElemsAre [eq 1, eq 2, eq 3]) ::
               Predicate [(Int, String)]
           )
-          `shouldBe` "entries are [(1,\"one\"),(2,\"two\")]"
+          `shouldBe` "keys ((any order) [1,2,3])"
+        show
+          (values (elemsAre [eq "one", eq "two"]) :: Predicate [(Int, String)])
+          `shouldBe` "values ([\"one\",\"two\"])"
         show (approxEq 1.0 :: Predicate Double) `shouldBe` "≈ 1.0"
         show (finite :: Predicate Double) `shouldBe` "finite"
         show (infinite :: Predicate Double) `shouldBe` "infinite"
+        show (positive :: Predicate Double) `shouldBe` "positive"
+        show (negative :: Predicate Double) `shouldBe` "negative"
+        show (nonPositive :: Predicate Double) `shouldBe` "non-positive"
+        show (nonNegative :: Predicate Double) `shouldBe` "non-negative"
         show (nAn :: Predicate Double) `shouldBe` "NaN"
         show (is even :: Predicate Int)
           `shouldSatisfy` ("custom predicate at " `isPrefixOf`)
