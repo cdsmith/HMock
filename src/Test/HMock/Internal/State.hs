@@ -160,7 +160,7 @@ markInteresting proxyCls proxyName = runInRootState $ do
       (mockInterestingMethods state)
       (Set.insert (typeRep proxyCls, symbolVal proxyName))
 
--- Determines whether a method is "interesting".
+-- | Determines whether a method is "interesting".
 isInteresting :: 
   forall (cls :: (Type -> Type) -> Constraint) name m proxy1 proxy2.
   (Typeable cls, KnownSymbol name) =>
@@ -284,6 +284,7 @@ instance ExpectContext MockT where
     withFrozenCallStack $
       fromMockSetup $ expectThisSet $ unwrapExpected $ consecutiveTimes mult es
 
+-- | Reports a potential problem with the given 'Severity'.
 reportFault :: (HasCallStack, MonadIO m) => Severity -> String -> MockT m ()
 reportFault severity msg = case severity of
   Ignore -> return ()

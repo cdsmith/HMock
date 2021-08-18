@@ -53,7 +53,7 @@ data MakeMockableOptions = MakeMockableOptions
     --
     -- @
     -- instance 'Mockable' MyClass where
-    --   'setupMockable' _ = ...
+    --   'Test.HMock.Mockable.setupMockable' _ = ...
     -- @
     mockEmptySetup :: Bool,
     -- | Whether to derive instances of the class for 'MockT' or not.  Defaults
