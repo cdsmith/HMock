@@ -69,7 +69,7 @@ where
 
 import Data.Char (toUpper)
 import Data.List (intercalate)
-import Data.Maybe (isJust, isNothing)
+import Data.Maybe (catMaybes, isJust, isNothing)
 import Data.MonoTraversable
 import qualified Data.Sequences as Seq
 import Data.Typeable (Proxy (..), Typeable, cast, typeRep)
@@ -77,9 +77,10 @@ import GHC.Exts (IsList (Item, toList))
 import GHC.Stack (HasCallStack, callStack)
 import Language.Haskell.TH (ExpQ, PatQ, pprint)
 import Language.Haskell.TH.Syntax (lift)
+import Test.HMock.Internal.FlowMatcher (bipartiteMatching)
 import Test.HMock.Internal.TH (removeModNames)
-import Test.HMock.Internal.Util (choices, isSubsequenceOf, locate, withLoc)
-import Text.Regex.TDFA hiding (match)
+import Test.HMock.Internal.Util (isSubsequenceOf, locate, withLoc)
+import Text.Regex.TDFA hiding (match, matchAll)
 
 -- $setup
 -- >>> :set -XTemplateHaskell
@@ -786,21 +787,40 @@ unorderedElemsAre ps =
         "(any order) " ++ show ps,
       showNegation =
         "not (in any order) " ++ show ps,
-      accept = match ps . otoList,
+      accept = \xs ->
+        let (_, orphanPs, orphanXs) = matchAll xs
+         in null orphanPs && null orphanXs,
       explain = \xs ->
-        if
-            | olength xs /= length ps ->
-              "wrong size (got "
-                ++ show (olength xs)
-                ++ "; expected "
-                ++ show (length ps)
-                ++ ")"
-            | match ps (otoList xs) -> "elements match"
-            | otherwise -> "elements don't match"
+        let (matches, orphanPs, orphanXs) = matchAll xs
+         in if null orphanPs && null orphanXs
+              then intercalate "; and " (explainMatch <$> matches)
+              else
+                let missingExplanation =
+                      if null orphanPs
+                        then Nothing
+                        else
+                          Just
+                            ( "Missing: "
+                                ++ intercalate ", " (showPredicate <$> orphanPs)
+                            )
+                    extraExplanation =
+                      if null orphanXs
+                        then Nothing
+                        else
+                          Just
+                            ( "Extra elements: "
+                                ++ intercalate
+                                  ", "
+                                  (("#" ++) . show . fst <$> orphanXs)
+                            )
+                 in intercalate
+                      "; "
+                      (catMaybes [missingExplanation, extraExplanation])
     }
   where
-    match (q : qs) xs = or [match qs ys | (y, ys) <- choices xs, accept q y]
-    match [] xs = null xs
+    matchOne p (_, x) = accept p x
+    matchAll xs = bipartiteMatching matchOne ps (zip [1 :: Int ..] (otoList xs))
+    explainMatch (p, (j, x)) = "element #" ++ show j ++ ": " ++ explain p x
 
 -- | A 'Predicate' that accepts data structures whose elements each match the
 -- child 'Predicate'.
@@ -843,10 +863,8 @@ each p =
 contains :: MonoFoldable t => Predicate (Element t) -> Predicate t
 contains = notP . each . notP
 
--- | A 'Predicate' that accepts data structures which contain an element
--- satisfying each of the child 'Predicate's.  @'containsAll' [p1, p2, ..., pn]@
--- is equivalent to @'contains' p1 `'andP'` 'contains' p2 `'andP'` ... `'andP'`
--- 'contains' pn@.
+-- | A 'Predicate' that accepts data structures whose elements all satisfy the
+-- given child 'Predicate's.
 --
 -- >>> accept (containsAll [eq "foo", eq "bar"]) ["bar", "foo"]
 -- True
@@ -854,39 +872,69 @@ contains = notP . each . notP
 -- False
 -- >>> accept (containsAll [eq "foo", eq "bar"]) ["foo", "bar", "qux"]
 -- True
+--
+-- Each child 'Predicate' must be satisfied by a different element, so repeating
+-- a 'Predicate' requires that two different matching elements exist.  If you
+-- want a 'Predicate' to match multiple elements, instead, you can accomplish
+-- this with @'contains' p1 `'andP'` 'contains' p2 `'andP'` ...@.
+--
+-- >>> accept (containsAll [startsWith "f", endsWith "o"]) ["foo"]
+-- False
+-- >>> accept (contains (startsWith "f") `andP` contains (endsWith "o")) ["foo"]
+-- True
 containsAll :: MonoFoldable t => [Predicate (Element t)] -> Predicate t
 containsAll ps =
   Predicate
     { showPredicate = "contains all of " ++ show ps,
       showNegation = "not all of " ++ show ps,
-      accept = \xs -> all (flip oany xs . accept) ps,
+      accept = \xs -> let (_, orphanPs, _) = matchAll xs in null orphanPs,
       explain = \xs ->
-        if all (flip oany xs . accept) ps
-          then "value contains all elements"
-          else "value is missing elements"
+        let (matches, orphanPs, _) = matchAll xs
+         in if null orphanPs
+              then intercalate "; and " (explainMatch <$> matches)
+              else "Missing: " ++ intercalate ", " (showPredicate <$> orphanPs)
     }
+  where
+    matchOne p (_, x) = accept p x
+    matchAll xs = bipartiteMatching matchOne ps (zip [1 :: Int ..] (otoList xs))
+    explainMatch (p, (j, x)) = "element #" ++ show j ++ ": " ++ explain p x
 
--- | A 'Predicate' that accepts data structures whose elements all satisfy at
--- least one of the child 'Predicate's.  @'containsOnly' [p1, p2, ..., pn]@ is
--- equivalent to @'each' (p1 `'orP'` p2 `'orP'` ... `'orP'` pn)@.
+-- | A 'Predicate' that accepts data structures whose elements all satisfy one
+-- of the child 'Predicate's.
 --
--- >>> accept (containsOnly [eq "foo", eq "bar"]) ["foo", "foo"]
+-- >>> accept (containsOnly [eq "foo", eq "bar"]) ["foo"]
 -- True
 -- >>> accept (containsOnly [eq "foo", eq "bar"]) ["foo", "bar"]
 -- True
 -- >>> accept (containsOnly [eq "foo", eq "bar"]) ["foo", "qux"]
 -- False
+--
+-- Each element must satisfy a different child 'Predicate'.  If you want
+-- multiple elements to match the same 'Predicate', instead, you can accomplish
+-- this with @'each' (p1 `'orP'` p2 `'orP'` ...)@.
+--
+-- >>> accept (containsOnly [eq "foo", eq "bar"]) ["foo", "foo"]
+-- False
+-- >>> accept (each (eq "foo" `orP` eq "bar")) ["foo", "foo"]
+-- True
 containsOnly :: MonoFoldable t => [Predicate (Element t)] -> Predicate t
 containsOnly ps =
   Predicate
     { showPredicate = "contains only " ++ show ps,
       showNegation = "not only " ++ show ps,
-      accept = oall (\x -> any (`accept` x) ps),
+      accept = \xs -> let (_, _, orphanXs) = matchAll xs in null orphanXs,
       explain = \xs ->
-        if oall (flip any ps . flip accept) xs
-          then "value has no extra elements"
-          else "value has extra elements"
+        let (matches, _, orphanXs) = matchAll xs
+         in if null orphanXs
+              then intercalate "; and " (explainMatch <$> matches)
+              else
+                "Extra elements: "
+                  ++ intercalate ", " (("#" ++) . show . fst <$> orphanXs)
     }
+  where
+    matchOne p (_, x) = accept p x
+    matchAll xs = bipartiteMatching matchOne ps (zip [1 :: Int ..] (otoList xs))
+    explainMatch (p, (j, x)) = "element #" ++ show j ++ ": " ++ explain p x
 
 -- | Transforms a 'Predicate' on a list of keys into a 'Predicate' on map-like
 -- data structures.
