@@ -1,5 +1,7 @@
 # Revision history for hmock
 
+## 0.x.0.0 -- 2021-??-??
+
 ## 0.4.0.0 -- 2021-08-22
 
 * Dramatically simplified the Template Haskell API.
