@@ -1,6 +1,6 @@
 # Revision history for hmock
 
-## 0.x.0.0 -- 2021-??-??
+## 0.4.0.0 -- 2021-08-22
 
 * Dramatically simplified the Template Haskell API.
   * `makeMockable` now expects a Type instead of a Name.  Use `[t|MyClass|]`.
