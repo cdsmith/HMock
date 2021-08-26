@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE ParallelListComp #-}
@@ -7,11 +8,18 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
+-- Orphan instances are enabled to allow the declaration of IfCxt orphans by
+-- mkIfCxtInstances.  This is safe because all IfCxt instances derived in this
+-- way are equivalent.
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 
--- | This module defines 'Predicate's which you can use to match the arguments of
--- a method in your execution plan.
+-- | This module defines 'Predicate's which you can use to match the arguments
+-- of a method in your execution plan.
 module Test.HMock.Predicates
-  ( Predicate (..),
+  ( -- * The Predicate type
+    Predicate (..),
+
+    -- * Predicate combinators
     anything,
     eq,
     neq,
@@ -64,13 +72,19 @@ module Test.HMock.Predicates
     qWith,
     qMatch,
     typed,
+
+    -- * The OptionalShow class
+    OptionalShow,
+    deriveOptionalShow,
+    ifShow,
+    showOr,
   )
 where
 
 import Data.Char (toUpper)
 import Data.List (intercalate)
 import Data.Maybe (catMaybes, isJust, isNothing)
-import Data.MonoTraversable
+import Data.MonoTraversable (Element, MonoFoldable (..), MonoFunctor (..))
 import qualified Data.Sequences as Seq
 import Data.Typeable (Proxy (..), Typeable, cast, typeRep)
 import GHC.Exts (IsList (Item, toList))
@@ -78,9 +92,12 @@ import GHC.Stack (HasCallStack, callStack)
 import Language.Haskell.TH (ExpQ, PatQ, pprint)
 import Language.Haskell.TH.Syntax (lift)
 import Test.HMock.Internal.FlowMatcher (bipartiteMatching)
+import Test.HMock.Internal.IfCxt
 import Test.HMock.Internal.TH (removeModNames)
 import Test.HMock.Internal.Util (isSubsequenceOf, locate, withLoc)
 import Text.Regex.TDFA hiding (match, matchAll)
+
+deriveOptionalShow
 
 -- $setup
 -- >>> :set -XTemplateHaskell
@@ -132,16 +149,16 @@ anything =
 -- True
 -- >>> accept (eq "foo") "bar"
 -- False
-eq :: (Show a, Eq a) => a -> Predicate a
+eq :: (OptionalShow a, Eq a) => a -> Predicate a
 eq x =
   Predicate
-    { showPredicate = show x,
-      showNegation = "≠ " ++ show x,
+    { showPredicate = showOr "expected" x,
+      showNegation = "≠ " ++ showOr "expected" x,
       accept = (== x),
       explain = \y ->
         if y == x
-          then show y ++ " = " ++ show x
-          else show y ++ " ≠ " ++ show x
+          then showOr "value" y ++ " = " ++ showOr "expected" x
+          else showOr "value" y ++ " ≠ " ++ showOr "expected" x
     }
 
 -- | A 'Predicate' that accepts anything but the given value.
@@ -150,7 +167,7 @@ eq x =
 -- False
 -- >>> accept (neq "foo") "bar"
 -- True
-neq :: (Show a, Eq a) => a -> Predicate a
+neq :: (OptionalShow a, Eq a) => a -> Predicate a
 neq = notP . eq
 
 -- | A 'Predicate' that accepts anything greater than the given value.
