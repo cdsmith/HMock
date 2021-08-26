@@ -100,6 +100,7 @@ import Text.Regex.TDFA hiding (match, matchAll)
 deriveOptionalShow
 
 -- $setup
+-- >>> :set -XExtendedDefaultRules
 -- >>> :set -XTemplateHaskell
 -- >>> :set -XTypeApplications
 -- >>> :set -Wno-type-defaults
@@ -152,7 +153,7 @@ anything =
 eq :: (OptionalShow a, Eq a) => a -> Predicate a
 eq x =
   Predicate
-    { showPredicate = showOr "expected" x,
+    { showPredicate = showOr "= expected" x,
       showNegation = "≠ " ++ showOr "expected" x,
       accept = (== x),
       explain = \y ->

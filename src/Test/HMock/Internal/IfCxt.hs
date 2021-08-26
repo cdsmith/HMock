@@ -57,7 +57,7 @@ mkIfCxtInstances name = do
 mkInstance :: Cxt -> Type -> Name -> [Dec]
 mkInstance cx t name =
   [ InstanceD
-      Nothing
+      (Just Overlaps)
       (map relaxCxt cx)
       (relaxCxt (AppT (ConT name) t))
       [ FunD
