@@ -1,10 +1,11 @@
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MonoLocalBinds #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskellQuotes #-}
-{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 -- | A type class and corresponding Template Haskell code for optional Show
@@ -16,7 +17,11 @@
 module Test.HMock.Internal.IfCxt where
 
 import Control.Monad (forM, unless)
+import Control.Monad.State (StateT, evalStateT, get, put)
+import Control.Monad.Trans (lift)
 import Data.Proxy (Proxy (..))
+import Data.Set (Set)
+import qualified Data.Set as Set
 import Language.Haskell.TH
 
 class IfCxt cxt where
@@ -25,53 +30,72 @@ class IfCxt cxt where
 instance {-# OVERLAPPABLE #-} IfCxt cxt where ifCxt _ _ f = f
 
 mkIfCxtInstances :: Name -> Q [Dec]
-mkIfCxtInstances name = do
-  scopedTypeVars <- isExtEnabled ScopedTypeVariables
-  unless scopedTypeVars $ fail "ScopedTypeVariables must be enabled"
+mkIfCxtInstances name = flip evalStateT Set.empty $ mkIfCxtInstancesState name
 
-  ifCxtInfo <- reify ''IfCxt
-  let instancesOfIfCxt = case ifCxtInfo of
+mkIfCxtInstancesState :: Name -> StateT (Set Name) Q [Dec]
+mkIfCxtInstancesState name = do
+  finished <- get
+  if name `Set.member` finished
+    then return []
+    else do
+      put (Set.insert name finished)
+
+      scopedTypeVars <- lift $ isExtEnabled ScopedTypeVariables
+      unless scopedTypeVars $ fail "ScopedTypeVariables must be enabled"
+
+      ifCxtInfo <- lift $ reify ''IfCxt
+      let instancesOfIfCxt = case ifCxtInfo of
+            ClassI _ instances -> do
+              flip map instances $ \inst -> do
+                case inst of
+                  InstanceD _ _ (AppT _ t) _ -> t
+                  _ -> error "mkIfCxtInstances: unexpected IfCxt instance"
+            _ ->
+              error $
+                "mkIfCxtInstances: "
+                  ++ "reify ''IfCxt returned something other than a class"
+          isInstanceOfIfCxt t = t `elem` instancesOfIfCxt
+
+      info <- lift $ reify name
+      case info of
         ClassI _ instances -> do
-          flip map instances $ \inst -> do
-            case inst of
-              InstanceD _ _ (AppT _ t) _ -> t
-              _ -> error "mkIfCxtInstances: unexpected IfCxt instance"
-        _ ->
-          error $
-            "mkIfCxtInstances: "
-              ++ "reify ''IfCxt returned something other than a class"
-      isInstanceOfIfCxt t = t `elem` instancesOfIfCxt
+          fmap concat $
+            forM instances $ \inst -> do
+              case inst of
+                InstanceD _ cx appt@(AppT _ t) _ ->
+                  if isInstanceOfIfCxt appt
+                    then return []
+                    else mkInstance cx t name
+                _ -> error "mkIfCxtInstances: unexpected instance"
+        _ -> fail $ show name ++ " is not a class name."
 
-  info <- reify name
-  case info of
-    ClassI _ instances -> do
-      fmap concat $
-        forM instances $ \inst -> do
-          case inst of
-            InstanceD _ cx appt@(AppT _ t) _ ->
-              return $
-                if isInstanceOfIfCxt appt then [] else mkInstance cx t name
-            _ -> error "mkIfCxtInstances: unexpected instance"
-    _ -> fail $ show name ++ " is not a class name."
-
-mkInstance :: Cxt -> Type -> Name -> [Dec]
-mkInstance cx t name =
-  [ InstanceD
-      (Just Overlaps)
-      (map relaxCxt cx)
-      (relaxCxt (AppT (ConT name) t))
-      [ FunD
-          'ifCxt
-          [ Clause
-              [ WildP,
-                VarP (mkName "t"),
-                if null cx then WildP else VarP (mkName "f")
-              ]
-              (NormalB (mkIfCxtFun cx))
-              []
-          ]
-      ]
-  ]
+mkInstance :: Cxt -> Type -> Name -> StateT (Set Name) Q [Dec]
+mkInstance cx t name = do
+  prereqs <- fmap concat $
+    forM cx $ \case
+      AppT (ConT n) _
+        | n == ''IfCxt -> return []
+        | otherwise -> mkIfCxtInstancesState n
+      _ -> return []
+  return
+    ( prereqs
+        ++ [ InstanceD
+               Nothing
+               (map relaxCxt cx)
+               (relaxCxt (AppT (ConT name) t))
+               [ FunD
+                   'ifCxt
+                   [ Clause
+                       [ WildP,
+                         VarP (mkName "t"),
+                         if null cx then WildP else VarP (mkName "f")
+                       ]
+                       (NormalB (mkIfCxtFun cx))
+                       []
+                   ]
+               ]
+           ]
+    )
 
 relaxCxt :: Type -> Type
 relaxCxt t@(AppT (ConT c) _)
@@ -89,6 +113,7 @@ mkIfCxtFun (c : cs) =
 -- 'Show' instance is available, it can be used; otherwise, a default answer can
 -- be provided.
 class IfCxt (Show a) => OptionalShow a
+
 instance IfCxt (Show a) => OptionalShow a
 
 -- | Like 'show', but with a default answer to be used when there is no 'Show'
