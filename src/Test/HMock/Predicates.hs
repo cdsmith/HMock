@@ -98,10 +98,7 @@ import Test.HMock.Internal.TH (removeModNames)
 import Test.HMock.Internal.Util (isSubsequenceOf, locate, withLoc)
 import Text.Regex.TDFA hiding (match, matchAll)
 
-deriveOptionalShow
-
 -- $setup
--- >>> :set -XExtendedDefaultRules
 -- >>> :set -XTemplateHaskell
 -- >>> :set -XTypeApplications
 -- >>> :set -Wno-type-defaults
@@ -151,16 +148,16 @@ anything =
 -- True
 -- >>> accept (eq "foo") "bar"
 -- False
-eq :: (OptionalShow a, Eq a) => a -> Predicate a
+eq :: (Show a, Eq a) => a -> Predicate a
 eq x =
   Predicate
-    { showPredicate = showOr "= expected" x,
-      showNegation = "≠ " ++ showOr "expected" x,
+    { showPredicate = show x,
+      showNegation = "≠ " ++ show x,
       accept = (== x),
       explain = \y ->
         if y == x
-          then showOr "value" y ++ " = " ++ showOr "expected" x
-          else showOr "value" y ++ " ≠ " ++ showOr "expected" x
+          then show y ++ " = " ++ show x
+          else show y ++ " ≠ " ++ show x
     }
 
 -- | A 'Predicate' that accepts anything but the given value.
