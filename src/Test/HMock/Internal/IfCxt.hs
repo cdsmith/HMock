@@ -12,8 +12,6 @@
 -- instances.  The implementation here is based heavily on the code at
 -- <https://github.com/mikeizbicki/ifcxt>, by Mike Izbicki, but is reproduced
 -- here for release management reasons.
---
--- TODO: Recursively define instances for classes in contexts.
 module Test.HMock.Internal.IfCxt where
 
 import Control.Monad (forM, unless)
