@@ -166,7 +166,7 @@ eq x =
 -- False
 -- >>> accept (neq "foo") "bar"
 -- True
-neq :: (OptionalShow a, Eq a) => a -> Predicate a
+neq :: (Show a, Eq a) => a -> Predicate a
 neq = notP . eq
 
 -- | A 'Predicate' that accepts anything greater than the given value.
