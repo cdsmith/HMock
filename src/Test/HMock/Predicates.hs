@@ -9,10 +9,6 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
--- Orphan instances are enabled to allow the declaration of IfCxt orphans by
--- mkIfCxtInstances.  This is safe because all IfCxt instances derived in this
--- way are equivalent.
-{-# OPTIONS_GHC -fno-warn-orphans #-}
 
 -- | This module defines 'Predicate's which you can use to match the arguments
 -- of a method in your execution plan.
@@ -73,12 +69,6 @@ module Test.HMock.Predicates
     qWith,
     qMatch,
     typed,
-
-    -- * The OptionalShow class
-    OptionalShow,
-    deriveOptionalShow,
-    ifShow,
-    showOr,
   )
 where
 
@@ -93,7 +83,6 @@ import GHC.Stack (HasCallStack, callStack)
 import Language.Haskell.TH (ExpQ, PatQ, pprint)
 import Language.Haskell.TH.Syntax (lift)
 import Test.HMock.Internal.FlowMatcher (bipartiteMatching)
-import Test.HMock.Internal.IfCxt
 import Test.HMock.Internal.TH (removeModNames)
 import Test.HMock.Internal.Util (isSubsequenceOf, locate, withLoc)
 import Text.Regex.TDFA hiding (match, matchAll)
