@@ -2,11 +2,11 @@ import Classes (classTests)
 import Core (coreTests)
 import Demo (demoSpec)
 import qualified DocTests.All
-import ExpectSet
+import ExpectSet (expectSetSpec)
 import Extras (multiplicityTests, predicateTests)
+import TH (thUtilSpec)
 import qualified Test.DocTest.Driver as DocTest
 import Test.Hspec (hspec)
-import TH
 
 main :: IO ()
 main = do
