@@ -52,8 +52,8 @@ class ExpectContext (ctx :: (Type -> Type) -> Type -> Type) where
   -- @
   --
   -- In this example, `readFile` must be called exactly twice by the tested
-  -- code, and will return "lorem ipsum" the first time, but something different the
-  -- second time.
+  -- code, and will return "lorem ipsum" the first time, but something different
+  -- the second time.
   expect ::
     ( HasCallStack,
       MonadIO m,
@@ -69,7 +69,7 @@ class ExpectContext (ctx :: (Type -> Type) -> Type -> Type) where
   --   'Test.HMock.MockT.runMockT' '$' do
   --     'expect' '$' MakeList
   --     'expectN' ('Test.HMock.atLeast' 2) '$'
-  --       CheckList "Cindy Lou Who" 'Test.HMock.Rule.|->' "nice"
+  --       CheckList "Cindy Lou Who" 'Test.HMock.Rule.|->' Nice
   --
   --     callCodeUnderTest
   -- @
@@ -94,8 +94,10 @@ class ExpectContext (ctx :: (Type -> Type) -> Type -> Type) where
   --
   -- @
   --   'Test.HMock.MockT.runMockT' '$' do
-  --     'expectAny' '$' ReadFile_ anything 'Test.HMock.Rule.|->' "tlhIngan maH!"
-  --     'expectAny' '$' ReadFile "config.txt" 'Test.HMock.Rule.|->' "lang: klingon"
+  --     'expectAny' '$'
+  --       ReadFile_ anything 'Test.HMock.Rule.|->' "tlhIngan maH!"
+  --     'expectAny' '$'
+  --       ReadFile "config.txt" 'Test.HMock.Rule.|->' "lang: klingon"
   --
   --     callCodeUnderTest
   -- @
@@ -129,7 +131,7 @@ class ExpectContext (ctx :: (Type -> Type) -> Type -> Type) where
 
   -- | Combines multiple expectations, which can occur in any order.  Most of
   -- the time, you can achieve the same thing by expecting each separately, but
-  -- this can be combined in complex expectations to describe more complex
+  -- this can be combined in compound expectations to describe more complex
   -- ordering constraints.
   --
   -- If ambiguity checking is disabled, the choice is left-biased, so earlier
