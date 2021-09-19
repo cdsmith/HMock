@@ -13,24 +13,19 @@ module Test.HMock.Internal.TH
     freeTypeVars,
     relevantContext,
     constrainVars,
-    unifyTypes,
     removeModNames,
     hasPolyType,
     hasNestedPolyType,
     resolveInstance,
     resolveInstanceType,
     simplifyContext,
-    localizeMember,
   )
 where
 
-import Control.Monad.Extra (mapMaybeM)
 import Data.Generics
-import Data.List ((\\))
 import Data.Maybe (catMaybes, fromMaybe)
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax (NameFlavour (..))
-import Test.HMock.Internal.Util (choices)
 import Data.Foldable (foldl')
 
 #if MIN_VERSION_template_haskell(2,17,0)
@@ -114,56 +109,6 @@ relevantContext ty (tvs, cx) = (filter needsTv tvs, filteredCx)
     filteredCx = filter (any (`elem` freeTypeVars ty) . freeTypeVars) cx
     needsTv v = any ((v `elem`) . freeTypeVars) (ty : filteredCx)
 
--- | Attempts to unify the given types by constructing a table of substitutions
--- for the variables of the left type that obtain the right one.
-unifyTypes :: Type -> Type -> Q (Maybe [(Name, Type)])
-unifyTypes = unifyTypesWith []
-
--- | Unify types, but starting with a table of substitutions.
-unifyTypesWith :: [(Name, Type)] -> Type -> Type -> Q (Maybe [(Name, Type)])
-unifyTypesWith tbl (VarT v) t2
-  | Just t1 <- lookup v tbl = unifyTypesWith tbl t1 t2
-  | otherwise = return (Just ((v, t2) : tbl))
-unifyTypesWith tbl (ConT a) (ConT b) | a == b = return (Just tbl)
-unifyTypesWith tbl a b = do
-  mbA <- replaceSyn a
-  mbB <- replaceSyn b
-  case (mbA, mbB) of
-    (Nothing, Nothing) -> unifyWithin tbl a b
-    _ -> unifyTypesWith tbl (fromMaybe a mbA) (fromMaybe b mbB)
-  where
-    replaceSyn :: Type -> Q (Maybe Type)
-    replaceSyn (ConT n) = do
-      info <- reify n
-      case info of
-        TyConI (TySynD _ [] t) -> return (Just t)
-        _ -> return Nothing
-    replaceSyn _ = return Nothing
-
--- Unifies the types that occur within the arguments, starting with a table of
--- substitutions.
-unifyWithin ::
-  (Data a, Data b) => [(Name, Type)] -> a -> b -> Q (Maybe [(Name, Type)])
-unifyWithin tbl a b
-  | toConstr a == toConstr b =
-    compose (gzipWithQ (\a' b' tbl' -> unify tbl' a' b') a b) tbl
-  | otherwise = return Nothing
-  where
-    unify ::
-      (Data a, Data b) => [(Name, Type)] -> a -> b -> Q (Maybe [(Name, Type)])
-    unify tbl' a' b' = do
-      case (cast a', cast b') of
-        (Just a'', Just b'') -> unifyTypesWith tbl' a'' b''
-        _ -> unifyWithin tbl' a' b'
-
-    compose :: Monad m => [t -> m (Maybe t)] -> t -> m (Maybe t)
-    compose [] x = return (Just x)
-    compose (f : fs) x = do
-      y <- f x
-      case y of
-        Just y' -> compose fs y'
-        _ -> return Nothing
-
 -- | Removes all module names from 'Name's in the given value, so that it will
 -- pretty-print more cleanly.
 removeModNames :: Data a => a -> a
@@ -213,6 +158,51 @@ resolveInstance cls args = do
         _ -> return Nothing
     tryInstance _ _ = return Nothing
 
+-- | Unifies the types that occur within the arguments, starting with a table of
+-- substitutions.
+unifyWithin ::
+  (Data a, Data b) => [(Name, Type)] -> a -> b -> Q (Maybe [(Name, Type)])
+unifyWithin tbl a b
+  | toConstr a == toConstr b =
+    compose (gzipWithQ (\a' b' tbl' -> unify tbl' a' b') a b) tbl
+  | otherwise = return Nothing
+  where
+    unify ::
+      (Data a, Data b) => [(Name, Type)] -> a -> b -> Q (Maybe [(Name, Type)])
+    unify tbl' a' b' = do
+      case (cast a', cast b') of
+        (Just a'', Just b'') -> unifyTypesWith tbl' a'' b''
+        _ -> unifyWithin tbl' a' b'
+
+    compose :: Monad m => [t -> m (Maybe t)] -> t -> m (Maybe t)
+    compose [] x = return (Just x)
+    compose (f : fs) x = do
+      y <- f x
+      case y of
+        Just y' -> compose fs y'
+        _ -> return Nothing
+
+-- | Unify types, but starting with a table of substitutions.
+unifyTypesWith :: [(Name, Type)] -> Type -> Type -> Q (Maybe [(Name, Type)])
+unifyTypesWith tbl (VarT v) t2
+  | Just t1 <- lookup v tbl = unifyTypesWith tbl t1 t2
+  | otherwise = return (Just ((v, t2) : tbl))
+unifyTypesWith tbl (ConT a) (ConT b) | a == b = return (Just tbl)
+unifyTypesWith tbl a b = do
+  mbA <- replaceSyn a
+  mbB <- replaceSyn b
+  case (mbA, mbB) of
+    (Nothing, Nothing) -> unifyWithin tbl a b
+    _ -> unifyTypesWith tbl (fromMaybe a mbA) (fromMaybe b mbB)
+  where
+    replaceSyn :: Type -> Q (Maybe Type)
+    replaceSyn (ConT n) = do
+      info <- reify n
+      case info of
+        TyConI (TySynD _ [] t) -> return (Just t)
+        _ -> return Nothing
+    replaceSyn _ = return Nothing
+
 -- | Attempts to produce sufficient constraints for the given 'Type' to be a
 -- satisfied constraint.  The type should be a class applied to its type
 -- parameters.
@@ -232,29 +222,3 @@ simplifyContext (p : preds) =
         Nothing -> return Nothing
     _ -> fmap (p :) <$> simplifyContext preds
 simplifyContext [] = return (Just [])
-
--- | Remove instance context from a method.
---
--- Some GHC versions report class members including the instance context (for
--- example, @show :: Show a => a -> String@, instead of @show :: a -> String@).
--- This looks for the instance context, and substitutes if needed to eliminate
--- it.
-localizeMember :: Type -> Name -> Type -> Q Type
-localizeMember instTy m t@(ForallT tvs cx ty) = do
-  let fullConstraint = AppT instTy (VarT m)
-  let unifyLeft (c, cs) = fmap (,cs) <$> unifyTypes c fullConstraint
-  results <- mapMaybeM unifyLeft (choices cx)
-  case results of
-    ((tbl, remainingCx) : _) -> do
-      let cx' = substTypeVars tbl <$> remainingCx
-          ty' = substTypeVars tbl ty
-          (tvs', cx'') =
-            relevantContext
-              ty'
-              ((tvName <$> tvs) \\ (fst <$> tbl), cx')
-          t'
-            | null tvs' && null cx'' = ty'
-            | otherwise = ForallT (bindVar <$> tvs') cx'' ty'
-      return t'
-    _ -> return t
-localizeMember _ _ t = return t

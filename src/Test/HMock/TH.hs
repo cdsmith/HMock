@@ -177,7 +177,7 @@ makeInstance ::
   [Dec] ->
   Q Instance
 makeInstance options ty cx tbl ps m members = do
-  processedMembers <- mapM (getMethod ty m tbl) members
+  processedMembers <- mapM (getMethod m tbl) members
   (extraMembers, methods) <-
     partitionEithers <$> zipWithM memberOrMethod members processedMembers
   return $
@@ -196,9 +196,9 @@ makeInstance options ty cx tbl ps m members = do
       return (Left dec)
     memberOrMethod _ (Right method) = return (Right method)
 
-getMethod :: Type -> Name -> [(Name, Type)] -> Dec -> Q (Either [String] Method)
-getMethod instTy m tbl (SigD name ty) = do
-  simpleTy <- localizeMember instTy m (substTypeVars tbl ty)
+getMethod :: Name -> [(Name, Type)] -> Dec -> Q (Either [String] Method)
+getMethod m tbl (SigD name ty) = do
+  let simpleTy = substTypeVars tbl ty
   let (tvs, cx, args, mretval) = splitType simpleTy
   return $ do
     retval <- case mretval of
@@ -235,25 +235,25 @@ getMethod instTy m tbl (SigD name ty) = do
   where
     isVarTypeable :: Cxt -> Name -> Bool
     isVarTypeable cx v = AppT (ConT ''Typeable) (VarT v) `elem` cx
-getMethod _ _ _ (DataD _ name _ _ _ _) =
+getMethod _ _ (DataD _ name _ _ _ _) =
   return $
     Left [nameBase name ++ " must be defined manually in MockT instance."]
-getMethod _ _ _ (NewtypeD _ name _ _ _ _) =
+getMethod _ _ (NewtypeD _ name _ _ _ _) =
   return $
     Left [nameBase name ++ " must be defined manually in MockT instance."]
-getMethod _ _ _ (TySynD name _ _) =
+getMethod _ _ (TySynD name _ _) =
   return $
     Left [nameBase name ++ " must be defined manually in MockT instance."]
-getMethod _ _ _ (DataFamilyD name _ _) =
+getMethod _ _ (DataFamilyD name _ _) =
   return $
     Left [nameBase name ++ " must be defined manually in MockT instance."]
-getMethod _ _ _ (OpenTypeFamilyD (TypeFamilyHead name _ _ _)) =
+getMethod _ _ (OpenTypeFamilyD (TypeFamilyHead name _ _ _)) =
   return $
     Left [nameBase name ++ " must be defined manually in MockT instance."]
-getMethod _ _ _ (ClosedTypeFamilyD (TypeFamilyHead name _ _ _) _) =
+getMethod _ _ (ClosedTypeFamilyD (TypeFamilyHead name _ _ _) _) =
   return $
     Left [nameBase name ++ " must be defined manually in MockT instance."]
-getMethod _ _ _ _ = return (Left [])
+getMethod _ _ _ = return (Left [])
 
 isKnownType :: Method -> Type -> Bool
 isKnownType method ty = null tyVars && null cx
