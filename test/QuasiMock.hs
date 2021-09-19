@@ -10,6 +10,7 @@ import Language.Haskell.TH hiding (Match)
 import Language.Haskell.TH.Syntax hiding (Match)
 import QuasiMockBase
 import Test.HMock
+import Test.Predicates (anything, elemsAre, eq, is, qMatch)
 
 #if !MIN_VERSION_base(4, 13, 0)
 import Control.Monad.Fail (MonadFail)

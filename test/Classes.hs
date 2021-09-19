@@ -26,6 +26,7 @@ import Language.Haskell.TH.Syntax hiding (Type)
 import QuasiMock
 import Test.HMock
 import Test.Hspec
+import Test.Predicates (anything, eq, hasSubstr, qMatch, with)
 import Util.DeriveRecursive (deriveRecursive)
 
 #if MIN_VERSION_template_haskell(2, 16, 0)

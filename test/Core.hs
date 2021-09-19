@@ -24,6 +24,7 @@ import Data.IORef
 import Data.List (isInfixOf, isPrefixOf)
 import Test.HMock
 import Test.Hspec
+import Test.Predicates (anything, eq, hasSubstr, is)
 import qualified UnliftIO.Concurrent as UnliftIO
 import Prelude hiding (readFile, writeFile)
 import qualified Prelude

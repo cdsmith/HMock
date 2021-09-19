@@ -39,8 +39,8 @@ import Test.HMock.Internal.State (MockT)
 import Test.HMock.Internal.TH
 import Test.HMock.MockMethod (mockDefaultlessMethod, mockMethod)
 import Test.HMock.Mockable (MatchResult (..), Mockable, MockableBase (..))
-import Test.HMock.Predicates (Predicate (..), eq)
 import Test.HMock.Rule (Expectable (..))
+import Test.Predicates (Predicate (..), eq)
 
 -- | Custom options for deriving 'MockableBase' and related instances.
 data MakeMockableOptions = MakeMockableOptions

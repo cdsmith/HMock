@@ -83,14 +83,6 @@ module Test.HMock
     -- for the execution plan.
     module Test.HMock.ExpectContext,
 
-    -- * Predicates
-
-    -- | When matching methods, you can either match on exact parameter values,
-    -- or using 'Predicate's.  The 'Predicate' type either accepts or rejects
-    -- values of parameters, and HMock provides an extensive library of standard
-    -- 'Predicate's to make it easier to match exactly what you want to.
-    module Test.HMock.Predicates,
-
     -- * Multiplicity
 
     -- | For repeated actions in your execution plan, you often want to control
@@ -120,6 +112,5 @@ import Test.HMock.MockT
 import Test.HMock.MockMethod
 import Test.HMock.Mockable
 import Test.HMock.Multiplicity
-import Test.HMock.Predicates
 import Test.HMock.Rule
 import Test.HMock.TH

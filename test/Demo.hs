@@ -21,7 +21,6 @@ import Test.HMock
   ( MakeMockableOptions (..),
     Mockable (..),
     allowUnexpected,
-    anything,
     expect,
     expectAny,
     makeMockable,
@@ -31,6 +30,7 @@ import Test.HMock
     (|=>),
   )
 import Test.Hspec (SpecWith, describe, example, it)
+import Test.Predicates (anything)
 import Prelude hiding (appendFile, readFile, writeFile)
 
 -- This is an in-depth example of using HMock to test a system with dependencies

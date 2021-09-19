@@ -4,8 +4,6 @@
 -- | Internal utilities used for HMock implementation.
 module Test.HMock.Internal.Util where
 
-import Data.MonoTraversable (Element)
-import qualified Data.Sequences as Seq
 import GHC.Stack (CallStack, getCallStack, prettySrcLoc)
 
 -- | A value together with its source location.
@@ -27,11 +25,3 @@ withLoc (Loc (Just loc) s) = s ++ " at " ++ loc
 choices :: [a] -> [(a, [a])]
 choices [] = []
 choices (x : xs) = (x, xs) : (fmap (x :) <$> choices xs)
-
--- | Checks if one sequence is a subsequence of another.
-isSubsequenceOf :: (Seq.IsSequence t, Eq (Element t)) => t -> t -> Bool
-xs `isSubsequenceOf` ys = case Seq.uncons xs of
-  Nothing -> True
-  Just (x, xs') -> case Seq.uncons (snd (Seq.break (== x) ys)) of
-    Nothing -> False
-    Just (_, ys') -> xs' `isSubsequenceOf` ys'

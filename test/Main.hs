@@ -3,7 +3,7 @@ import Core (coreTests)
 import Demo (demoSpec)
 import qualified DocTests.All
 import ExpectSet (expectSetSpec)
-import Extras (multiplicityTests, predicateTests)
+import Multiplicity (multiplicityTests)
 import TH (thUtilSpec)
 import qualified Test.DocTest.Driver as DocTest
 import Test.Hspec (hspec)
@@ -12,7 +12,6 @@ main :: IO ()
 main = do
   hspec $ do
     multiplicityTests
-    predicateTests
     expectSetSpec
     coreTests
     classTests
