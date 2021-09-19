@@ -36,8 +36,13 @@ instance (Typeable m, MonadFail m, MonadIO m) => Quasi (MockT m) where
   qPutQ a = mockMethod (QPutQ a)
   qIsExtEnabled e = mockDefaultlessMethod (QIsExtEnabled e)
   qExtsEnabled = mockMethod QExtsEnabled
+
+#if MIN_VERSION_template_haskell(2, 14, 0)
   qAddTempFile s = mockMethod (QAddTempFile s)
   qAddForeignFilePath l s = mockMethod (QAddForeignFilePath l s)
+#else
+  qAddForeignFile l s = mockMethod (QAddForeignFile l s)
+#endif
 
 #if MIN_VERSION_template_haskell(2, 16, 0)
   qReifyType n = mockDefaultlessMethod (QReifyType n)
