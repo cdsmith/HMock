@@ -53,7 +53,7 @@ library
                       mtl >= 2.2.2 && < 2.3,
                       stm >= 2.5.0 && < 2.6,
                       syb >= 0.7.2 && < 0.8,
-                      template-haskell >= 2.13.0 && < 2.18,
+                      template-haskell >= 2.14 && < 2.18,
                       transformers-base >= 0.4.5 && < 0.5,
                       unliftio >= 0.2.18 && < 0.3,
     hs-source-dirs:   src
