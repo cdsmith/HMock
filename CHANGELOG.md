@@ -1,6 +1,6 @@
 # Revision history for hmock
 
-## 0.x.0.0 -- 2021-??-??
+## 0.5.0.0 -- 2021-09-25
 * HMock now depends on `Predicate` from the `explainable-predicates` package.
 
 ## 0.4.0.0 -- 2021-08-22
