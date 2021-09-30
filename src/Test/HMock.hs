@@ -34,7 +34,7 @@
 -- copyFile :: MonadFilesystem m => 'FilePath' -> 'FilePath' -> m ()
 -- copyFile a b = readFile a >>= writeFile b
 --
--- 'Test.HMock.TH.makeMockable' ''MonadFilesystem
+-- 'Test.HMock.TH.makeMockable' [t|MonadFilesystem|]
 --
 -- spec = describe "copyFile" '$'
 --   it "reads a file and writes its contents to another file" '$'

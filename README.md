@@ -312,7 +312,7 @@ class MonadFoo m where
   mockThis :: String -> m ()
   butNotThis :: Int -> m String
 
-makeMockableWithOptions ''MonadFoo def { mockDeriveForMockT = False }
+makeMockableWithOptions [t|MonadFoo|] def { mockDeriveForMockT = False }
 
 instance (Monad m, Typeable m) => MonadFoo (MockT m) where
   mockThis x = mockMethod (MockThis x)
@@ -428,7 +428,7 @@ From that point forward, ambiguous matches will throw errors.
 ### How do I mock multi-parameter type classes?
 
 In order to mock a multi-parameter type class, the monad argument `m` must be
-the last type variable.  Then just use `makeMockable ''MonadMPTC`.
+the last type variable.  Then just use `makeMockable [t|MonadMPTC|]`.
 
 ### How do I mock classes with functional dependencies?
 
@@ -438,7 +438,7 @@ We will consider classes of the form
 class MonadMPTC a b c m | m -> a b c
 ```
 
-If you try to use `makeMockable ''MonadMPTC`, it will fail.  The functional
+If you try to use `makeMockable [t|MonadMPTC|]`, it will fail.  The functional
 dependency requires that `a`, `b`, and `c` are determined by `m`, but we cannot
 determine them for the `MockT` instance.
 
