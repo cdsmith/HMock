@@ -36,7 +36,7 @@ import Test.HMock.Internal.Util (Located)
 import Test.HMock.Mockable (Mockable (..))
 import UnliftIO
   ( MonadIO,
-    MonadUnliftIO,
+    MonadUnliftIO(withRunInIO),
     STM,
     TVar,
     atomically,
@@ -198,12 +198,16 @@ newtype MockT m a where
       MonadBase b,
       MonadCatch,
       MonadMask,
-      MonadThrow,
-      MonadUnliftIO
+      MonadThrow
     )
 
 instance MonadTrans MockT where
   lift = MockT . lift
+
+-- Note: The 'MonadUnliftIO' instance is implemented manually because deriving
+-- it causes compilation failure in GHC 8.6 and 8.8.  (See issue #23.)
+instance MonadUnliftIO m => MonadUnliftIO (MockT m) where
+  withRunInIO inner = MockT $ withRunInIO $ \run -> inner (run . unMockT)
 
 -- | Applies a function to the base monad of 'MockT'.
 mapMockT :: (m a -> m b) -> MockT m a -> MockT m b
