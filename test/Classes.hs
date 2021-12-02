@@ -1,5 +1,6 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -543,6 +544,32 @@ polyResultTests = describe "MonadPolyResult" $ do
       x <- polyResult (3 :: Int)
       liftIO $ x `shouldBe` 3
 
+class MonadDefaultSignatures m where
+  methodWithDefault :: Int -> m Int
+
+  default methodWithDefault :: MonadIO m => Int -> m Int
+  methodWithDefault = liftIO . methodWithDefault
+
+instance MonadDefaultSignatures IO where
+  methodWithDefault = pure
+
+makeMockable [t|MonadDefaultSignatures|]
+
+defaultSignaturesTests :: SpecWith ()
+defaultSignaturesTests = describe "MonadDefaultSignatures" $ do
+  it "generates mock impl" $
+    example $ do
+      decs <- runMockT $ do
+        allowUnexpected $ QReifyInstances_ anything anything |-> []
+        $(onReify [|expectAny|] ''MonadDefaultSignatures)
+        runQ (makeMockable [t|MonadDefaultSignatures|])
+      evaluate (rnf decs)
+  it "is mockable" $
+    example . runMockT $ do
+      expect $ MethodWithDefault_ anything |=> \MethodWithDefault{} -> return 42
+      x <- methodWithDefault 0
+      liftIO $ x `shouldBe` 42
+
 class MonadExtraneousMembers m where
   data SomeDataType m
   favoriteNumber :: SomeDataType m -> Int
@@ -812,6 +839,7 @@ classTests = describe "makeMockable" $ do
   polyArgTests
   unshowableArgTests
   monadInArgTests
+  defaultSignaturesTests
   extraneousMembersTests
   rankNTests
   defaultReturnTests

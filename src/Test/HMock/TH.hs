@@ -177,7 +177,7 @@ makeInstance ::
   [Dec] ->
   Q Instance
 makeInstance options ty cx tbl ps m members = do
-  processedMembers <- mapM (getMethod ty m tbl) members
+  processedMembers <- mapM (getMethod ty m tbl) $ filter isRelevantMember members
   (extraMembers, methods) <-
     partitionEithers <$> zipWithM memberOrMethod members processedMembers
   return $
@@ -190,6 +190,10 @@ makeInstance options ty cx tbl ps m members = do
         instExtraMembers = extraMembers
       }
   where
+    isRelevantMember :: Dec -> Bool
+    isRelevantMember DefaultSigD{} = False
+    isRelevantMember _ = True
+
     memberOrMethod :: Dec -> Either [String] Method -> Q (Either Dec Method)
     memberOrMethod dec (Left warnings) = do
       when (mockVerbose options) $ mapM_ reportWarning warnings
