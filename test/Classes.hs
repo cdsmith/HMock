@@ -141,9 +141,8 @@ simpleTests = describe "MonadSimple" $ do
   it "fails when too many params are given" $
     example $ do
       let tooManyParams = runMockT $ do
+            allowUnexpected $ QReifyInstances_ anything anything |-> []
             $(onReify [|expectAny|] ''MonadSimple)
-            $(onReifyInstances [|expectAny|] ''MockableBase [[t|MonadSimple|]])
-            $(onReifyInstances [|expectAny|] ''Mockable [[t|MonadSimple|]])
             expect $
               QReport_ anything (hasSubstr "is applied to too many arguments")
 
@@ -277,6 +276,29 @@ superTests = describe "MonadSuper" $ do
 
       success
       failure `shouldThrow` anyException
+
+class MissingSuperClass (m :: Type -> Type)
+
+class (MissingSuperClass m, Monad m, Typeable m) => MonadMissingSuper m where
+  withMissingSuper :: m ()
+
+$(pure [])
+
+missingSuperTests :: SpecWith ()
+missingSuperTests = describe "MonadMissingSuper" $ do
+  it "generates an error" $ do
+    example $ do
+      let test = runMockT $ do
+            allowUnexpected $ QReifyInstances_ anything anything |-> []
+            $(onReify [|expectAny|] ''MonadMissingSuper)
+
+            expect $
+              QReport_ anything (eq "Missing MockT instance for a superclass.")
+
+            _ <- runQ (makeMockable [t|MonadMissingSuper|])
+            return ()
+
+      test `shouldThrow` anyQMonadFailure
 
 class MonadMPTC a m where
   mptc :: a -> m ()
@@ -436,8 +458,8 @@ polyArgTests = describe "MonadPolyArg" $ do
   it "fails without RankNTypes" $
     example $ do
       let missingRankNTypes = runMockT $ do
+            allowUnexpected $ QReifyInstances_ anything anything |-> []
             $(onReify [|expectAny|] ''MonadPolyArg)
-            $(onReifyInstances [|expectAny|] ''MockableBase [[t|MonadPolyArg|]])
             expectAny $ QIsExtEnabled RankNTypes |-> False
             expect $
               QReport_ anything (hasSubstr "Please enable RankNTypes")
@@ -646,17 +668,8 @@ extraneousMembersTests = describe "MonadExtraneousMembers" $ do
   it "fails to derive MockT when class has extra methods" $
     example $ do
       let unmockableMethods = runMockT $ do
+            allowUnexpected $ QReifyInstances_ anything anything |-> []
             $(onReify [|expectAny|] ''MonadExtraneousMembers)
-            $( onReifyInstances
-                 [|expectAny|]
-                 ''MockableBase
-                 [[t|MonadExtraneousMembers|]]
-             )
-            $( onReifyInstances
-                 [|expectAny|]
-                 ''Mockable
-                 [[t|MonadExtraneousMembers|]]
-             )
             expect $
               QReport_ anything (hasSubstr "has unmockable methods")
 
@@ -847,6 +860,7 @@ classTests = describe "makeMockable" $ do
   suffixTests
   setupTests
   superTests
+  missingSuperTests
   mptcTests
   fdSpecializedTests
   fdGeneralTests
