@@ -46,7 +46,8 @@ deriveRecursive Nothing ''Lift ''InstanceDec
 reifyInstancesStatic :: Name -> [Type] -> Q Exp
 reifyInstancesStatic n ts = reifyInstances n ts >>= lift
 
-onReifyInstances :: Q Exp -> Name -> [Type] -> Q Exp
-onReifyInstances handler n ts = do
+onReifyInstances :: Q Exp -> Name -> [Q Type] -> Q Exp
+onReifyInstances handler n qts = do
+  ts <- sequence qts
   result <- reifyInstances n ts
   [|$handler (QReifyInstances $(lift n) $(lift ts) |-> $(lift result))|]

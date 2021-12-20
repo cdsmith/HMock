@@ -68,22 +68,18 @@ instance Mockable Quasi where
     $(onReify [|allowUnexpected|] ''Enum)
     $(onReify [|allowUnexpected|] ''Monad)
 
-    $(onReifyInstances [|allowUnexpected|] ''Show [ConT ''String])
-    $(onReifyInstances [|allowUnexpected|] ''Eq [ConT ''String])
-    $(onReifyInstances [|allowUnexpected|] ''Show [ConT ''Char])
-    $(onReifyInstances [|allowUnexpected|] ''Eq [ConT ''Char])
-    $(onReifyInstances [|allowUnexpected|] ''Show [ConT ''Int])
-    $(onReifyInstances [|allowUnexpected|] ''Eq [ConT ''Int])
-    $(onReifyInstances [|allowUnexpected|] ''Show [ConT ''Bool])
-    $(onReifyInstances [|allowUnexpected|] ''Eq [ConT ''Bool])
-    $(onReifyInstances [|allowUnexpected|] ''Default [TupleT 0])
-    $(onReifyInstances [|allowUnexpected|] ''Default [ConT ''String])
-    $(onReifyInstances [|allowUnexpected|] ''Default [ConT ''Int])
-    $( onReifyInstances
-         [|allowUnexpected|]
-         ''Default
-         [AppT (ConT ''Maybe) (ConT ''Bool)]
-     )
+    $(onReifyInstances [|allowUnexpected|] ''Show [[t|String|]])
+    $(onReifyInstances [|allowUnexpected|] ''Eq [[t|String|]])
+    $(onReifyInstances [|allowUnexpected|] ''Show [[t|Char|]])
+    $(onReifyInstances [|allowUnexpected|] ''Eq [[t|Char|]])
+    $(onReifyInstances [|allowUnexpected|] ''Show [[t|Int|]])
+    $(onReifyInstances [|allowUnexpected|] ''Eq [[t|Int|]])
+    $(onReifyInstances [|allowUnexpected|] ''Show [[t|Bool|]])
+    $(onReifyInstances [|allowUnexpected|] ''Eq [[t|Bool|]])
+    $(onReifyInstances [|allowUnexpected|] ''Default [[t|()|]])
+    $(onReifyInstances [|allowUnexpected|] ''Default [[t|String|]])
+    $(onReifyInstances [|allowUnexpected|] ''Default [[t|Int|]])
+    $(onReifyInstances [|allowUnexpected|] ''Default [[t|Maybe Bool|]])
 
     allowUnexpected $ QReifyInstances_ (eq ''Show) (is functionType) |-> []
     allowUnexpected $ QReifyInstances_ (eq ''Eq) (is functionType) |-> []

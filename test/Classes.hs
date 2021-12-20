@@ -17,11 +17,12 @@
 module Classes where
 
 import Control.DeepSeq (NFData (rnf))
-import Control.Exception (evaluate)
+import Control.Exception (SomeException, evaluate)
 import Control.Monad.Trans (MonadIO, liftIO)
 import Data.Default (Default (def))
 import Data.Dynamic (Typeable)
 import Data.Kind (Type)
+import Data.List (isInfixOf)
 import Language.Haskell.TH.Syntax hiding (Type)
 import QuasiMock
 import Test.HMock
@@ -35,6 +36,9 @@ instance NFData Bytes where rnf = undefined
 #endif
 
 deriveRecursive (Just AnyclassStrategy) ''NFData ''Dec
+
+anyQMonadFailure :: SomeException -> Bool
+anyQMonadFailure e = "(Q monad failure)" `isInfixOf` show e
 
 class MonadSimple m where
   simple :: String -> m ()
@@ -69,7 +73,7 @@ simpleTests = describe "MonadSimple" $ do
             _ <- runQ (makeMockable [t|MonadSimple|])
             return ()
 
-      missingGADTs `shouldThrow` anyException
+      missingGADTs `shouldThrow` anyQMonadFailure
 
   it "fails when TypeFamilies is disabled" $
     example $ do
@@ -80,7 +84,7 @@ simpleTests = describe "MonadSimple" $ do
             _ <- runQ (makeMockable [t|MonadSimple|])
             return ()
 
-      missingTypeFamilies `shouldThrow` anyException
+      missingTypeFamilies `shouldThrow` anyQMonadFailure
 
   it "fails when DataKinds is disabled" $
     example $ do
@@ -91,7 +95,7 @@ simpleTests = describe "MonadSimple" $ do
             _ <- runQ (makeMockable [t|MonadSimple|])
             return ()
 
-      missingDataKinds `shouldThrow` anyException
+      missingDataKinds `shouldThrow` anyQMonadFailure
 
   it "fails when FlexibleInstances is disabled" $
     example $ do
@@ -103,7 +107,7 @@ simpleTests = describe "MonadSimple" $ do
             _ <- runQ (makeMockable [t|MonadSimple|])
             return ()
 
-      missingDataKinds `shouldThrow` anyException
+      missingDataKinds `shouldThrow` anyQMonadFailure
 
   it "fails when MultiParamTypeClasses is disabled" $
     example $ do
@@ -117,7 +121,7 @@ simpleTests = describe "MonadSimple" $ do
             _ <- runQ (makeMockable [t|MonadSimple|])
             return ()
 
-      missingDataKinds `shouldThrow` anyException
+      missingDataKinds `shouldThrow` anyQMonadFailure
 
   it "fails when ScopedTypeVariables is disabled" $
     example $ do
@@ -131,19 +135,21 @@ simpleTests = describe "MonadSimple" $ do
             _ <- runQ (makeMockable [t|MonadSimple|])
             return ()
 
-      missingDataKinds `shouldThrow` anyException
+      missingDataKinds `shouldThrow` anyQMonadFailure
 
   it "fails when too many params are given" $
     example $ do
       let tooManyParams = runMockT $ do
             $(onReify [|expectAny|] ''MonadSimple)
+            $(onReifyInstances [|expectAny|] ''MockableBase [[t|MonadSimple|]])
+            $(onReifyInstances [|expectAny|] ''Mockable [[t|MonadSimple|]])
             expect $
               QReport_ anything (hasSubstr "is applied to too many arguments")
 
             _ <- runQ (makeMockable [t|MonadSimple IO|])
             return ()
 
-      tooManyParams `shouldThrow` anyException
+      tooManyParams `shouldThrow` anyQMonadFailure
 
   it "is mockable" $
     example $ do
@@ -430,6 +436,7 @@ polyArgTests = describe "MonadPolyArg" $ do
     example $ do
       let missingRankNTypes = runMockT $ do
             $(onReify [|expectAny|] ''MonadPolyArg)
+            $(onReifyInstances [|expectAny|] ''MockableBase [[t|MonadPolyArg|]])
             expectAny $ QIsExtEnabled RankNTypes |-> False
             expect $
               QReport_ anything (hasSubstr "Please enable RankNTypes")
@@ -437,7 +444,7 @@ polyArgTests = describe "MonadPolyArg" $ do
             _ <- runQ (makeMockable [t|MonadPolyArg|])
             return ()
 
-      missingRankNTypes `shouldThrow` anyException
+      missingRankNTypes `shouldThrow` anyQMonadFailure
 
   it "is mockable" $
     example $ do
@@ -613,13 +620,23 @@ extraneousMembersTests = describe "MonadExtraneousMembers" $ do
     example $ do
       let unmockableMethods = runMockT $ do
             $(onReify [|expectAny|] ''MonadExtraneousMembers)
+            $( onReifyInstances
+                 [|expectAny|]
+                 ''MockableBase
+                 [[t|MonadExtraneousMembers|]]
+             )
+            $( onReifyInstances
+                 [|expectAny|]
+                 ''Mockable
+                 [[t|MonadExtraneousMembers|]]
+             )
             expect $
               QReport_ anything (hasSubstr "has unmockable methods")
 
             _ <- runQ (makeMockable [t|MonadExtraneousMembers|])
             return ()
 
-      unmockableMethods `shouldThrow` anyException
+      unmockableMethods `shouldThrow` anyQMonadFailure
 
   it "is mockable" $
     example $ do
@@ -682,7 +699,7 @@ defaultReturnTests = do
         decs <- runMockT $ do
           allowUnexpected $ QReifyInstances_ anything anything |-> []
           $(onReify [|expectAny|] ''MonadManyReturns)
-          $(onReifyInstances [|expectAny|] ''Default [ConT ''NoDefault])
+          $(onReifyInstances [|expectAny|] ''Default [[t|NoDefault|]])
 
           runQ (makeMockable [t|MonadManyReturns|])
         evaluate (rnf decs)
@@ -738,10 +755,8 @@ nestedNoDefTests = describe "MonadNestedNoDef" $ do
       decs <- runMockT $ do
         allowUnexpected $ QReifyInstances_ anything anything |-> []
         $(onReify [|expectAny|] ''MonadNestedNoDef)
-        $( [t|(NoDefault, String)|]
-             >>= onReifyInstances [|expectAny|] ''Default . (: [])
-         )
-        $(onReifyInstances [|expectAny|] ''Default [ConT ''NoDefault])
+        $(onReifyInstances [|expectAny|] ''Default [[t|(NoDefault, String)|]])
+        $(onReifyInstances [|expectAny|] ''Default [[t|NoDefault|]])
 
         runQ (makeMockable [t|MonadNestedNoDef|])
       evaluate (rnf decs)
@@ -763,7 +778,7 @@ errorTests = describe "errors" $ do
             _ <- runQ (makeMockable [t|Int|])
             return ()
 
-      wrongKind `shouldThrow` anyException
+      wrongKind `shouldThrow` anyQMonadFailure
 
   it "fails when given an unexpected type constructor" $
     example $ do
@@ -773,7 +788,7 @@ errorTests = describe "errors" $ do
             _ <- runQ (makeMockable [t|(Int, String)|])
             return ()
 
-      notClass `shouldThrow` anyException
+      notClass `shouldThrow` anyQMonadFailure
 
   it "fails when class has no params" $
     example $ do
@@ -787,7 +802,7 @@ errorTests = describe "errors" $ do
             _ <- runQ (makeMockable [t|ClassWithNoParams|])
             return ()
 
-      tooManyParams `shouldThrow` anyException
+      tooManyParams `shouldThrow` anyQMonadFailure
 
   it "fails when class has no mockable methods" $
     example $ do
@@ -797,7 +812,7 @@ errorTests = describe "errors" $ do
             _ <- runQ (makeMockable [t|Show|])
             return ()
 
-      noMockableMethods `shouldThrow` anyException
+      noMockableMethods `shouldThrow` anyQMonadFailure
 
 classTests :: SpecWith ()
 classTests = describe "makeMockable" $ do

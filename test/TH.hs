@@ -66,10 +66,8 @@ thUtilSpec = do
       example $
         runMockT $ do
           $(onReify [|expectAny|] ''NotShowable)
-          $(onReifyInstances [|expectAny|] ''Show [ConT ''NotShowable])
-          $( [t|(Int, NotShowable)|]
-               >>= onReifyInstances [|expectAny|] ''Show . (: [])
-           )
+          $(onReifyInstances [|expectAny|] ''Show [[t|NotShowable|]])
+          $(onReifyInstances [|expectAny|] ''Show [[t|(Int, NotShowable)|]])
 
           t <- runQ [t|(Int, NotShowable)|]
           result <- runQ $ resolveInstance ''Show [t]
