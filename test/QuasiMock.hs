@@ -87,6 +87,17 @@ instance Mockable Quasi where
     allowUnexpected $
       QReifyInstances_
         (eq ''Show)
+        (elemsAre [$(qMatch [p|VarT _|])])
+        |-> $(reifyInstancesStatic ''Show [VarT (mkName "a")])
+    allowUnexpected $
+      QReifyInstances_
+        (eq ''Eq)
+        (elemsAre [$(qMatch [p|VarT _|])])
+        |-> $(reifyInstancesStatic ''Eq [VarT (mkName "a")])
+
+    allowUnexpected $
+      QReifyInstances_
+        (eq ''Show)
         (elemsAre [$(qMatch [p|AppT ListT (VarT _)|])])
         |-> $(reifyInstancesStatic ''Show [AppT ListT (VarT (mkName "a"))])
     allowUnexpected $

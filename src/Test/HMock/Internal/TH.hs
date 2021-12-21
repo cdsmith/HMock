@@ -24,14 +24,13 @@ module Test.HMock.Internal.TH
   )
 where
 
-import Control.Monad.Extra (mapMaybeM)
+import Control.Monad.Extra (mapMaybeM, concatMapM)
 import Data.Generics
-import Data.List ((\\))
+import Data.List ((\\), nub)
 import Data.Maybe (catMaybes, fromMaybe)
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax (NameFlavour (..))
 import Test.HMock.Internal.Util (choices)
-import Data.Foldable (foldl')
 
 #if MIN_VERSION_template_haskell(2,17,0)
 
@@ -188,50 +187,53 @@ hasPolyType = everything (||) (mkQ False isPolyType)
 -- | Attempts to produce sufficient constraints for the given 'Type' to be an
 -- instance of the given class 'Name'.
 resolveInstance :: Name -> [Type] -> Q (Maybe Cxt)
-resolveInstance cls args
-  | all isTypeVar args = return (Just [foldl' AppT (ConT cls) args])
-  where
-    isTypeVar :: Type -> Bool
-    isTypeVar (VarT _) = True
-    isTypeVar _ = False
 resolveInstance cls args = do
   decs <- reifyInstances cls args
-  result <- traverse (tryInstance args) decs
-  case catMaybes result of
-    [cx] -> return (Just (filter (not . null . freeTypeVars) cx))
+  results <- catMaybes <$> traverse (tryInstance args) decs
+  case results of
+    [cx] -> pure (Just cx)
     _ -> return Nothing
   where
     tryInstance :: [Type] -> InstanceDec -> Q (Maybe Cxt)
     tryInstance actualArgs (InstanceD _ cx instType _) =
       case splitTypeApp instType of
-        Just (cls', instArgs) | cls' == cls ->
-          unifyWithin [] instArgs actualArgs >>= \case
-            Just tbl ->
-              let cx' = substTypeVars tbl <$> cx
-              in fmap concat . sequence <$> mapM resolveInstanceType cx'
-            Nothing -> return Nothing
+        Just (cls', instArgs)
+          | cls' == cls ->
+            unifyWithin [] instArgs actualArgs >>= \case
+              Just tbl -> simplifyContext (substTypeVars tbl <$> cx)
+              Nothing -> return Nothing
         _ -> return Nothing
     tryInstance _ _ = return Nothing
 
 -- | Attempts to produce sufficient constraints for the given 'Type' to be a
 -- satisfied constraint.  The type should be a class applied to its type
 -- parameters.
+--
+-- Unlike 'simplifyContext', this function always resolves the top-level
+-- constraint, and returns 'Nothing' if it cannot do so.
 resolveInstanceType :: Type -> Q (Maybe Cxt)
-resolveInstanceType t = case splitTypeApp t of
-  Just (cls, args) -> resolveInstance cls args
-  Nothing -> return Nothing
+resolveInstanceType t =
+  maybe (pure Nothing) (uncurry resolveInstance) (splitTypeApp t)
 
 -- | Simplifies a context with complex types (requiring FlexibleContexts) to try
 -- to obtain one with all constraints applied to variables.
+--
+-- Should return Nothing if and only if the simplified contraint is
+-- unsatisfiable, which is the case if and only if it contains a component with
+-- no type variables.
 simplifyContext :: Cxt -> Q (Maybe Cxt)
-simplifyContext (p : preds) =
-  case splitTypeApp p of
-    Just (cls, args) ->
-      resolveInstance cls args >>= \case
-        Just cxt' -> fmap (cxt' ++) <$> simplifyContext preds
-        Nothing -> return Nothing
-    _ -> fmap (p :) <$> simplifyContext preds
-simplifyContext [] = return (Just [])
+simplifyContext preds
+  | all isVarApp preds = return (Just preds)
+  | otherwise = do
+    let simplifyPred t = fromMaybe [t] <$> resolveInstanceType t
+    components <- concatMapM simplifyPred preds
+    if any (null . freeTypeVars) components
+      then return Nothing
+      else return (Just (nub components))
+  where
+    isVarApp (ConT _) = True
+    isVarApp (AppT t (VarT _)) | isVarApp t = True
+    isVarApp _ = False
 
 -- | Remove instance context from a method.
 --

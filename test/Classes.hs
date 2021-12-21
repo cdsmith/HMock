@@ -3,6 +3,7 @@
 {-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GADTs #-}
@@ -19,6 +20,7 @@ module Classes where
 
 import Control.DeepSeq (NFData (rnf))
 import Control.Exception (SomeException, evaluate)
+import Control.Monad.Reader (MonadReader)
 import Control.Monad.Trans (MonadIO, liftIO)
 import Data.Default (Default (def))
 import Data.Dynamic (Typeable)
@@ -277,28 +279,35 @@ superTests = describe "MonadSuper" $ do
       success
       failure `shouldThrow` anyException
 
-class MissingSuperClass (m :: Type -> Type)
+class MonadReader String m => MonadPassThroughSuper m where
+  withPassThroughSuper :: m ()
 
-class (MissingSuperClass m, Monad m, Typeable m) => MonadMissingSuper m where
-  withMissingSuper :: m ()
+makeMockable [t|MonadPassThroughSuper|]
 
-$(pure [])
-
-missingSuperTests :: SpecWith ()
-missingSuperTests = describe "MonadMissingSuper" $ do
-  it "generates an error" $ do
+passThroughSuperTests :: SpecWith ()
+passThroughSuperTests = describe "MonadPassThroughSuper" $ do
+  it "generates mock impl" $
     example $ do
-      let test = runMockT $ do
-            allowUnexpected $ QReifyInstances_ anything anything |-> []
-            $(onReify [|expectAny|] ''MonadMissingSuper)
+      decs <- runMockT $ do
+        allowUnexpected $ QReifyInstances_ anything anything |-> []
+        $(onReify [|expectAny|] ''MonadPassThroughSuper)
+        expectAny $
+          QReifyInstances_
+            (eq ''MonadReader)
+            $( qMatch
+                 [p|
+                   [ VarT _,
+                     AppT (ConT (Name (OccName "MockT") _)) (VarT _)
+                     ]
+                   |]
+             )
+            |-> $( reifyInstancesStatic
+                     ''MonadReader
+                     [VarT (mkName "r"), AppT (ConT ''MockT) (VarT (mkName "v"))]
+                 )
 
-            expect $
-              QReport_ anything (eq "Missing MockT instance for a superclass.")
-
-            _ <- runQ (makeMockable [t|MonadMissingSuper|])
-            return ()
-
-      test `shouldThrow` anyQMonadFailure
+        runQ (makeMockable [t|MonadPassThroughSuper|])
+      evaluate (rnf decs)
 
 class MonadMPTC a m where
   mptc :: a -> m ()
@@ -575,7 +584,6 @@ polyResultTests = describe "MonadPolyResult" $ do
 
 class MonadDefaultSignatures m where
   methodWithDefault :: Int -> m Int
-
   default methodWithDefault :: MonadIO m => Int -> m Int
   methodWithDefault = liftIO . methodWithDefault
 
@@ -595,7 +603,9 @@ defaultSignaturesTests = describe "MonadDefaultSignatures" $ do
       evaluate (rnf decs)
   it "is mockable" $
     example . runMockT $ do
-      expect $ MethodWithDefault_ anything |=> \MethodWithDefault{} -> return 42
+      expect $
+        MethodWithDefault_ anything
+          |=> \MethodWithDefault {} -> return 42
       x <- methodWithDefault 0
       liftIO $ x `shouldBe` 42
 
@@ -860,7 +870,7 @@ classTests = describe "makeMockable" $ do
   suffixTests
   setupTests
   superTests
-  missingSuperTests
+  passThroughSuperTests
   mptcTests
   fdSpecializedTests
   fdGeneralTests

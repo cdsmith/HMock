@@ -10,8 +10,11 @@ import QuasiMock
 import Test.HMock
 import Test.HMock.Internal.TH (resolveInstance, unifyTypes)
 import Test.Hspec
+import Test.Predicates (anything, eq)
 
 data NotShowable
+
+class NoInstances a
 
 $(pure [])
 
@@ -49,6 +52,13 @@ thUtilSpec = do
           liftIO $ result `shouldBe` Just [(v, ConT ''Char)]
 
   describe "resolveInstance" $ do
+    it "fails for missing instances" $
+      example $
+        runMockT $ do
+          allowUnexpected $ QReifyInstances_ (eq ''NoInstances) anything |-> []
+          result <- runQ $ resolveInstance ''NoInstances [ConT ''String]
+          liftIO $ result `shouldBe` Nothing
+
     it "finds unrestricted instances" $
       example $
         runMockT $ do

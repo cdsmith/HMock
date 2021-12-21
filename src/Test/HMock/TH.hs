@@ -1,6 +1,5 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE ExplicitNamespaces #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -191,7 +190,7 @@ makeInstance options ty cx tbl ps m members = do
       }
   where
     isRelevantMember :: Dec -> Bool
-    isRelevantMember DefaultSigD{} = False
+    isRelevantMember DefaultSigD {} = False
     isRelevantMember _ = True
 
     memberOrMethod :: Dec -> Either [String] Method -> Q (Either Dec Method)
@@ -624,12 +623,8 @@ defineExpectableAction options inst method = do
     argCxt :: Type -> Q (Maybe Cxt)
     argCxt argTy
       | not (isKnownType method argTy) = return Nothing
-      | VarT v <- argTy =
-        Just <$> sequence [[t|Eq $(varT v)|], [t|Show $(varT v)|]]
-      | otherwise = do
-        eqCxt <- resolveInstance ''Eq [argTy]
-        showCxt <- resolveInstance ''Show [argTy]
-        return ((++) <$> eqCxt <*> showCxt)
+      | otherwise =
+        simplifyContext [AppT (ConT ''Eq) argTy, AppT (ConT ''Show) argTy]
 
 deriveForMockT :: MakeMockableOptions -> Type -> Q [Dec]
 deriveForMockT options ty = do
@@ -664,8 +659,12 @@ deriveForMockT options ty = do
                    AppT (ConT ''MonadIO) (VarT (instMonadVar inst))
                  ]
 
-      simplifyContext
-        (substTypeVar (instMonadVar inst) (AppT (ConT ''MockT) (VarT m)) <$> cx)
+      let mockTConstraints =
+            substTypeVar
+              (instMonadVar inst)
+              (AppT (ConT ''MockT) (VarT m))
+              <$> cx
+      simplifyContext mockTConstraints
         >>= \case
           Just cxMockT ->
             (: [])
@@ -693,7 +692,7 @@ implementMethod options method = do
     actionExp (v : vs) e = actionExp vs [|$e $(varE v)|]
 
     body argVars = do
-      defaultCxt <- resolveInstance ''Default [methodResult method]
+      defaultCxt <- simplifyContext [AppT (ConT ''Default) (methodResult method)]
       let someMockMethod = case defaultCxt of
             Just [] -> [|mockMethod|]
             _ -> [|mockDefaultlessMethod|]
