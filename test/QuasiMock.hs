@@ -51,6 +51,11 @@ instance (Typeable m, MonadFail m, MonadIO m) => Quasi (MockT m) where
   qRecover = error "qRecover"
   qReifyAnnotations = error "qReifyAnnotations"
 
+#if MIN_VERSION_template_haskell(2, 18, 0)
+  qGetDoc l = mockMethod (QGetDoc l)
+  qPutDoc l s = mockMethod (QPutDoc l s)
+#endif
+
 functionType :: [Type] -> Bool
 functionType = everything (||) (mkQ False isArrow)
   where
