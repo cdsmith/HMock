@@ -1,5 +1,12 @@
 # Revision history for hmock
 
+## 0.5.1.0 -- 2021-09-25
+
+* HMock works with more classes with superclass constraints.
+* Classes with default methods are now fully mockable.
+* Builds with GHC 9.2.1
+* Fixes for GHC 8.4 and 8.6
+
 ## 0.5.0.0 -- 2021-09-25
 * HMock now depends on `Predicate` from the `explainable-predicates` package.
 
