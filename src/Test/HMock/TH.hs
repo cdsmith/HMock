@@ -43,8 +43,7 @@ import Test.Predicates (Predicate (..), eq)
 
 -- | Custom options for deriving 'MockableBase' and related instances.
 data MakeMockableOptions = MakeMockableOptions
-  { -- | Whether to generate a 'Mockable' instance with an empty setup.  If this
-    -- is 'False', you are responsible for providing a 'Mockable' instance.
+  { -- | Whether to generate a 'Mockable' instance with an empty setup.
     -- Defaults to 'True'.
     --
     -- If this is 'False', you are responsible for providing a 'Mockable'
@@ -321,12 +320,9 @@ makeMockableImpl options qtype = do
       else return False
   mockable <-
     if needsMockable
-      then
-        (: [])
-          <$> instanceD
-            (pure typeableCxt)
-            [t|Mockable $(pure (instType inst))|]
-            []
+      then do
+        t <- [t|Mockable $(pure (instType inst))|]
+        return [InstanceD (Just Overlappable) typeableCxt t []]
       else return []
 
   mockt <- deriveForMockT options ty
@@ -542,7 +538,7 @@ matchActionClause options method = do
             [|
               catMaybes $
                 zipWith
-                  (\i mm -> fmap (\x -> (i, x)) mm)
+                  (fmap . (,))
                   [1 ..]
                   $(listE (mkAccept <$> argVars))
               |]
