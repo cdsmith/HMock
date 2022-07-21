@@ -1,7 +1,7 @@
 # HMock - A Flexible Mock Framework for Haskell
 
-![](https://travis-ci.com/cdsmith/HMock.svg?branch=main)
-![](https://img.shields.io/hackage/v/HMock)
+[![CI](https://github.com/cdsmith/HMock/actions/workflows/ci.yml/badge.svg)](https://github.com/cdsmith/HMock/actions/workflows/ci.yml)
+[![Hackage](https://img.shields.io/hackage/v/HMock)](https://hackage.haskell.org/package/HMock)
 
 [HMock](https://hackage.haskell.org/package/HMock) provides a flexible and
 composable mock framework for Haskell, with functionality that generally
