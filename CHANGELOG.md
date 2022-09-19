@@ -1,5 +1,9 @@
 # Revision history for hmock
 
+## 0.5.1.1 -- 2022-09-18
+
+* Version bounds now allow GHC 9.4
+
 ## 0.5.1.0 -- 2021-09-25
 
 * HMock works with more classes with superclass constraints.

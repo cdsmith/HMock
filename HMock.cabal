@@ -1,6 +1,6 @@
 cabal-version:      2.4
 name:               HMock
-version:            0.5.1.0
+version:            0.5.1.1
 synopsis:           A flexible mock framework for testing effectful code.
 description:        HMock is a flexible mock framework for testing effectful
                     code in Haskell.  Tests can set up expectations about
@@ -21,7 +21,7 @@ maintainer:         Chris Smith <cdsmith@gmail.com>
 
 extra-source-files: CHANGELOG.md, README.md
 
-tested-with:        GHC == 8.6.5 || == 8.8.4 || == 8.10.7 || == 9.0.2 || == 9.2.3
+tested-with:        GHC == 8.6.5 || == 8.8.4 || == 8.10.7 || == 9.0.2 || == 9.2.3 || == 9.4.2
 
 source-repository head
     type:     git
@@ -42,7 +42,7 @@ library
                       Test.HMock.Internal.Step,
                       Test.HMock.Internal.TH,
                       Test.HMock.Internal.Util
-    build-depends:    base >=4.11.0 && < 4.17,
+    build-depends:    base >=4.11.0 && < 4.18,
                       constraints >= 0.13 && < 0.14,
                       containers >= 0.6.2 && < 0.7,
                       data-default >= 0.7.1 && < 0.8,
@@ -53,7 +53,7 @@ library
                       mtl >= 2.2.2 && < 2.3,
                       stm >= 2.5.0 && < 2.6,
                       syb >= 0.7.2 && < 0.8,
-                      template-haskell >= 2.14 && < 2.19,
+                      template-haskell >= 2.14 && < 2.20,
                       transformers-base >= 0.4.5 && < 0.5,
                       unliftio >= 0.2.18 && < 0.3,
     hs-source-dirs:   src
