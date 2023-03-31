@@ -43,6 +43,10 @@ instance (Typeable m, MonadFail m, MonadIO m) => Quasi (MockT m) where
   qReifyType n = mockDefaultlessMethod (QReifyType n)
 #endif
 
+#if MIN_VERSION_template_haskell(2, 19, 0)
+  qGetPackageRoot = mockDefaultlessMethod QGetPackageRoot
+#endif
+
   -- Methods delegated to IO
   qNewName s = liftIO (qNewName s)
 
