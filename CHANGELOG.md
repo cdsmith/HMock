@@ -1,5 +1,10 @@
 # Revision history for hmock
 
+## Unreleased
+
+* Version bounds now allow GHC 9.6
+* Fix Quasi instance warning for GHC 9.4
+
 ## 0.5.1.1 -- 2022-09-18
 
 * Version bounds now allow GHC 9.4
