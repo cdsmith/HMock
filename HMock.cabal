@@ -50,7 +50,7 @@ library
                       explainable-predicates >= 0.1 && < 0.2,
                       extra >= 1.7.9 && < 1.8,
                       monad-control >= 1.0.2 && < 1.1,
-                      mtl >= 2.2.2 && < 2.3,
+                      mtl >= 2.2.2 && < 2.4,
                       stm >= 2.5.0 && < 2.6,
                       syb >= 0.7.2 && < 0.8,
                       template-haskell >= 2.14 && < 2.21,

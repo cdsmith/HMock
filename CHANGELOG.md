@@ -4,6 +4,7 @@
 
 * Version bounds now allow GHC 9.6
 * Fix Quasi instance warning for GHC 9.4
+* Bumped `mtl` dependency version upper bound
 
 ## 0.5.1.1 -- 2022-09-18
 
