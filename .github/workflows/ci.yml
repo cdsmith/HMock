@@ -28,6 +28,7 @@ jobs:
           - "9.2.8"
           - "9.4.5"
           - "9.6.2"
+          - "9.8.1"
 
     steps:
     - uses: actions/checkout@v2

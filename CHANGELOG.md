@@ -1,10 +1,10 @@
 # Revision history for hmock
 
-## Unreleased
+## 0.5.1.2 -- 2023-11-28
 
-* Version bounds now allow GHC 9.6
+* Version bounds now allow GHC 9.6 and 9.8
 * Fix Quasi instance warning for GHC 9.4
-* Bumped `mtl` dependency version upper bound
+* Bumped dependency version upper bounds
 
 ## 0.5.1.1 -- 2022-09-18
 
