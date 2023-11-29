@@ -23,7 +23,7 @@ API.
     import Prelude hiding (readFile, writeFile)
     import qualified Prelude
 
-    class (Monad m) => MonadFilesystem m where
+    class Monad m => MonadFilesystem m where
       readFile :: FilePath -> m String
       writeFile :: FilePath -> String -> m ()
 
