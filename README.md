@@ -620,7 +620,7 @@ runMockT $ do
 
 ### Which GHC versions are supported?
 
-HMock is tested with GHC versions from 8.6 through 9.4.
+HMock is tested with GHC versions from 8.6 through 9.10.
 
 ## Case Study: Mocking Template Haskell
 
