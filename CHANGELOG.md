@@ -1,5 +1,9 @@
 # Revision history for hmock
 
+## Unreleased
+
+* Version bounds now allow GHC 9.10
+
 ## 0.5.1.2 -- 2023-11-28
 
 * Version bounds now allow GHC 9.6 and 9.8
