@@ -71,7 +71,8 @@ mockMethodImpl ::
 mockMethodImpl surrogate action = join $
   fromMockSetup $ do
     initClassIfNeeded (Proxy :: Proxy cls)
-    states <- allStates <$> MockSetup ask
+    currentState <- MockSetup ask
+    let states = allStates currentState
     (partial, full) <- fmap (bimap concat concat . unzip) $
       forM states $ \state -> do
         expectSet <- mockSetupSTM $ readTVar (mockExpectSet state)
@@ -87,10 +88,10 @@ mockMethodImpl surrogate action = join $
     sideEffect <-
       getSideEffect
         <$> concatMapM (mockSetupSTM . readTVar . mockSideEffects) states
-    ambigSev <- mockSetupSTM $ readTVar . mockAmbiguitySeverity . head $ states
+    ambigSev <- mockSetupSTM $ readTVar (mockAmbiguitySeverity currentState)
     unintSev <-
-      mockSetupSTM $ readTVar . mockUninterestingSeverity . head $ states
-    unexpSev <- mockSetupSTM $ readTVar . mockUnexpectedSeverity . head $ states
+      mockSetupSTM $ readTVar (mockUninterestingSeverity currentState)
+    unexpSev <- mockSetupSTM $ readTVar (mockUnexpectedSeverity currentState)
     case ( full,
            orderedPartial,
            allowedUnexpected unexpected,

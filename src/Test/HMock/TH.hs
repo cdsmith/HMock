@@ -26,7 +26,10 @@ import Data.Char (toUpper)
 import Data.Default (Default (..))
 import Data.Either (partitionEithers)
 import qualified Data.Kind
-import Data.List (foldl', (\\))
+import Data.List ((\\))
+#if !MIN_VERSION_base(4, 20, 0)
+import Data.List (foldl')
+#endif
 import Data.Maybe (catMaybes, isNothing)
 import Data.Proxy (Proxy)
 import Data.Typeable (Typeable, typeRep)

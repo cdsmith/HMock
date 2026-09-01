@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -36,7 +35,7 @@ import Test.HMock.Internal.Util (Located)
 import Test.HMock.Mockable (Mockable (..))
 import UnliftIO
   ( MonadIO,
-    MonadUnliftIO(withRunInIO),
+    MonadUnliftIO,
     STM,
     TVar,
     atomically,
@@ -46,10 +45,6 @@ import UnliftIO
     readTVarIO,
   )
 import Data.Kind (Type, Constraint)
-
-#if !MIN_VERSION_base(4, 13, 0)
-import Control.Monad.Fail (MonadFail)
-#endif
 
 -- | The severity for a possible problem.
 data Severity
@@ -198,16 +193,12 @@ newtype MockT m a where
       MonadBase b,
       MonadCatch,
       MonadMask,
-      MonadThrow
+      MonadThrow,
+      MonadUnliftIO
     )
 
 instance MonadTrans MockT where
   lift = MockT . lift
-
--- Note: The 'MonadUnliftIO' instance is implemented manually because deriving
--- it causes compilation failure in GHC 8.6 and 8.8.  (See issue #23.)
-instance MonadUnliftIO m => MonadUnliftIO (MockT m) where
-  withRunInIO inner = MockT $ withRunInIO $ \run -> inner (run . unMockT)
 
 -- | Applies a function to the base monad of 'MockT'.
 mapMockT :: (m a -> m b) -> MockT m a -> MockT m b

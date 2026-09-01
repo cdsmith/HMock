@@ -1,8 +1,11 @@
 # Revision history for hmock
 
-## Unreleased
+## 0.5.1.3 -- 2026-09-01
 
-* Version bounds now allow GHC 9.10
+* Supported GHC versions are now 9.0 through 9.14.
+  * Support for GHC 8.6, 8.8, and 8.10 has been dropped.
+* Version bounds now allow GHC 9.10, 9.12, and 9.14.
+* Bumped dependency version upper bounds.
 
 ## 0.5.1.2 -- 2023-11-28
 

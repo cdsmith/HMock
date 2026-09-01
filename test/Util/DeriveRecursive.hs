@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 module Util.DeriveRecursive where
 
 import Control.Monad (replicateM)
@@ -5,7 +6,9 @@ import Control.Monad.Extra (concatMapM)
 import Control.Monad.State (StateT, evalStateT, gets, modify)
 import Control.Monad.Trans (MonadTrans (lift))
 import Language.Haskell.TH
+#if !MIN_VERSION_base(4, 20, 0)
 import Data.List (foldl')
+#endif
 
 deriveRecursive :: Maybe DerivStrategy -> Name -> Name -> Q [Dec]
 deriveRecursive strat cls ty = evalStateT (concatMapM defineIfNeeded [ty]) []

@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TupleSections #-}
 
@@ -32,8 +31,6 @@ import Language.Haskell.TH
 import Language.Haskell.TH.Syntax (NameFlavour (..))
 import Test.HMock.Internal.Util (choices)
 
-#if MIN_VERSION_template_haskell(2,17,0)
-
 -- | Fetches the 'Name' of a 'TyVarBndr'.
 tvName :: TyVarBndr flag -> Name
 tvName (PlainTV name _) = name
@@ -42,19 +39,6 @@ tvName (KindedTV name _ _) = name
 -- | Creates a 'TyVarBndr' for a plain variable without a kind annotation.
 bindVar :: Name -> TyVarBndr Specificity
 bindVar n = PlainTV n SpecifiedSpec
-
-#else
-
--- | Fetches the 'Name' of a 'TyVarBndr'.
-tvName :: TyVarBndr -> Name
-tvName (PlainTV name) = name
-tvName (KindedTV name _) = name
-
--- | Creates a 'TyVarBndr' for a plain variable without a kind annotation.
-bindVar :: Name -> TyVarBndr
-bindVar = PlainTV
-
-#endif
 
 -- | Gets the unapplied top-level name from a type application.
 unappliedName :: Type -> Maybe Name

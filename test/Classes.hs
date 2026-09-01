@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE DeriveAnyClass #-}
@@ -33,10 +32,8 @@ import Test.Hspec
 import Test.Predicates (anything, eq, hasSubstr, qMatch, with)
 import Util.DeriveRecursive (deriveRecursive)
 
-#if MIN_VERSION_template_haskell(2, 16, 0)
 -- Pre-define low-level instance to prevent deriveRecursive from trying.
 instance NFData Bytes where rnf = undefined
-#endif
 
 deriveRecursive (Just AnyclassStrategy) ''NFData ''Dec
 
@@ -823,7 +820,7 @@ errorTests = describe "errors" $ do
             expect $
               QReport_
                 anything
-                (hasSubstr "Expected GHC.Types.Int to be a class")
+                (hasSubstr "Int to be a class")
 
             _ <- runQ (makeMockable [t|Int|])
             return ()

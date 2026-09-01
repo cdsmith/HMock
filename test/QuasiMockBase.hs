@@ -19,8 +19,9 @@ import Language.Haskell.TH.Syntax
 import Test.HMock (MakeMockableOptions (..), makeMockableWithOptions)
 import Util.DeriveRecursive (deriveRecursive)
 
-#if MIN_VERSION_template_haskell(2, 16, 0)
+#if !MIN_VERSION_template_haskell(2, 23, 0)
 -- Pre-define low-level instance to prevent deriveRecursive from trying.
+-- template-haskell 2.23 (GHC 9.12) provides this instance itself.
 instance Lift Bytes where lift = undefined; liftTyped = undefined
 #endif
 

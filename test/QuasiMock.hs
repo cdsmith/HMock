@@ -12,10 +12,6 @@ import QuasiMockBase
 import Test.HMock
 import Test.Predicates (anything, elemsAre, eq, is, qMatch)
 
-#if !MIN_VERSION_base(4, 13, 0)
-import Control.Monad.Fail (MonadFail)
-#endif
-
 -- Because not all methods of Quasi are mockable, the instance must be written
 -- by hand.
 instance (Typeable m, MonadFail m, MonadIO m) => Quasi (MockT m) where
@@ -39,9 +35,7 @@ instance (Typeable m, MonadFail m, MonadIO m) => Quasi (MockT m) where
   qAddTempFile s = mockMethod (QAddTempFile s)
   qAddForeignFilePath l s = mockMethod (QAddForeignFilePath l s)
 
-#if MIN_VERSION_template_haskell(2, 16, 0)
   qReifyType n = mockDefaultlessMethod (QReifyType n)
-#endif
 
 #if MIN_VERSION_template_haskell(2, 19, 0)
   qGetPackageRoot = mockDefaultlessMethod QGetPackageRoot

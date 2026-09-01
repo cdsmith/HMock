@@ -1,10 +1,13 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module ExpectSet where
 
 import Control.Arrow (second)
+#if !MIN_VERSION_base(4, 20, 0)
 import Data.List (foldl')
+#endif
 import Test.HMock.Internal.ExpectSet
 import Test.HMock.Multiplicity
 import Test.Hspec
