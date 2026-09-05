@@ -1,9 +1,9 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
 
-module Multiplicity where
+module Common.Multiplicity where
 
-import Test.HMock
+import Test.HMock.Multiplicity
 import Test.Hspec
 import Test.QuickCheck hiding (once)
 

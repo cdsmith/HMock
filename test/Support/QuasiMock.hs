@@ -1,16 +1,38 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
 
-module QuasiMock (module QuasiMock, module QuasiMockBase) where
+module Support.QuasiMock
+  ( module Support.QuasiMock,
+    module Support.QuasiMockBase,
+  )
+where
 
+import Control.DeepSeq (NFData (rnf))
+import Control.Exception (SomeException)
 import Control.Monad.Trans (MonadIO, liftIO)
 import Data.Default (Default (..))
 import Data.Generics (Typeable, everything, mkQ)
+import Data.List (isInfixOf)
 import Language.Haskell.TH hiding (Match)
 import Language.Haskell.TH.Syntax hiding (Match)
-import QuasiMockBase
+import Support.DeriveRecursive (deriveRecursive)
+import Support.QuasiMockBase
 import Test.HMock
 import Test.Predicates (anything, elemsAre, eq, is, qMatch)
+
+-- Pre-define low-level instance to prevent deriveRecursive from trying.
+instance NFData Bytes where rnf = undefined
+
+-- | 'NFData' for Template Haskell declarations, so that a test can force
+-- everything a splice generated.
+deriveRecursive (Just AnyclassStrategy) ''NFData ''Dec
+
+-- | Matches the exception a splice raises when it calls 'fail'.
+anyQMonadFailure :: SomeException -> Bool
+anyQMonadFailure e = "(Q monad failure)" `isInfixOf` show e
 
 -- Because not all methods of Quasi are mockable, the instance must be written
 -- by hand.

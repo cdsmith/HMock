@@ -14,6 +14,6 @@ MODULES=$(grep -l -- '-- >>>' $(find src -name *.hs) \
 $CMD --import-dir src \
      --output-dir test \
      --import-tested \
-     --module-prefix DocTests \
+     --module-prefix Common.DocTests \
      --library-main All \
      $MODULES

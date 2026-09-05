@@ -2,7 +2,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module ExpectSet where
+module Common.ExpectSet where
 
 import Control.Arrow (second)
 #if !MIN_VERSION_base(4, 20, 0)

@@ -1,5 +1,5 @@
 {-# LANGUAGE CPP #-}
-module Util.DeriveRecursive where
+module Support.DeriveRecursive where
 
 import Control.Monad (replicateM)
 import Control.Monad.Extra (concatMapM)

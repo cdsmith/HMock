@@ -1,39 +1,39 @@
-{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 -- | This module defines the 'ExpectContext' class, whose members provide the
 -- combinators for building the execution plan for your mocks.  Notably, there
--- is a 'Test.HMock.MockT.MockT' instance for 'ExpectContext', so you can use
+-- is a t'Test.HMock.Classic.MockT.MockT' instance for 'ExpectContext', so you can use
 -- these combinators to add expectations inside your tests that run in
--- 'Test.HMock.MockT.MockT', as well as nesting them in other combinators.
-module Test.HMock.ExpectContext
+-- t'Test.HMock.Classic.MockT.MockT', as well as nesting them in other combinators.
+module Test.HMock.Classic.ExpectContext
   ( MockableMethod,
     ExpectContext (..),
   )
 where
 
 import Control.Monad.IO.Class (MonadIO)
-import Data.Kind (Constraint, Type)
-import Data.Typeable (Typeable)
-import GHC.Stack (HasCallStack)
-import GHC.TypeLits (KnownSymbol, Symbol)
-import Test.HMock.Mockable (Mockable)
-import Test.HMock.Multiplicity (Multiplicity)
-import Test.HMock.Rule (Expectable)
-
--- | All constraints needed to mock a method with the given class, name, base
--- monad, and return type.
-type MockableMethod
-  (cls :: (Type -> Type) -> Constraint)
-  (name :: Symbol)
-  (m :: Type -> Type)
-  (r :: Type) =
-  (Mockable cls, Typeable m, KnownSymbol name, Typeable r)
+import Data.Kind (Type)
+import GHC.Stack (HasCallStack, callStack, withFrozenCallStack)
+import Test.HMock.Classic.Internal
+  ( Expectable (toRule),
+    MockContext (fromMockSetup),
+    MockSetup,
+    MockT,
+    MockableMethod,
+    liftMockSTM,
+    prepareRule,
+  )
+import Test.HMock.Internal.ExpectSet (ExpectSet (..))
+import Test.HMock.Multiplicity (Multiplicity, anyMultiplicity)
+import Test.HMock.Internal.State (expectThisSet)
+import Test.HMock.Internal.Step (Step, expandRepeatRule, expandRule)
 
 -- | Type class for contexts in which one can build expectations.  Notably, this
--- includes `Test.HMock.MockT.MockT`, which expects actions to be performed
+-- includes `Test.HMock.Classic.MockT.MockT`, which expects actions to be performed
 -- during a test.
 --
 -- The methods of this class represent the user-facing API for build your
@@ -43,11 +43,11 @@ class ExpectContext (ctx :: (Type -> Type) -> Type -> Type) where
   -- response (or exactly once if there is no response).
   --
   -- @
-  -- 'Test.HMock.MockT.runMockT' '$' do
+  -- 'Test.HMock.Classic.MockT.runMockT' '$' do
   --   'expect' '$'
   --     ReadFile "foo.txt"
-  --       'Test.HMock.Rule.|->' "lorem ipsum"
-  --       'Test.HMock.Rule.|->' "oops, the file changed out from under me!"
+  --       'Test.HMock.Classic.Rule.|->' "lorem ipsum"
+  --       'Test.HMock.Classic.Rule.|->' "oops, the file changed out from under me!"
   --   callCodeUnderTest
   -- @
   --
@@ -66,10 +66,10 @@ class ExpectContext (ctx :: (Type -> Type) -> Type -> Type) where
   -- | Creates an expectation that an action is performed some number of times.
   --
   -- @
-  --   'Test.HMock.MockT.runMockT' '$' do
+  --   'Test.HMock.Classic.MockT.runMockT' '$' do
   --     'expect' '$' MakeList
   --     'expectN' ('Test.HMock.atLeast' 2) '$'
-  --       CheckList "Cindy Lou Who" 'Test.HMock.Rule.|->' Nice
+  --       CheckList "Cindy Lou Who" 'Test.HMock.Classic.Rule.|->' Nice
   --
   --     callCodeUnderTest
   -- @
@@ -87,17 +87,17 @@ class ExpectContext (ctx :: (Type -> Type) -> Type -> Type) where
 
   -- | Specifies a response if a matching action is performed, but doesn't
   -- expect anything.  This is equivalent to @'expectN'
-  -- 'Test.HMock.Multiplicity.anyMultiplicity'@, but shorter.
+  -- 'Test.HMock.Classic.anyMultiplicity'@, but shorter.
   --
   -- In this example, the later use of 'expectAny' overrides earlier uses, but
   -- only for calls that match its conditions.
   --
   -- @
-  --   'Test.HMock.MockT.runMockT' '$' do
+  --   'Test.HMock.Classic.MockT.runMockT' '$' do
   --     'expectAny' '$'
-  --       ReadFile_ anything 'Test.HMock.Rule.|->' "tlhIngan maH!"
+  --       ReadFile_ anything 'Test.HMock.Classic.Rule.|->' "tlhIngan maH!"
   --     'expectAny' '$'
-  --       ReadFile "config.txt" 'Test.HMock.Rule.|->' "lang: klingon"
+  --       ReadFile "config.txt" 'Test.HMock.Classic.Rule.|->' "lang: klingon"
   --
   --     callCodeUnderTest
   -- @
@@ -126,6 +126,8 @@ class ExpectContext (ctx :: (Type -> Type) -> Type -> Type) where
   -- that's not the purpose of the test, consider adding several independent
   -- expectations, instead.  This avoids over-asserting, and keeps your tests
   -- less brittle.
+  --
+  -- An empty list expects nothing.
   inSequence ::
     MonadIO m => (forall ctx'. ExpectContext ctx' => [ctx' m ()]) -> ctx m ()
 
@@ -146,6 +148,8 @@ class ExpectContext (ctx :: (Type -> Type) -> Type -> Type) where
   --       'expect' '$' StartCar
   --     ]
   -- @
+  --
+  -- An empty list expects nothing.
   inAnyOrder ::
     MonadIO m => (forall ctx'. ExpectContext ctx' => [ctx' m ()]) -> ctx m ()
 
@@ -159,8 +163,13 @@ class ExpectContext (ctx :: (Type -> Type) -> Type -> Type) where
   --       'expect' $ ApplyForUniversity
   --     ]
   -- @
+  --
+  -- The list must not be empty, since a choice among no alternatives can never
+  -- be satisfied.  @'anyOf' []@ is an error.
   anyOf ::
-    MonadIO m => (forall ctx'. ExpectContext ctx' => [ctx' m ()]) -> ctx m ()
+    (HasCallStack, MonadIO m) =>
+    (forall ctx'. ExpectContext ctx' => [ctx' m ()]) ->
+    ctx m ()
 
   -- | Creates a parent expectation that the child expectation will happen a
   -- certain number of times.  Unlike `expectN`, the child expectation can be
@@ -190,3 +199,67 @@ class ExpectContext (ctx :: (Type -> Type) -> Type -> Type) where
     Multiplicity ->
     (forall ctx'. ExpectContext ctx' => ctx' m ()) ->
     ctx m ()
+
+-- | An expectation under construction.  The "return type" @a@ is a phantom.
+--
+-- Building runs in t'MockSetup', because each rule's class setup has to run
+-- and each response has to be closed over the environment before the engine
+-- can see it.
+newtype Expected m a = Expected
+  {unwrapExpected :: MockSetup m (ExpectSet (Step m))}
+
+instance ExpectContext Expected where
+  expect e = Expected (expandRule Nothing callStack <$> prepareRule (toRule e))
+  expectN mult e =
+    Expected (expandRepeatRule Nothing mult callStack <$> prepareRule (toRule e))
+  expectAny e =
+    Expected
+      ( expandRepeatRule Nothing anyMultiplicity callStack
+          <$> prepareRule (toRule e)
+      )
+  inSequence es =
+    Expected (foldr ExpectSequence ExpectNothing <$> mapM unwrapExpected es)
+  inAnyOrder es =
+    Expected (foldr ExpectInterleave ExpectNothing <$> mapM unwrapExpected es)
+  anyOf es = Expected $ do
+    sets <- mapM unwrapExpected es
+    case sets of
+      [] -> error emptyAnyOf
+      _ -> return (foldr1 ExpectEither sets)
+  times mult e = Expected (ExpectMulti mult <$> unwrapExpected e)
+  consecutiveTimes mult e =
+    Expected (ExpectConsecutive mult <$> unwrapExpected e)
+
+-- | The error for @'anyOf' []@.
+emptyAnyOf :: String
+emptyAnyOf = "anyOf requires at least one alternative; anyOf [] can never be satisfied."
+
+-- | Builds an expectation and installs it.
+install :: Expected m () -> MockSetup m ()
+install e = unwrapExpected e >>= liftMockSTM . expectThisSet
+
+-- | This instance allows you to add expectations from t'MockSetup' actions.
+-- This is an unusual thing to do.  Consider using
+-- 'Test.HMock.Classic.Defaults.allowUnexpected', instead.
+instance ExpectContext MockSetup where
+  expect e = withFrozenCallStack $ install (expect e)
+  expectN mult e = withFrozenCallStack $ install (expectN mult e)
+  expectAny e = withFrozenCallStack $ install (expectAny e)
+  inSequence es = withFrozenCallStack $ install (inSequence es)
+  inAnyOrder es = withFrozenCallStack $ install (inAnyOrder es)
+  anyOf es = withFrozenCallStack $ install (anyOf es)
+  times mult es = withFrozenCallStack $ install (times mult es)
+  consecutiveTimes mult es =
+    withFrozenCallStack $ install (consecutiveTimes mult es)
+
+-- | Expectations added during a test take effect immediately.
+instance ExpectContext MockT where
+  expect e = withFrozenCallStack $ fromMockSetup $ install (expect e)
+  expectN mult e = withFrozenCallStack $ fromMockSetup $ install (expectN mult e)
+  expectAny e = withFrozenCallStack $ fromMockSetup $ install (expectAny e)
+  inSequence es = withFrozenCallStack $ fromMockSetup $ install (inSequence es)
+  inAnyOrder es = withFrozenCallStack $ fromMockSetup $ install (inAnyOrder es)
+  anyOf es = withFrozenCallStack $ fromMockSetup $ install (anyOf es)
+  times mult es = withFrozenCallStack $ fromMockSetup $ install (times mult es)
+  consecutiveTimes mult es =
+    withFrozenCallStack $ fromMockSetup $ install (consecutiveTimes mult es)

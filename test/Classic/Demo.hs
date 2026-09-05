@@ -9,7 +9,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module Demo where
+module Classic.Demo where
 
 import Control.Exception (Exception)
 import Control.Monad (unless, when)

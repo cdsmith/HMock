@@ -6,7 +6,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module Core where
+module Classic.Core where
 
 import Control.Concurrent (forkIO, newEmptyMVar, putMVar, takeMVar)
 import Control.DeepSeq (rnf)
@@ -744,6 +744,44 @@ coreTests = do
         setUnmetExpectationCheck Ignore
         expect $ ReadFile_ anything
 
+    describe "allowUnexpected with a response" $ do
+      it "does not supply the response for an expected call" $
+        example $
+          runMockT $ do
+            allowUnexpected $ ReadFile_ anything |-> "from allowUnexpected"
+            byDefault $ ReadFile_ anything |-> "from byDefault"
+            expect $ ReadFile "foo.txt"
+            result <- readFile "foo.txt"
+            liftIO (result `shouldBe` "from byDefault")
+
+      it "overrides byDefault for an unexpected call" $
+        example $
+          runMockT $ do
+            allowUnexpected $ ReadFile_ anything |-> "from allowUnexpected"
+            byDefault $ ReadFile_ anything |-> "from byDefault"
+            result <- readFile "foo.txt"
+            liftIO (result `shouldBe` "from allowUnexpected")
+
+      it "falls through to byDefault when it has no response" $
+        example $
+          runMockT $ do
+            allowUnexpected $ ReadFile_ anything
+            byDefault $ ReadFile_ anything |-> "from byDefault"
+            result <- readFile "foo.txt"
+            liftIO (result `shouldBe` "from byDefault")
+
+    describe "empty combinators" $ do
+      it "treats inSequence [] as no expectation" $
+        example $ runMockT $ inSequence []
+
+      it "treats inAnyOrder [] as no expectation" $
+        example $ runMockT $ inAnyOrder []
+
+      it "rejects anyOf [] immediately" $
+        example $
+          runMockT (anyOf [])
+            `shouldThrow` errorWith ("anyOf requires at least one" `isInfixOf`)
+
     describe "nestMockT" $ do
       it "checks nested context early" $ do
         example $ do
@@ -812,6 +850,20 @@ coreTests = do
 
             result2 <- readFile "foo.txt"
             liftIO (result2 `shouldBe` "foo")
+
+      it "adds response expectations where the rule was written" $
+        example $
+          runMockT $ do
+            expect $
+              ReadFile "foo.txt" |=> \_ -> do
+                expect $ WriteFile "log.txt" "read foo"
+                return "foo"
+
+            nestMockT $ do
+              _ <- readFile "foo.txt"
+              return ()
+
+            writeFile "log.txt" "read foo"
 
 errorWith :: (String -> Bool) -> SomeException -> Bool
 errorWith p e = p (show e)

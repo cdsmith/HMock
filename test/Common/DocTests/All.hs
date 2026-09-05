@@ -1,10 +1,10 @@
 -- Do not edit! Automatically created with doctest-extract.
-module DocTests.All where
+module Common.DocTests.All where
 
-import qualified DocTests.Test.HMock.Multiplicity
+import qualified Common.DocTests.Test.HMock.Multiplicity
 
 import qualified Test.DocTest.Driver as DocTest
 
 main :: DocTest.T ()
 main = do
-    DocTests.Test.HMock.Multiplicity.test
+    Common.DocTests.Test.HMock.Multiplicity.test

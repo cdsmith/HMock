@@ -5,37 +5,32 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE PolyKinds #-}
 
--- | This module contains MockT and SetupMockT state functions.
+-- | The mutable state behind a mock, and the t'MockSTM' monad that reads and
+-- writes it transactionally.  Shared by every front end; nothing here knows
+-- how a test is run.
 module Test.HMock.Internal.State where
 
-import Control.Monad (forM_, unless, (<=<))
-import Control.Monad.Base (MonadBase)
-import Control.Monad.Catch (MonadCatch, MonadMask, MonadThrow)
-import Control.Monad.Cont (MonadCont)
-import Control.Monad.Except (MonadError)
+import Control.Monad (forM_, (<=<))
 import Control.Monad.Extra (maybeM)
 import Control.Monad.IO.Class (liftIO)
-import Control.Monad.RWS (MonadRWS)
-import Control.Monad.Reader (MonadReader (..), ReaderT, mapReaderT, runReaderT)
-import Control.Monad.State (MonadState)
-import Control.Monad.Trans (MonadTrans, lift)
-import Control.Monad.Writer (MonadWriter)
+import Control.Monad.Reader (MonadReader (..), ReaderT (..), runReaderT)
+import Control.Monad.Trans (lift)
 import Data.Proxy (Proxy (Proxy))
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Typeable (TypeRep, Typeable, typeRep)
-import GHC.Stack (withFrozenCallStack, HasCallStack)
+import GHC.Stack (HasCallStack)
 import GHC.TypeLits (KnownSymbol, symbolVal)
 import System.IO (hPutStrLn, stderr)
-import Test.HMock.ExpectContext (ExpectContext (..))
-import Test.HMock.Internal.ExpectSet (ExpectSet (..), getSteps)
-import Test.HMock.Internal.Step (SingleRule, Step (..), unwrapExpected)
-import Test.HMock.Internal.Util (Located)
-import Test.HMock.Mockable (Mockable (..))
+import Data.List (intercalate)
+import Data.Maybe (fromMaybe)
+import Test.HMock.Internal.ExpectSet (ExpectSet (..), formatExpectSet, getSteps)
+import Test.HMock.Internal.Step (SingleRule, Step (..))
+import Test.HMock.Internal.Util (InstanceId (..), Located)
 import UnliftIO
   ( MonadIO,
-    MonadUnliftIO,
     STM,
     TVar,
     atomically,
@@ -43,8 +38,9 @@ import UnliftIO
     newTVarIO,
     readTVar,
     readTVarIO,
+    writeTVar,
   )
-import Data.Kind (Type, Constraint)
+
 
 -- | The severity for a possible problem.
 data Severity
@@ -65,12 +61,13 @@ data MockState m = MockState
     mockUnexpectedSeverity :: TVar Severity,
     mockUninterestingSeverity :: TVar Severity,
     mockUnmetSeverity :: TVar Severity,
-    mockClasses :: TVar (Set TypeRep),
     mockInterestingMethods :: TVar (Set (TypeRep, String)),
+    mockNextInstanceId :: TVar Int,
+    mockInstanceNames :: TVar (Set String),
     mockParent :: Maybe (MockState m)
   }
 
--- | Initializes a new 'MockState' with the given parent.  If the parent is
+-- | Initializes a new t'MockState' with the given parent.  If the parent is
 -- 'Nothing', then a new root state is made.
 initMockState :: MonadIO m => Maybe (MockState m) -> m (MockState m)
 initMockState parent =
@@ -95,9 +92,30 @@ initMockState parent =
       (newTVarIO Error)
       (newTVarIO <=< readTVarIO . mockUnmetSeverity)
       (return parent)
-    <*> maybe (newTVarIO Set.empty) (return . mockClasses) parent
     <*> maybe (newTVarIO Set.empty) (return . mockInterestingMethods) parent
+    <*> maybe (newTVarIO 1) (return . mockNextInstanceId) parent
+    <*> maybe (newTVarIO Set.empty) (return . mockInstanceNames) parent
     <*> pure parent
+
+-- | Allocates an identity for a new mocked instance, with the given name if
+-- there is one.  Numbers and names come from the root state, so both are
+-- unique across a whole test even when nested blocks are in play.  An
+-- unnamed instance is named for its number, as @"#3"@.  A name already in
+-- use, whether given or not, gets a numeric suffix: @"fs"@, then @"fs_2"@,
+-- @"fs_3"@, and so on.
+newInstanceId :: Maybe String -> MockSTM m InstanceId
+newInstanceId requested = runInRootState $ do
+  state <- askState
+  n <- liftSTM $ readTVar (mockNextInstanceId state)
+  liftSTM $ writeTVar (mockNextInstanceId state) (n + 1)
+  used <- liftSTM $ readTVar (mockInstanceNames state)
+  let base = fromMaybe ('#' : show n) requested
+      candidate :: Int -> String
+      candidate 1 = base
+      candidate k = base ++ "_" ++ show k
+      name = candidate (until ((`Set.notMember` used) . candidate) (+ 1) 1)
+  liftSTM $ modifyTVar (mockInstanceNames state) (Set.insert name)
+  return (InstanceId n name)
 
 -- | Gets a list of all states, starting with the innermost.
 allStates :: MockState m -> [MockState m]
@@ -109,179 +127,85 @@ allStates s
 rootState :: MockState m -> MockState m
 rootState = last . allStates
 
--- | Monad for setting up a mockable class.  Note that even though the type
--- looks that way, this is *not* a monad transformer.  It's a very restricted
--- environment that can only be used to set up defaults for a class.
-newtype MockSetup m a where
-  MockSetup :: {unMockSetup :: ReaderT (MockState m) STM a} -> MockSetup m a
+-- | A transaction on a t'MockState'.  Every read or write of the state goes
+-- through one of these, so that a match, or the installation of an
+-- expectation, is atomic.  The @m@ parameter is only there because the state
+-- stores responses in @m@; this is not a transformer over @m@.
+newtype MockSTM m a where
+  MockSTM :: {unMockSTM :: ReaderT (MockState m) STM a} -> MockSTM m a
   deriving (Functor, Applicative, Monad)
 
--- | Runs a setup action with the root state, rather than the current one.
-runInRootState :: MockSetup m a -> MockSetup m a
-runInRootState = MockSetup . local rootState . unMockSetup
+-- | Runs a transaction against a given state.
+runMockSTM :: MockState m -> MockSTM m a -> STM a
+runMockSTM state = flip runReaderT state . unMockSTM
 
--- | Run an STM action in 'MockSetup'
-mockSetupSTM :: STM a -> MockSetup m a
-mockSetupSTM m = MockSetup (lift m)
+-- | The state the transaction is running against.
+askState :: MockSTM m (MockState m)
+askState = MockSTM ask
 
--- | Runs class initialization for a 'Mockable' class, if it hasn't been run
--- yet.
-initClassIfNeeded ::
-  forall cls m proxy.
-  (Mockable cls, Typeable m, MonadIO m) =>
-  proxy cls ->
-  MockSetup m ()
-initClassIfNeeded proxy = runInRootState $ do
-  state <- MockSetup ask
-  classes <- mockSetupSTM $ readTVar (mockClasses state)
-  unless (Set.member t classes) $ do
-    mockSetupSTM $ modifyTVar (mockClasses state) (Set.insert t)
-    setupMockable (Proxy :: Proxy cls)
-  where
-    t = typeRep proxy
+-- | Runs a transaction with the root state, rather than the current one.
+runInRootState :: MockSTM m a -> MockSTM m a
+runInRootState = MockSTM . local rootState . unMockSTM
+
+-- | Lifts a raw STM action into t'MockSTM'.
+liftSTM :: STM a -> MockSTM m a
+liftSTM m = MockSTM (lift m)
 
 -- | Marks a method as "interesting".  This can have implications for what
 -- happens to calls to that method.
 markInteresting ::
-  forall (cls :: (Type -> Type) -> Constraint) name m proxy1 proxy2.
+  forall k (cls :: k) name m proxy1 proxy2.
   (Typeable cls, KnownSymbol name) =>
   proxy1 cls ->
   proxy2 name ->
-  MockSetup m ()
+  MockSTM m ()
 markInteresting proxyCls proxyName = runInRootState $ do
-  state <- MockSetup ask
-  mockSetupSTM $
+  state <- askState
+  liftSTM $
     modifyTVar
       (mockInterestingMethods state)
       (Set.insert (typeRep proxyCls, symbolVal proxyName))
 
 -- | Determines whether a method is "interesting".
 isInteresting :: 
-  forall (cls :: (Type -> Type) -> Constraint) name m proxy1 proxy2.
+  forall k (cls :: k) name m proxy1 proxy2.
   (Typeable cls, KnownSymbol name) =>
   proxy1 cls ->
   proxy2 name ->
-  MockSetup m Bool
+  MockSTM m Bool
 isInteresting proxyCls proxyName = runInRootState $ do
-  state <- MockSetup ask
-  interesting <- mockSetupSTM $ readTVar (mockInterestingMethods state)
+  state <- askState
+  interesting <- liftSTM $ readTVar (mockInterestingMethods state)
   return ((typeRep proxyCls, symbolVal proxyName) `Set.member` interesting)
 
--- | Runs class initialization for all uninitialized 'Mockable' classes in the
--- given 'ExpectSet'.
-initClassesAsNeeded :: MonadIO m => ExpectSet (Step m) -> MockSetup m ()
-initClassesAsNeeded es = runInRootState $
+-- | Marks every method mentioned in the given 'ExpectSet' as interesting.
+markInterestingSteps :: ExpectSet (Step m) -> MockSTM m ()
+markInterestingSteps es =
   forM_ (getSteps es) $
-    \(Step (_ :: Located (SingleRule cls name m r))) -> do
-      initClassIfNeeded (Proxy :: Proxy cls)
+    \(Step _ (_ :: Located (SingleRule cls name m r))) ->
       markInteresting (Proxy :: Proxy cls) (Proxy :: Proxy name)
 
--- | Monad transformer for running mocks.
-newtype MockT m a where
-  MockT :: {unMockT :: ReaderT (MockState m) m a} -> MockT m a
-  deriving
-    ( Functor,
-      Applicative,
-      Monad,
-      MonadFail,
-      MonadIO,
-      MonadState s,
-      MonadWriter w,
-      MonadRWS r w s,
-      MonadError e,
-      MonadCont,
-      MonadBase b,
-      MonadCatch,
-      MonadMask,
-      MonadThrow,
-      MonadUnliftIO
-    )
-
-instance MonadTrans MockT where
-  lift = MockT . lift
-
--- | Applies a function to the base monad of 'MockT'.
-mapMockT :: (m a -> m b) -> MockT m a -> MockT m b
-mapMockT f = MockT . mapReaderT f . unMockT
-
-instance MonadReader r m => MonadReader r (MockT m) where
-  ask = lift ask
-  local = mapMockT . local
-  reader = lift . reader
-
--- | This type class defines a shared API between the 'MockT' and 'MockSetup'
--- monads.
-class MockContext ctx where
-  -- | Runs a 'MockSetup' action in this monad.
-  fromMockSetup :: MonadIO m => MockSetup m a -> ctx m a
-
-instance MockContext MockSetup where
-  fromMockSetup = id
-
-instance MockContext MockT where
-  fromMockSetup m = do
-    state <- MockT ask
-    atomically $ runReaderT (unMockSetup m) state
-
--- | Adds an expectation to the 'MockState' for the given 'ExpectSet',
+-- | Adds an expectation to the t'MockState' for the given 'ExpectSet',
 -- interleaved with any existing expectations.
-expectThisSet :: MonadIO m => ExpectSet (Step m) -> MockSetup m ()
+expectThisSet :: ExpectSet (Step m) -> MockSTM m ()
 expectThisSet e = do
-  initClassesAsNeeded e
-  state <- MockSetup ask
-  mockSetupSTM $ modifyTVar (mockExpectSet state) (e `ExpectInterleave`)
-
--- | This instance allows you to add expectations from 'MockSetup' actions.
--- This is an unusual thing to do.  Consider using
--- 'Test.HMock.MockT.allowUnexpected', instead.
-instance ExpectContext MockSetup where
-  expect e =
-    withFrozenCallStack $ expectThisSet $ unwrapExpected $ expect e
-  expectN mult e =
-    withFrozenCallStack $ expectThisSet $ unwrapExpected $ expectN mult e
-  expectAny e =
-    withFrozenCallStack $ expectThisSet $ unwrapExpected $ expectAny e
-  inSequence es =
-    withFrozenCallStack $ expectThisSet $ unwrapExpected $ inSequence es
-  inAnyOrder es =
-    withFrozenCallStack $ expectThisSet $ unwrapExpected $ inAnyOrder es
-  anyOf es =
-    withFrozenCallStack $ expectThisSet $ unwrapExpected $ anyOf es
-  times mult es =
-    withFrozenCallStack $ expectThisSet $ unwrapExpected $ times mult es
-  consecutiveTimes mult es =
-    withFrozenCallStack $
-      expectThisSet $ unwrapExpected $ consecutiveTimes mult es
-
-instance ExpectContext MockT where
-  expect e =
-    withFrozenCallStack $
-      fromMockSetup $ expectThisSet $ unwrapExpected $ expect e
-  expectN mult e =
-    withFrozenCallStack $
-      fromMockSetup $ expectThisSet $ unwrapExpected $ expectN mult e
-  expectAny e =
-    withFrozenCallStack $
-      fromMockSetup $ expectThisSet $ unwrapExpected $ expectAny e
-  inSequence es =
-    withFrozenCallStack $
-      fromMockSetup $ expectThisSet $ unwrapExpected $ inSequence es
-  inAnyOrder es =
-    withFrozenCallStack $
-      fromMockSetup $ expectThisSet $ unwrapExpected $ inAnyOrder es
-  anyOf es =
-    withFrozenCallStack $
-      fromMockSetup $ expectThisSet $ unwrapExpected $ anyOf es
-  times mult es =
-    withFrozenCallStack $
-      fromMockSetup $ expectThisSet $ unwrapExpected $ times mult es
-  consecutiveTimes mult es =
-    withFrozenCallStack $
-      fromMockSetup $ expectThisSet $ unwrapExpected $ consecutiveTimes mult es
+  markInterestingSteps e
+  state <- askState
+  liftSTM $ modifyTVar (mockExpectSet state) (e `ExpectInterleave`)
 
 -- | Reports a potential problem with the given 'Severity'.
-reportFault :: (HasCallStack, MonadIO m) => Severity -> String -> MockT m ()
+reportFault :: (HasCallStack, MonadIO m) => Severity -> String -> m ()
 reportFault severity msg = case severity of
   Ignore -> return ()
   Warning -> liftIO $ hPutStrLn stderr msg
   Error -> error msg
+
+-- | Describes the outstanding expectations in the given state.  The exact
+-- format is not specified.
+describeExpectationsWith :: MonadIO m => MockState m -> m String
+describeExpectationsWith state = atomically $ runMockSTM state $ do
+  states <- allStates <$> askState
+  expectSets <- mapM (liftSTM . readTVar . mockExpectSet) states
+  return $
+    intercalate "\n----- (next layer) -----\n" $
+      formatExpectSet <$> expectSets

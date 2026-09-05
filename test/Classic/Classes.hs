@@ -15,30 +15,20 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module Classes where
+module Classic.Classes where
 
 import Control.DeepSeq (NFData (rnf))
-import Control.Exception (SomeException, evaluate)
+import Control.Exception (evaluate)
 import Control.Monad.Reader (MonadReader)
 import Control.Monad.Trans (MonadIO, liftIO)
 import Data.Default (Default (def))
 import Data.Dynamic (Typeable)
 import Data.Kind (Type)
-import Data.List (isInfixOf)
 import Language.Haskell.TH.Syntax hiding (Type)
-import QuasiMock
+import Support.QuasiMock
 import Test.HMock
 import Test.Hspec
 import Test.Predicates (anything, eq, hasSubstr, qMatch, with)
-import Util.DeriveRecursive (deriveRecursive)
-
--- Pre-define low-level instance to prevent deriveRecursive from trying.
-instance NFData Bytes where rnf = undefined
-
-deriveRecursive (Just AnyclassStrategy) ''NFData ''Dec
-
-anyQMonadFailure :: SomeException -> Bool
-anyQMonadFailure e = "(Q monad failure)" `isInfixOf` show e
 
 class MonadSimple m where
   simple :: String -> m ()

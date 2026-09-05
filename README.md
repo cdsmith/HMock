@@ -8,12 +8,6 @@ composable mock framework for Haskell, with functionality that generally
 matches or exceeds that of Mockito for Java, GoogleMock for C++, and other
 mainstream languages.
 
-WARNING: Hmock's API is likely to change soon.  Please ensure you use an upper
-bound on the version number.  The current API works fine for mocking with
-MTL-style classes.  I want HMock to also work with effect systems, servant,
-haxl, and more.  To accomplish this, I'll need to make breaking changes to the
-API.
-
 ## Quick Start
 
 1.  Define classes for the functionality you need to mock.  To mock anything
@@ -63,6 +57,70 @@ API.
     * `|->` separates the method call from its result.  If it's left out, the
       method will return a default value (see `Data.Default`), so there's no
       need to specify `()` as a return value.
+
+## Quick Start: Bluefin
+
+HMock can also mock [Bluefin](https://hackage.haskell.org/package/bluefin)
+capabilities: records of effectful operations, in the style described by
+`Bluefin.Compound`.
+
+1.  Define the capability.  This is ordinary Bluefin code, with no HMock in it.
+
+    ``` haskell
+    data FileSystem e = MkFileSystem
+      { readFileImpl :: FilePath -> Eff e String,
+        writeFileImpl :: FilePath -> String -> Eff e ()
+      }
+      deriving (Generic)
+      deriving (Handle) via OneWayCoercibleHandle FileSystem
+
+    instance (e <: es) => OneWayCoercible (FileSystem e) (FileSystem es) where
+      oneWayCoercibleImpl = gOneWayCoercible
+
+    readFile :: (e <: es) => FileSystem e -> FilePath -> Eff es String
+    readFile fs path = readFileImpl (mapHandle fs) path
+
+    writeFile :: (e <: es) => FileSystem e -> FilePath -> String -> Eff es ()
+    writeFile fs path contents = writeFileImpl (mapHandle fs) path contents
+    ```
+
+2.  Implement the code to test, using the capability.
+
+    ``` haskell
+    copyFile :: (e <: es) => FileSystem e -> FilePath -> FilePath -> Eff es ()
+    copyFile fs a b = readFile fs a >>= writeFile fs b
+    ```
+
+3.  Make the capability mockable.  `Test.HMock.Bluefin` provides the splice
+    and everything else the test below uses.
+
+    ``` haskell
+    import Test.HMock.Bluefin
+
+    makeMockableCapability [t|FileSystem|]
+    ```
+
+4.  Set up expectations and run your code.
+
+    ``` haskell
+    test_copyFile :: IO ()
+    test_copyFile = runEff $ \io -> runMock io $ \source -> do
+      fs <- newMock source
+
+      expect fs $ ReadFile "foo.txt" |-> "contents"
+      expect fs $ WriteFile "bar.txt" "contents"
+
+      copyFile (mocked fs) "foo.txt" "bar.txt"
+    ```
+
+Here `newMock` creates a mock, `expect` sets expectations on it, and `mocked`
+turns it into the plain capability record the code under test takes.
+
+The rest works as described below.  The `Test.HMock.Bluefin` documentation
+covers what is specific to Bluefin, including holding several mocks of one
+capability, responses that run in `Eff`, callback arguments, nested blocks, and
+threads.  For a longer example, including two mocks of the same capability in
+one test, see `test/Bluefin/Demo.hs`.
 
 ## Why mocks?
 
@@ -346,7 +404,7 @@ In `bar`, the argument type `b` is bound by the *method*.  Because of this, the
 `(forall b. Predicate b) -> Matcher ...`.  In fact, pretty much the only
 `Predicate` you could use in such a type is `anything` (which always matches, no
 matter the argument value).  Since `eq` is not legal here, the corresponding
-`Action` type will not get an `Expectable` instance, so you may not use it
+`Action` type will not get an `ExactMatch` instance, so you may not use it
 to match an exact call to `bar`.
 
 In order to write a more specific predicate, you'd need to add constraints to
@@ -389,9 +447,10 @@ There are a few ways to do this:
 1. To just change the default behavior, use `byDefault`.  A method call must
    still be expected or it will fail, but if you leave out the return value in
    the expectation, this default will be used.
-2. To also make unexpected calls to a method suceed, use `allowUnexpected`.  If
-   you include a response in the argument, it will become the default in
-   addition to allowing an unexpected method.
+2. To also make unexpected calls to a method succeed, use `allowUnexpected`.
+   If you include a response in the argument, unexpected calls use it instead
+   of the `byDefault` response.  Expected calls never use it: an expectation
+   without a response still falls through to `byDefault`.
 3. To set up defaults for *all* users of the mock, replace your call to
    `makeMockable` with a call to `makeMockableWithOptions` and set
    `mockEmptySetup` to `False`.  Then write an instance for `Mockable` and
@@ -633,8 +692,8 @@ most operations, making it unsuitable for testing any non-trivial uses of
 Template Haskell.
 
 As part of HMock's own test suite, the `Quasi` monad is made mockable (in
-`test/QuasiMock.hs`), and then used (in `test/Classes.hs`) to test HMock's
-Template Haskell-based code generation.
+`test/Support/QuasiMock.hs`), and then used (in `test/Classic/Classes.hs`) to
+test HMock's Template Haskell-based code generation.
 
 At first glance, this might seem unnecessary.  After all, the unit tests make
 use of `makeMockable` for tests of the core HMock functionality, so surely any

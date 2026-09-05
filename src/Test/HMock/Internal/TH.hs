@@ -6,9 +6,9 @@ module Test.HMock.Internal.TH
   ( unappliedName,
     tvName,
     bindVar,
-    substTypeVar,
     substTypeVars,
     splitType,
+    resolveInstanceType,
     freeTypeVars,
     relevantContext,
     constrainVars,
@@ -17,19 +17,16 @@ module Test.HMock.Internal.TH
     hasPolyType,
     hasNestedPolyType,
     resolveInstance,
-    resolveInstanceType,
     simplifyContext,
-    localizeMember,
   )
 where
 
-import Control.Monad.Extra (mapMaybeM, concatMapM)
+import Control.Monad.Extra (concatMapM)
 import Data.Generics
-import Data.List ((\\), nub)
+import Data.List (nub)
 import Data.Maybe (catMaybes, fromMaybe)
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax (NameFlavour (..))
-import Test.HMock.Internal.Util (choices)
 
 -- | Fetches the 'Name' of a 'TyVarBndr'.
 tvName :: TyVarBndr flag -> Name
@@ -45,10 +42,6 @@ unappliedName :: Type -> Maybe Name
 unappliedName (AppT a _) = unappliedName a
 unappliedName (ConT a) = Just a
 unappliedName _ = Nothing
-
--- | Substitutes a 'Type' for all occurrences of the given 'Name'.
-substTypeVar :: Name -> Type -> Type -> Type
-substTypeVar n t = substTypeVars [(n, t)]
 
 -- | Makes variable substitutions from the given table.
 substTypeVars :: [(Name, Type)] -> Type -> Type
@@ -104,6 +97,11 @@ unifyTypes = unifyTypesWith []
 
 -- | Unify types, but starting with a table of substitutions.
 unifyTypesWith :: [(Name, Type)] -> Type -> Type -> Q (Maybe [(Name, Type)])
+-- Kind signatures are ignored for the purpose of unification.  GHC adds them
+-- when reifying instances of poly-kinded classes such as 'MockableBase', where
+-- the kind of the class parameter isn't determined by the class itself.
+unifyTypesWith tbl (SigT t1 _) t2 = unifyTypesWith tbl t1 t2
+unifyTypesWith tbl t1 (SigT t2 _) = unifyTypesWith tbl t1 t2
 unifyTypesWith tbl (VarT v) t2
   | Just t1 <- lookup v tbl = unifyTypesWith tbl t1 t2
   | otherwise = return (Just ((v, t2) : tbl))
@@ -191,10 +189,7 @@ resolveInstance cls args = do
 
 -- | Attempts to produce sufficient constraints for the given 'Type' to be a
 -- satisfied constraint.  The type should be a class applied to its type
--- parameters.
---
--- Unlike 'simplifyContext', this function always resolves the top-level
--- constraint, and returns 'Nothing' if it cannot do so.
+-- arguments.
 resolveInstanceType :: Type -> Q (Maybe Cxt)
 resolveInstanceType t =
   maybe (pure Nothing) (uncurry resolveInstance) (splitTypeApp t)
@@ -218,29 +213,3 @@ simplifyContext preds
     isVarApp (ConT _) = True
     isVarApp (AppT t (VarT _)) | isVarApp t = True
     isVarApp _ = False
-
--- | Remove instance context from a method.
---
--- Some GHC versions report class members including the instance context (for
--- example, @show :: Show a => a -> String@, instead of @show :: a -> String@).
--- This looks for the instance context, and substitutes if needed to eliminate
--- it.
-localizeMember :: Type -> Name -> Type -> Q Type
-localizeMember instTy m t@(ForallT tvs cx ty) = do
-  let fullConstraint = AppT instTy (VarT m)
-  let unifyLeft (c, cs) = fmap (,cs) <$> unifyTypes c fullConstraint
-  results <- mapMaybeM unifyLeft (choices cx)
-  case results of
-    ((tbl, remainingCx) : _) -> do
-      let cx' = substTypeVars tbl <$> remainingCx
-          ty' = substTypeVars tbl ty
-          (tvs', cx'') =
-            relevantContext
-              ty'
-              ((tvName <$> tvs) \\ (fst <$> tbl), cx')
-          t'
-            | null tvs' && null cx'' = ty'
-            | otherwise = ForallT (bindVar <$> tvs') cx'' ty'
-      return t'
-    _ -> return t
-localizeMember _ _ t = return t

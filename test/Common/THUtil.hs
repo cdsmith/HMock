@@ -2,11 +2,11 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TemplateHaskell #-}
 
-module TH where
+module Common.THUtil where
 
 import Control.Monad.Trans (liftIO)
 import Language.Haskell.TH
-import QuasiMock
+import Support.QuasiMock
 import Test.HMock
 import Test.HMock.Internal.TH (resolveInstance, unifyTypes)
 import Test.Hspec

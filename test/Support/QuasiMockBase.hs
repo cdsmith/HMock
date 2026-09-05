@@ -11,13 +11,13 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module QuasiMockBase where
+module Support.QuasiMockBase where
 
 import Data.Default (def)
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax
 import Test.HMock (MakeMockableOptions (..), makeMockableWithOptions)
-import Util.DeriveRecursive (deriveRecursive)
+import Support.DeriveRecursive (deriveRecursive)
 
 #if !MIN_VERSION_template_haskell(2, 23, 0)
 -- Pre-define low-level instance to prevent deriveRecursive from trying.

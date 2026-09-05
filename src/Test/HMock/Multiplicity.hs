@@ -39,7 +39,7 @@ instance Show Multiplicity where
         | m == n - 1 = show m ++ " or " ++ show n ++ " times"
         | otherwise = show m ++ " to " ++ show n ++ " times"
 
--- | A 'Multiplicity' value representing inconsistent expectations.
+-- | A t'Multiplicity' value representing inconsistent expectations.
 infeasible :: Multiplicity
 infeasible = Multiplicity 0 (Just (-1))
 
@@ -78,14 +78,14 @@ normalize m@(Multiplicity a b)
   | not (feasible m) = infeasible
   | otherwise = Multiplicity (max a 0) b
 
--- | Checks whether a certain number satisfies the 'Multiplicity'.
+-- | Checks whether a certain number satisfies the t'Multiplicity'.
 meetsMultiplicity :: Multiplicity -> Int -> Bool
 meetsMultiplicity (Multiplicity lo mbhi) n
   | n < lo = False
   | Just hi <- mbhi, n > hi = False
   | otherwise = True
 
--- | A 'Multiplicity' that means exactly once.
+-- | A t'Multiplicity' that means exactly once.
 --
 -- >>> meetsMultiplicity once 0
 -- False
@@ -96,7 +96,7 @@ meetsMultiplicity (Multiplicity lo mbhi) n
 once :: Multiplicity
 once = 1
 
--- | A 'Multiplicity' that means any number of times.
+-- | A t'Multiplicity' that means any number of times.
 -- >>> meetsMultiplicity anyMultiplicity 0
 -- True
 -- >>> meetsMultiplicity anyMultiplicity 1
@@ -106,7 +106,7 @@ once = 1
 anyMultiplicity :: Multiplicity
 anyMultiplicity = atLeast 0
 
--- | A 'Multiplicity' that means at least this many times.
+-- | A t'Multiplicity' that means at least this many times.
 --
 -- >>> meetsMultiplicity (atLeast 2) 1
 -- False
@@ -117,7 +117,7 @@ anyMultiplicity = atLeast 0
 atLeast :: Multiplicity -> Multiplicity
 atLeast (Multiplicity n _) = normalize $ Multiplicity n Nothing
 
--- | A 'Multiplicity' that means at most this many times.
+-- | A t'Multiplicity' that means at most this many times.
 --
 -- >>> meetsMultiplicity (atMost 2) 1
 -- True
@@ -128,7 +128,7 @@ atLeast (Multiplicity n _) = normalize $ Multiplicity n Nothing
 atMost :: Multiplicity -> Multiplicity
 atMost (Multiplicity _ n) = normalize $ Multiplicity 0 n
 
--- | A 'Multiplicity' that means any number in this interval, endpoints
+-- | A t'Multiplicity' that means any number in this interval, endpoints
 -- included.  For example, @'between' 2 3@ means 2 or 3 times, while
 -- @'between' n n@ is equivalent to @n@.
 --
@@ -143,7 +143,7 @@ atMost (Multiplicity _ n) = normalize $ Multiplicity 0 n
 between :: Multiplicity -> Multiplicity -> Multiplicity
 between (Multiplicity m _) (Multiplicity _ n) = normalize $ Multiplicity m n
 
--- | Checks whether a 'Multiplicity' is capable of matching any number at all.
+-- | Checks whether a t'Multiplicity' is capable of matching any number at all.
 --
 -- >>> feasible once
 -- True
